@@ -16,10 +16,18 @@ domains:
     type: ALIAS
 
 databases:
-  - name: kisdigital-db
-    cluster_name: kisdigital-db
+  # References the existing "amos" managed MySQL cluster (already running
+  # pulsely's database on this account) rather than provisioning a new one —
+  # cluster_name matching a cluster you already own makes App Platform bind
+  # to it instead of creating one. db_name/db_user must already exist on
+  # that cluster (both do: the "chron" database and "rob" user). Once bound,
+  # ${amos.HOSTNAME}/PORT/DATABASE/USERNAME/PASSWORD below are populated by
+  # App Platform itself at deploy time — nothing here or in any env file
+  # ever holds the actual password.
+  - name: amos
+    cluster_name: amos
     db_name: chron
-    db_user: kisdigital
+    db_user: rob
     engine: MYSQL
     production: true
 
@@ -58,15 +66,15 @@ services:
       - key: SITEURL
         value: https://kisdigital.com
       - key: CHRON_DB_HOST
-        value: ${kisdigital-db.HOSTNAME}
+        value: ${amos.HOSTNAME}
       - key: CHRON_DB_PORT
-        value: ${kisdigital-db.PORT}
+        value: ${amos.PORT}
       - key: CHRON_DB_NAME
-        value: ${kisdigital-db.DATABASE}
+        value: ${amos.DATABASE}
       - key: CHRON_DB_USER
-        value: ${kisdigital-db.USERNAME}
+        value: ${amos.USERNAME}
       - key: CHRON_DB_PASSWORD
-        value: ${kisdigital-db.PASSWORD}
+        value: ${amos.PASSWORD}
         type: SECRET
       - key: R2_ACCOUNT_ID
         value: EDIT_IN_UI
