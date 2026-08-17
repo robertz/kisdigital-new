@@ -92,27 +92,17 @@ class {
 		var authHeader = "AWS4-HMAC-SHA256 Credential=#variables.accessKeyId#/#credentialScope#, "
 			& "SignedHeaders=#signedHeaders#, Signature=#signature#";
 
-		// Uses the bx:http tag rather than java.net.http.HttpClient directly:
-		// BoxLang's Java interop layer has a reflection-caching bug where
-		// calling *any* two Java methods with differing arguments earlier in
-		// the request corrupts later overload resolution of HttpClient.send()
-		// (observed even with zero relation to the HTTP call itself — e.g. two
-		// StringBuilder.append() calls beforehand reproduces it). bx:http is a
-		// native tag, not a reflected call, so it isn't subject to that bug.
-		var uploadBytes = arguments.bytes;
-		bx:http url="https://#host##objectPath#" method="PUT" result="local.uploadResult" throwOnError="false" {
-			bx:httpparam type="header" name="Content-Type" value="#arguments.contentType#";
-			bx:httpparam type="header" name="x-amz-content-sha256" value="#payloadHash#";
-			bx:httpparam type="header" name="x-amz-date" value="#amzDate#";
-			bx:httpparam type="header" name="Authorization" value="#authHeader#";
-			bx:httpparam type="body" value="#uploadBytes#";
-		}
+		var result = _send( "PUT", "https://#host##objectPath#", {
+			"Content-Type"         : arguments.contentType,
+			"x-amz-content-sha256" : payloadHash,
+			"x-amz-date"           : amzDate,
+			"Authorization"        : authHeader
+		}, arguments.bytes );
 
-		var statusCode = listFirst( local.uploadResult.statusCode, " " );
-		if ( !isNumeric( statusCode ) || statusCode < 200 || statusCode >= 300 ){
+		if ( result.statusCode < 200 || result.statusCode >= 300 ){
 			throw(
 				type    = "R2Client.UploadFailed",
-				message = "R2 upload failed with status #local.uploadResult.statusCode#: #local.uploadResult.fileContent#"
+				message = "R2 upload failed with status #result.statusCode#: #result.body#"
 			);
 		}
 
@@ -168,21 +158,20 @@ class {
 		var authHeader = "AWS4-HMAC-SHA256 Credential=#variables.accessKeyId#/#credentialScope#, "
 			& "SignedHeaders=#signedHeaders#, Signature=#signature#";
 
-		bx:http url="https://#host#/#variables.bucket#?#queryParams#" method="GET" result="local.listResult" throwOnError="false" {
-			bx:httpparam type="header" name="x-amz-content-sha256" value="#payloadHash#";
-			bx:httpparam type="header" name="x-amz-date" value="#amzDate#";
-			bx:httpparam type="header" name="Authorization" value="#authHeader#";
-		}
+		var result = _send( "GET", "https://#host#/#variables.bucket#?#queryParams#", {
+			"x-amz-content-sha256" : payloadHash,
+			"x-amz-date"           : amzDate,
+			"Authorization"        : authHeader
+		} );
 
-		var statusCode = listFirst( local.listResult.statusCode, " " );
-		if ( !isNumeric( statusCode ) || statusCode < 200 || statusCode >= 300 ){
+		if ( result.statusCode < 200 || result.statusCode >= 300 ){
 			throw(
 				type    = "R2Client.ListFailed",
-				message = "R2 list failed with status #local.listResult.statusCode#: #local.listResult.fileContent#"
+				message = "R2 list failed with status #result.statusCode#: #result.body#"
 			);
 		}
 
-		var doc     = xmlParse( local.listResult.fileContent );
+		var doc     = xmlParse( result.body );
 		var results = [];
 		if ( !isNull( doc.ListBucketResult ) && !isNull( doc.ListBucketResult.XmlChildren ) ){
 			for ( var node in doc.ListBucketResult.XmlChildren ){
@@ -203,6 +192,47 @@ class {
 
 		results.sort( ( a, b ) => compare( b.lastModified, a.lastModified ) );
 		return results;
+	}
+
+	/**
+	 * Sends a single HTTP request via java.net.HttpURLConnection and returns
+	 * { statusCode, body }.
+	 *
+	 * Two other transports were tried and rejected before this one:
+	 * java.net.http.HttpClient hit a BoxLang Java-interop bug where calling
+	 * *any* two Java methods with differing arguments earlier in the request
+	 * corrupts later overload resolution of HttpClient.send() — reproducible
+	 * even with zero relation to the HTTP call itself (e.g. two unrelated
+	 * StringBuilder.append() calls beforehand). Switching to the bx:http tag
+	 * avoided that bug locally, but in production (DigitalOcean App
+	 * Platform) it returned a fast, empty-bodied HTTP 500 for every request
+	 * to R2 — while a plain `curl` to the same URL from the same container
+	 * succeeded immediately, ruling out DNS/network/firewall causes and
+	 * pointing at bx:http's own request handling. HttpURLConnection is the
+	 * oldest and simplest of the three JDK HTTP clients — a single mutable
+	 * connection object rather than an immutable builder chain or a tag with
+	 * its own internal wrapping — and is what this was switched to.
+	 */
+	private function _send( required string method, required string url, required struct headers, binary body ){
+		var conn = createObject( "java", "java.net.URI" ).create( arguments.url ).toURL().openConnection();
+		conn.setRequestMethod( arguments.method );
+		conn.setConnectTimeout( 10000 );
+		conn.setReadTimeout( 20000 );
+		for ( var name in arguments.headers ){
+			conn.setRequestProperty( name, arguments.headers[ name ] );
+		}
+		if ( !isNull( arguments.body ) ){
+			conn.setDoOutput( true );
+			var outStream = conn.getOutputStream();
+			outStream.write( arguments.body );
+			outStream.close();
+		}
+
+		var statusCode = conn.getResponseCode();
+		var stream = statusCode >= 400 ? conn.getErrorStream() : conn.getInputStream();
+		var body = isNull( stream ) ? "" : createObject( "java", "java.lang.String" ).init( stream.readAllBytes(), "UTF-8" );
+
+		return { "statusCode": statusCode, "body": body };
 	}
 
 	private function _uriEncode( required string value ){
