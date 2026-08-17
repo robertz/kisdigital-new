@@ -408,31 +408,40 @@
 					statusEl.textContent = 'Uploading…';
 					uploadBtn.disabled = true;
 
-					var formData = new FormData();
-					formData.append('image', file);
-
-					fetch('/manage/posts/upload-image', {
+					// Two-step: ask our server to presign a URL (it never sees the
+					// file bytes), then PUT the file to R2 directly from here.
+					fetch('/manage/posts/upload-url', {
 						method: 'POST',
-						headers: { 'X-CSRF-Token': csrfToken },
-						body: formData
+						headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': csrfToken },
+						body: new URLSearchParams({ filename: file.name, contentType: file.type })
 					})
 					.then(function(res){ return res.json(); })
 					.then(function(data){
+						if (!data.success) {
+							return Promise.reject(data.error || 'Upload failed.');
+						}
+						return fetch(data.uploadUrl, {
+							method: 'PUT',
+							headers: { 'Content-Type': file.type },
+							body: file
+						}).then(function(putRes){
+							if (!putRes.ok) {
+								return Promise.reject('Upload to image host failed.');
+							}
+							return data.url;
+						});
+					})
+					.then(function(url){
 						uploadBtn.disabled = false;
 						fileInput.value = '';
-						if (!data.success) {
-							statusEl.className = 'c-post-editor__cover-upload-status c-post-editor__cover-upload-status--error';
-							statusEl.textContent = data.error || 'Upload failed.';
-							return;
-						}
 						statusEl.textContent = 'Uploaded.';
-						setCoverImage(data.url);
+						setCoverImage(url);
 					})
-					.catch(function(){
+					.catch(function(err){
 						uploadBtn.disabled = false;
 						fileInput.value = '';
 						statusEl.className = 'c-post-editor__cover-upload-status c-post-editor__cover-upload-status--error';
-						statusEl.textContent = 'Upload failed — check your connection and try again.';
+						statusEl.textContent = typeof err === 'string' ? err : 'Upload failed — check your connection and try again.';
 					});
 				});
 
@@ -442,20 +451,39 @@
 					modal.hidden = false;
 					modalBody.innerHTML = '<p class="text-muted">Loading…</p>';
 
+					// Two-step, same as upload: our server presigns a list URL (it
+					// never fetches the listing itself), then this fetches that
+					// URL directly and parses the ListBucketResult XML itself.
 					fetch('/manage/posts/images', { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
 					.then(function(res){ return res.json(); })
 					.then(function(data){
 						if (!data.success) {
-							modalBody.innerHTML = '<p class="text-danger">' + (data.error || 'Could not load images.') + '</p>';
-							return;
+							return Promise.reject(data.error || 'Could not load images.');
 						}
-						if (!data.images.length) {
+						return fetch(data.listUrl).then(function(listRes){
+							if (!listRes.ok) {
+								return Promise.reject('Could not load images.');
+							}
+							return listRes.text().then(function(xmlText){
+								return { xmlText: xmlText, publicBaseUrl: data.publicBaseUrl };
+							});
+						});
+					})
+					.then(function(result){
+						var xml = new DOMParser().parseFromString(result.xmlText, 'application/xml');
+						var contents = Array.prototype.slice.call(xml.getElementsByTagName('Contents'));
+						var images = contents.map(function(node){
+							var key = node.getElementsByTagName('Key')[0].textContent;
+							return { key: key, url: result.publicBaseUrl + '/' + key };
+						}).filter(function(img){ return img.key.slice(-1) !== '/'; });
+
+						if (!images.length) {
 							modalBody.innerHTML = '<p class="text-muted">No uploaded images yet — use "Upload image" to add one.</p>';
 							return;
 						}
 						var grid = document.createElement('div');
 						grid.className = 'c-image-picker__grid';
-						data.images.forEach(function(img){
+						images.forEach(function(img){
 							var item = document.createElement('button');
 							item.type = 'button';
 							item.className = 'c-image-picker__item';
@@ -476,8 +504,8 @@
 						modalBody.innerHTML = '';
 						modalBody.appendChild(grid);
 					})
-					.catch(function(){
-						modalBody.innerHTML = '<p class="text-danger">Couldn\'t load existing images — check your connection and try again.</p>';
+					.catch(function(err){
+						modalBody.innerHTML = '<p class="text-danger">' + (typeof err === 'string' ? err : 'Couldn\'t load existing images — check your connection and try again.') + '</p>';
 					});
 				}
 

@@ -1,9 +1,9 @@
 /**
- * Minimal Cloudflare R2 client — signs and sends a single PUT-object request
- * per upload using AWS Signature V4. R2 is S3-API-compatible, but a full S3
- * SDK (WireBox-shaped, dozens of operations) is a lot of surface for the one
- * thing this app needs, so this hand-signs the one request type instead —
- * pure JDK crypto, no extra module.
+ * Minimal Cloudflare R2 client — computes presigned AWS Signature V4 URLs
+ * for PUT (upload) and GET (bucket listing) operations. The server never
+ * makes the actual HTTP request to R2 itself; it only signs a URL, which the
+ * browser then calls directly. This is deliberate, not just an efficiency
+ * choice — see the note on presignPutUrl() for why.
  */
 class {
 
@@ -44,82 +44,71 @@ class {
 	}
 
 	/**
-	 * Uploads a single object and returns its public URL (under publicBaseUrl,
-	 * i.e. the static.kisdigital.com custom domain mapped to the bucket).
+	 * Returns a short-lived signed URL the browser can PUT a file straight
+	 * to, plus the object's eventual public URL.
+	 *
+	 * This server never sends the actual upload request to R2 — three
+	 * different JDK HTTP transports (java.net.http.HttpClient, the bx:http
+	 * tag, java.net.HttpURLConnection) were tried for a server-side
+	 * putObject()/listObjects() here, and all three worked flawlessly in
+	 * local dev but failed in production (DigitalOcean App Platform,
+	 * x86_64) — two different failure modes (a fast empty-bodied HTTP 500,
+	 * and a hang through to the platform's own gateway timeout) despite
+	 * `curl` succeeding instantly against the same URL from the same
+	 * container. That combination pointed at a BoxLang/JVM-level bug in
+	 * outbound HTTPS specific to that architecture, not at this code, R2,
+	 * or the network path — unreproducible locally (aarch64) despite
+	 * identical code and an identical image. Presigning sidesteps it
+	 * entirely: this method only does string-building and HMAC signing, no
+	 * network I/O, so it isn't exposed to whatever that bug is. The actual
+	 * PUT happens in the browser via fetch(), which needs CORS enabled on
+	 * the bucket for the app's origin(s) — see db/README or ask before
+	 * assuming it's set.
 	 *
 	 * @param {string} key - Object key/path within the bucket, e.g. "posts/uuid.jpg".
-	 * @param {binary} bytes - Raw file content.
-	 * @param {string} contentType - MIME type to store and serve the object as.
-	 * @return {string} Public URL of the uploaded object.
+	 * @param {string} contentType - MIME type the browser will upload the file as.
+	 * @param {numeric} expiresSeconds - How long the signed URL stays valid. Defaults to 5 minutes.
+	 * @return {struct} { uploadUrl, publicUrl }.
 	 */
-	function putObject( required string key, required binary bytes, required string contentType ){
-		var host        = "#variables.accountId#.r2.cloudflarestorage.com";
-		var objectPath  = "/#variables.bucket#/#arguments.key#";
-		var payloadHash = _sha256Hex( arguments.bytes );
-
-		var instant   = createObject( "java", "java.time.Instant" ).now();
-		var formatter = createObject( "java", "java.time.format.DateTimeFormatter" )
-			.ofPattern( "yyyyMMdd'T'HHmmss'Z'" )
-			.withZone( createObject( "java", "java.time.ZoneOffset" ).UTC );
-		var amzDate   = formatter.format( instant );
-		var dateStamp = left( amzDate, 8 );
-
-		var canonicalHeaders = "content-type:#arguments.contentType#" & char( 10 )
-			& "host:#host#" & char( 10 )
-			& "x-amz-content-sha256:#payloadHash#" & char( 10 )
-			& "x-amz-date:#amzDate#" & char( 10 );
-		var signedHeaders = "content-type;host;x-amz-content-sha256;x-amz-date";
-
-		var canonicalRequest = "PUT" & char( 10 )
-			& objectPath & char( 10 )
-			& "" & char( 10 ) // no query string
-			& canonicalHeaders & char( 10 )
-			& signedHeaders & char( 10 )
-			& payloadHash;
-
-		var credentialScope = "#dateStamp#/auto/s3/aws4_request";
-		var stringToSign = "AWS4-HMAC-SHA256" & char( 10 )
-			& amzDate & char( 10 )
-			& credentialScope & char( 10 )
-			& _sha256Hex( canonicalRequest.getBytes( "UTF-8" ) );
-
-		var kDate     = _hmacSha256( ( "AWS4" & variables.secretAccessKey ).getBytes( "UTF-8" ), dateStamp );
-		var kRegion   = _hmacSha256( kDate, "auto" );
-		var kService  = _hmacSha256( kRegion, "s3" );
-		var kSigning  = _hmacSha256( kService, "aws4_request" );
-		var signature = _hex( _hmacSha256( kSigning, stringToSign ) );
-
-		var authHeader = "AWS4-HMAC-SHA256 Credential=#variables.accessKeyId#/#credentialScope#, "
-			& "SignedHeaders=#signedHeaders#, Signature=#signature#";
-
-		var result = _send( "PUT", "https://#host##objectPath#", {
-			"Content-Type"         : arguments.contentType,
-			"x-amz-content-sha256" : payloadHash,
-			"x-amz-date"           : amzDate,
-			"Authorization"        : authHeader
-		}, arguments.bytes );
-
-		if ( result.statusCode < 200 || result.statusCode >= 300 ){
-			throw(
-				type    = "R2Client.UploadFailed",
-				message = "R2 upload failed with status #result.statusCode#: #result.body#"
-			);
-		}
-
-		return "#variables.publicBaseUrl#/#arguments.key#";
+	function presignPutUrl( required string key, required string contentType, numeric expiresSeconds = 300 ){
+		var uploadUrl = _presign( "PUT", "/#variables.bucket#/#arguments.key#", {}, arguments.expiresSeconds );
+		return { "uploadUrl": uploadUrl, "publicUrl": "#variables.publicBaseUrl#/#arguments.key#" };
 	}
 
 	/**
-	 * Lists objects under a key prefix (S3 ListObjectsV2) — backs the cover
-	 * image picker's "choose an existing upload" grid.
+	 * Returns a short-lived signed URL the browser can GET to list objects
+	 * under a key prefix (S3 ListObjectsV2) — backs the cover image picker's
+	 * "choose an existing upload" grid. See presignPutUrl() for why this is
+	 * presigned rather than fetched server-side. The browser is responsible
+	 * for parsing the returned XML (ListBucketResult/Contents/Key etc.).
 	 *
 	 * @param {string} prefix - Key prefix to list under, e.g. "posts/". No leading slash.
 	 * @param {numeric} maxKeys - Maximum objects to return. Defaults to 100.
-	 * @return {array} Array of structs: key, url, size, lastModified — newest first.
+	 * @param {numeric} expiresSeconds - How long the signed URL stays valid. Defaults to 5 minutes.
+	 * @return {string} Signed URL.
 	 */
-	function listObjects( required string prefix, numeric maxKeys = 100 ){
+	function presignListUrl( required string prefix, numeric maxKeys = 100, numeric expiresSeconds = 300 ){
+		return _presign( "GET", "/#variables.bucket#", {
+			"list-type": "2",
+			"max-keys": arguments.maxKeys,
+			"prefix": arguments.prefix
+		}, arguments.expiresSeconds );
+	}
+
+	/**
+	 * The public URL an object would have once uploaded — used by callers
+	 * that already know the key without needing a fresh presign.
+	 */
+	function publicUrl( required string key ){
+		return "#variables.publicBaseUrl#/#arguments.key#";
+	}
+
+	function getPublicBaseUrl(){
+		return variables.publicBaseUrl;
+	}
+
+	private function _presign( required string method, required string canonicalUri, required struct extraQueryParams, required numeric expiresSeconds ){
 		var host = "#variables.accountId#.r2.cloudflarestorage.com";
-		var payloadHash = _sha256Hex( "".getBytes( "UTF-8" ) );
 
 		var instant   = createObject( "java", "java.time.Instant" ).now();
 		var formatter = createObject( "java", "java.time.format.DateTimeFormatter" )
@@ -127,23 +116,25 @@ class {
 			.withZone( createObject( "java", "java.time.ZoneOffset" ).UTC );
 		var amzDate   = formatter.format( instant );
 		var dateStamp = left( amzDate, 8 );
-
-		// Query params sorted by name — required for SigV4 canonical request.
-		var queryParams = "list-type=2&max-keys=#arguments.maxKeys#&prefix=#_uriEncode( arguments.prefix )#";
-
-		var canonicalHeaders = "host:#host#" & char( 10 )
-			& "x-amz-content-sha256:#payloadHash#" & char( 10 )
-			& "x-amz-date:#amzDate#" & char( 10 );
-		var signedHeaders = "host;x-amz-content-sha256;x-amz-date";
-
-		var canonicalRequest = "GET" & char( 10 )
-			& "/#variables.bucket#" & char( 10 )
-			& queryParams & char( 10 )
-			& canonicalHeaders & char( 10 )
-			& signedHeaders & char( 10 )
-			& payloadHash;
-
 		var credentialScope = "#dateStamp#/auto/s3/aws4_request";
+
+		var queryParams = arguments.extraQueryParams;
+		queryParams[ "X-Amz-Algorithm" ]     = "AWS4-HMAC-SHA256";
+		queryParams[ "X-Amz-Credential" ]    = "#variables.accessKeyId#/#credentialScope#";
+		queryParams[ "X-Amz-Date" ]          = amzDate;
+		queryParams[ "X-Amz-Expires" ]       = arguments.expiresSeconds;
+		queryParams[ "X-Amz-SignedHeaders" ] = "host";
+
+		var canonicalQueryString = _canonicalQueryString( queryParams );
+		var canonicalHeaders = "host:#host#" & char( 10 );
+
+		var canonicalRequest = arguments.method & char( 10 )
+			& arguments.canonicalUri & char( 10 )
+			& canonicalQueryString & char( 10 )
+			& canonicalHeaders & char( 10 )
+			& "host" & char( 10 )
+			& "UNSIGNED-PAYLOAD";
+
 		var stringToSign = "AWS4-HMAC-SHA256" & char( 10 )
 			& amzDate & char( 10 )
 			& credentialScope & char( 10 )
@@ -155,84 +146,18 @@ class {
 		var kSigning  = _hmacSha256( kService, "aws4_request" );
 		var signature = _hex( _hmacSha256( kSigning, stringToSign ) );
 
-		var authHeader = "AWS4-HMAC-SHA256 Credential=#variables.accessKeyId#/#credentialScope#, "
-			& "SignedHeaders=#signedHeaders#, Signature=#signature#";
-
-		var result = _send( "GET", "https://#host#/#variables.bucket#?#queryParams#", {
-			"x-amz-content-sha256" : payloadHash,
-			"x-amz-date"           : amzDate,
-			"Authorization"        : authHeader
-		} );
-
-		if ( result.statusCode < 200 || result.statusCode >= 300 ){
-			throw(
-				type    = "R2Client.ListFailed",
-				message = "R2 list failed with status #result.statusCode#: #result.body#"
-			);
-		}
-
-		var doc     = xmlParse( result.body );
-		var results = [];
-		if ( !isNull( doc.ListBucketResult ) && !isNull( doc.ListBucketResult.XmlChildren ) ){
-			for ( var node in doc.ListBucketResult.XmlChildren ){
-				if ( node.XmlName != "Contents" ) continue;
-				var key = "";
-				var size = 0;
-				var lastModified = "";
-				for ( var field in node.XmlChildren ){
-					if ( field.XmlName == "Key" )          key          = field.XmlText;
-					if ( field.XmlName == "Size" )         size         = field.XmlText;
-					if ( field.XmlName == "LastModified" ) lastModified = field.XmlText;
-				}
-				if ( len( key ) && right( key, 1 ) != "/" ){
-					results.append( { "key": key, "url": "#variables.publicBaseUrl#/#key#", "size": size, "lastModified": lastModified } );
-				}
-			}
-		}
-
-		results.sort( ( a, b ) => compare( b.lastModified, a.lastModified ) );
-		return results;
+		return "https://#host##arguments.canonicalUri#?#canonicalQueryString#&X-Amz-Signature=#signature#";
 	}
 
-	/**
-	 * Sends a single HTTP request via java.net.HttpURLConnection and returns
-	 * { statusCode, body }.
-	 *
-	 * Two other transports were tried and rejected before this one:
-	 * java.net.http.HttpClient hit a BoxLang Java-interop bug where calling
-	 * *any* two Java methods with differing arguments earlier in the request
-	 * corrupts later overload resolution of HttpClient.send() — reproducible
-	 * even with zero relation to the HTTP call itself (e.g. two unrelated
-	 * StringBuilder.append() calls beforehand). Switching to the bx:http tag
-	 * avoided that bug locally, but in production (DigitalOcean App
-	 * Platform) it returned a fast, empty-bodied HTTP 500 for every request
-	 * to R2 — while a plain `curl` to the same URL from the same container
-	 * succeeded immediately, ruling out DNS/network/firewall causes and
-	 * pointing at bx:http's own request handling. HttpURLConnection is the
-	 * oldest and simplest of the three JDK HTTP clients — a single mutable
-	 * connection object rather than an immutable builder chain or a tag with
-	 * its own internal wrapping — and is what this was switched to.
-	 */
-	private function _send( required string method, required string url, required struct headers, binary body ){
-		var conn = createObject( "java", "java.net.URI" ).create( arguments.url ).toURL().openConnection();
-		conn.setRequestMethod( arguments.method );
-		conn.setConnectTimeout( 10000 );
-		conn.setReadTimeout( 20000 );
-		for ( var name in arguments.headers ){
-			conn.setRequestProperty( name, arguments.headers[ name ] );
+	private function _canonicalQueryString( required struct params ){
+		var sortedKeys = structKeyArray( arguments.params );
+		arraySort( sortedKeys, "text" );
+		var parts = [];
+		for ( var i = 1; i <= sortedKeys.len(); i++ ){
+			var k = sortedKeys[ i ];
+			parts.append( _uriEncode( k ) & "=" & _uriEncode( toString( arguments.params[ k ] ) ) );
 		}
-		if ( !isNull( arguments.body ) ){
-			conn.setDoOutput( true );
-			var outStream = conn.getOutputStream();
-			outStream.write( arguments.body );
-			outStream.close();
-		}
-
-		var statusCode = conn.getResponseCode();
-		var stream = statusCode >= 400 ? conn.getErrorStream() : conn.getInputStream();
-		var body = isNull( stream ) ? "" : createObject( "java", "java.lang.String" ).init( stream.readAllBytes(), "UTF-8" );
-
-		return { "statusCode": statusCode, "body": body };
+		return parts.toList( "&" );
 	}
 
 	private function _uriEncode( required string value ){

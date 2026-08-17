@@ -58,12 +58,10 @@ class {
 		this.router.get( "/manage/posts/:id/edit", auth, ( req, res ) => editPost( req, res ) );
 		this.router.post( "/manage/posts/save", auth, ( req, res ) => savePost( req, res ) );
 		this.router.post( "/manage/posts/preview", auth, ( req, res ) => previewPost( req, res ) );
-		// boxExpressUpload() only runs its multipart parsing on requests whose
-		// Content-Type is actually multipart/form-data (see Multipart.bx), so
-		// scoping it to this one route rather than mounting it app-wide is
-		// just to keep it out of routes that will never see a file upload.
-		this.router.post( "/manage/posts/upload-image", auth, boxExpressUpload( { limit: 8388608 } ), ( req, res ) => uploadCoverImage( req, res ) );
-		this.router.get( "/manage/posts/images", auth, ( req, res ) => listCoverImages( req, res ) );
+		// Both of these hand back a presigned R2 URL rather than doing the
+		// upload/list themselves — see R2Client.presignPutUrl() for why.
+		this.router.post( "/manage/posts/upload-url", auth, ( req, res ) => coverImageUploadUrl( req, res ) );
+		this.router.get( "/manage/posts/images", auth, ( req, res ) => listCoverImagesUrl( req, res ) );
 
 		this.router.get( "/manage/authors", admin, ( req, res ) => authorsList( req, res ) );
 		this.router.get( "/manage/authors/new", admin, ( req, res ) => newAuthor( req, res ) );
@@ -349,34 +347,30 @@ class {
 		}
 	}
 
-	// POST /manage/posts/upload-image — the editor's "Upload" button. Pushes
-	// the file straight to R2 (see models/util/R2Client.bx) and hands back
-	// its public static.kisdigital.com URL; the browser never talks to R2
-	// directly, so no R2 credentials or CORS config are needed client-side.
-	function uploadCoverImage( req, res ){
+	// POST /manage/posts/upload-url — the editor's "Upload" button calls this
+	// first with the file's name/type, gets back a presigned R2 URL, then
+	// PUTs the file straight to R2 itself (see R2Client.presignPutUrl() for
+	// why this server never touches the file bytes).
+	function coverImageUploadUrl( req, res ){
 		if ( !variables.r2Client.isConfigured() ){
 			return res.status( 501 ).json( { success: false, error: "Image hosting isn't configured (missing R2 env vars)." } );
 		}
 
-		var uploaded = ( req.files.image ?: [] );
-		if ( !uploaded.len() ){
-			return res.status( 400 ).json( { success: false, error: "No file was uploaded." } );
-		}
-		var file = uploaded[ 1 ];
-
+		var filename    = trim( req.body.filename ?: "" );
+		var contentType = trim( req.body.contentType ?: "" );
 		var allowedTypes = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif" };
-		var ext = allowedTypes[ lCase( file.contentType ) ] ?: "";
+		var ext = allowedTypes[ lCase( contentType ) ] ?: "";
 		if ( !len( ext ) ){
-			return res.status( 415 ).json( { success: false, error: "Unsupported image type: #encodeForHTML( file.contentType )#. Use JPEG, PNG, WebP, or GIF." } );
+			return res.status( 415 ).json( { success: false, error: "Unsupported image type: #encodeForHTML( contentType )#. Use JPEG, PNG, WebP, or GIF." } );
 		}
 
 		try {
-			var key = variables.r2UploadPrefix & "/" & slugifyFilename( file.filename ) & "." & ext;
-			var url = variables.r2Client.putObject( key, file.buffer, file.contentType );
-			res.json( { success: true, url: url } );
+			var key = variables.r2UploadPrefix & "/" & slugifyFilename( filename ) & "." & ext;
+			var presigned = variables.r2Client.presignPutUrl( key, contentType );
+			res.json( { success: true, uploadUrl: presigned.uploadUrl, url: presigned.publicUrl } );
 		} catch ( any e ) {
-			println( "[error] cover image upload failed: " & e.message );
-			res.status( 502 ).json( { success: false, error: "Upload to image host failed." } );
+			println( "[error] cover image presign failed: " & e.message );
+			res.status( 502 ).json( { success: false, error: "Couldn't prepare the upload." } );
 		}
 	}
 
@@ -397,18 +391,19 @@ class {
 	}
 
 	// GET /manage/posts/images — backs the editor's "Choose existing" picker
-	// modal with everything already uploaded under the configured R2 prefix.
-	function listCoverImages( req, res ){
+	// modal. Hands back a presigned R2 list URL; the browser fetches it and
+	// parses the ListBucketResult XML itself (see R2Client.presignListUrl()).
+	function listCoverImagesUrl( req, res ){
 		if ( !variables.r2Client.isConfigured() ){
 			return res.status( 501 ).json( { success: false, error: "Image hosting isn't configured (missing R2 env vars)." } );
 		}
 
 		try {
-			var images = variables.r2Client.listObjects( variables.r2UploadPrefix & "/" );
-			res.json( { success: true, images: images } );
+			var listUrl = variables.r2Client.presignListUrl( variables.r2UploadPrefix & "/" );
+			res.json( { success: true, listUrl: listUrl, publicBaseUrl: variables.r2Client.getPublicBaseUrl() } );
 		} catch ( any e ) {
-			println( "[error] cover image list failed: " & e.message );
-			res.status( 502 ).json( { success: false, error: "Couldn't load existing images." } );
+			println( "[error] cover image list presign failed: " & e.message );
+			res.status( 502 ).json( { success: false, error: "Couldn't prepare the image list." } );
 		}
 	}
 
