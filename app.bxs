@@ -47,22 +47,20 @@ app.use(
 )
 
 // Resolves the real visitor IP behind DO App Platform's ingress + Cloudflare
-// (kisdigital.com is Cloudflare-proxied). boxlang-express's own "trust proxy"
-// setting reads X-Forwarded-For, which — confirmed by testing directly against
-// production with a forged header — Cloudflare and DO's ingress both APPEND to
-// rather than replace, so a client can prepend a fake entry and have it survive
-// all the way to the app; turning trust proxy on here would make req.ip
-// attacker-controlled, worse than the current "always the LB's own IP" default.
-// DO-Connecting-IP (falling back to Cloudflare's own CF-Connecting-IP) is set
-// by the edge itself from the actual TCP connection it saw, not from anything
-// the client sent, so those are trustworthy where X-Forwarded-For's leftmost
-// entry is not. Neither header exists in local dev, so req.ip there is left
-// as boxlang-express's own default (the raw connection address, correct for
-// a direct connection).
-app.use( ( req, res, next ) => {
-	req.ip = req.headers[ "Do-connecting-ip" ] ?: req.headers[ "Cf-connecting-ip" ] ?: req.ip
-	next()
-} )
+// (kisdigital.com is Cloudflare-proxied) for req.ip everywhere, including
+// boxlang-express's own per-request access-log line. Not app.set("trust
+// proxy", true) + X-Forwarded-For: confirmed by testing directly against
+// production with a forged header that Cloudflare and DO's ingress both
+// APPEND to that header rather than replacing it, so a client can prepend a
+// fake entry and have it survive to the app — trust proxy would make req.ip
+// attacker-controlled there, not just wrong. DO-Connecting-IP (falling back
+// to Cloudflare's own CF-Connecting-IP) is set by the edge itself from the
+// actual TCP connection it observed, not from anything the client sent, so
+// those are trustworthy where X-Forwarded-For's leftmost entry is not — see
+// Request.bx's _resolveIp() in boxlang-express (>=0.1.16) for the check
+// itself. Neither header exists in local dev, so req.ip there stays the
+// direct connection address, which is already correct.
+app.set( "trust proxy header", [ "DO-Connecting-IP", "CF-Connecting-IP" ] )
 
 // [M1] Legacy XSS filter hint — a no-op in modern browsers, harmless to send.
 // (Everything else from the old app's security header set is covered by helmet above.)
