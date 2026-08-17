@@ -1,0 +1,155 @@
+:root {
+	--site-background-color: #f4f4f8;
+	--site-padding-top: 56px;
+	--site-font-size: 0.9375rem;
+	--site-font-gap: 0.5rem;
+	--ui-radius-sm: 6px;
+	--ui-radius-md: 10px;
+	--ui-shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.08);
+
+	/* ── Type ── */
+	--font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+	--font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	--measure: 68ch;
+
+	/* ── Spacing scale ── */
+	--space-1: 4px;
+	--space-2: 8px;
+	--space-3: 12px;
+	--space-4: 16px;
+	--space-5: 20px;
+	--space-6: 24px;
+	--space-7: 32px;
+	--space-8: 48px;
+
+	/* ── Comment depth border colors ── */
+	--comment-depth-1: rgba(99, 102, 241, 0.45);
+	--comment-depth-2: rgba(168, 85, 247, 0.38);
+	--comment-depth-3: rgba(20, 184, 166, 0.38);
+	--comment-depth-4: rgba(245, 158, 11, 0.40);
+	--comment-depth-5: rgba(239, 68, 68, 0.35);
+
+	/* ── Surfaces ── */
+	--ui-surface-1: #ffffff;
+	--ui-surface-2: #f0f0f6;
+	--ui-border-subtle: rgba(0, 0, 0, 0.08);
+
+	--site-header-background-color: rgba(255, 255, 255, 0.88);
+
+	--main-padding: 5px 8px 10px;
+	--main-background-color: #ffffff;
+	--main-border-color: #dddde6;
+	--light-border-color: #c8c8d8;
+
+	/* ── Accent / link ── */
+	--post-anchor: #1c1c2e;
+	--post-anchor-visited: #6b6b88;
+	--post-link-text: #6366f1;
+
+	/* Bootstrap theme alignment */
+	--bs-primary: var(--post-link-text);
+	--bs-primary-rgb: 99, 102, 241;
+	--post-avatar-border: #a0a0c0;
+
+	--color-white: #fff;
+	--color-neutral-background: #ebebf2;
+	--color-neutral-background-container: #f8f8fc;
+
+	/* ── Text contrast tokens (on white / #f4f4f8 surfaces) ── */
+	/* --text-secondary:  ~5.5:1 — timestamps, meta, muted labels              */
+	/* --text-muted:      ~4.5:1 — helper text, decorative labels               */
+	/* --text-sep:        ~3.2:1 — separator bullets (decorative only)          */
+	/* --text-placeholder: ~3.5:1 on #f0f0f6 — input placeholder text           */
+	/* --text-lowcontrast: ~4.2:1 on #f4f4f8 — notification/login helper text   */
+	--text-secondary:    rgba(0, 0, 0, 0.60);
+	--text-muted:        rgba(0, 0, 0, 0.48);
+	--text-sep:          rgba(0, 0, 0, 0.28);
+	--text-placeholder:  #8888a8;
+	--text-lowcontrast:  #686888;
+}
+
+@media (prefers-color-scheme: dark) {
+	:root:not([data-theme="light"]) {
+		--site-background-color: #1a1a1b;
+		--ui-shadow-sm: 0 1px 0 rgba(255,255,255,0.03), 0 4px 16px rgba(0,0,0,0.45);
+
+		/* ── Comment depth border colors ── */
+		--comment-depth-1: rgba(79, 188, 255, 0.28);
+		--comment-depth-2: rgba(122, 162, 247, 0.24);
+		--comment-depth-3: rgba(158, 206, 106, 0.22);
+		--comment-depth-4: rgba(224, 175, 104, 0.22);
+		--comment-depth-5: rgba(247, 118, 142, 0.20);
+
+		/* ── Surfaces ── */
+		--ui-surface-1: #1f2022;
+		--ui-surface-2: #242527;
+		--ui-border-subtle: rgba(255, 255, 255, 0.08);
+
+		--site-header-background-color: rgba(26, 26, 27, 0.88);
+
+		--main-background-color: #1a1a1b;
+		--main-border-color: #424242;
+		--light-border-color: #555555;
+
+		/* ── Accent / link ── */
+		--post-anchor: rgb(215, 218, 220);
+		--post-anchor-visited: #a0a0a0;
+		--post-link-text: #7c83fd;
+
+		--bs-primary: var(--post-link-text);
+		--bs-primary-rgb: 124, 131, 253;
+		--post-avatar-border: #ccc;
+
+		--color-neutral-background: #0e1113;
+		--color-neutral-background-container: #181c1f;
+
+		/* ── Text contrast tokens ── */
+		--text-secondary:   rgba(255, 255, 255, 0.65);
+		--text-muted:       rgba(255, 255, 255, 0.55);
+		--text-sep:         rgba(255, 255, 255, 0.45);
+		--text-placeholder: #888b8e;
+		--text-lowcontrast: #a0a3a6;
+	}
+}
+
+[data-theme="dark"] {
+	--site-background-color: #1a1a1b;
+	--ui-shadow-sm: 0 1px 0 rgba(255,255,255,0.03), 0 4px 16px rgba(0,0,0,0.45);
+
+	/* ── Comment depth border colors ── */
+	--comment-depth-1: rgba(79, 188, 255, 0.28);
+	--comment-depth-2: rgba(122, 162, 247, 0.24);
+	--comment-depth-3: rgba(158, 206, 106, 0.22);
+	--comment-depth-4: rgba(224, 175, 104, 0.22);
+	--comment-depth-5: rgba(247, 118, 142, 0.20);
+
+	/* ── Surfaces ── */
+	--ui-surface-1: #1f2022;
+	--ui-surface-2: #242527;
+	--ui-border-subtle: rgba(255, 255, 255, 0.08);
+
+	--site-header-background-color: rgba(26, 26, 27, 0.88);
+
+	--main-background-color: #1a1a1b;
+	--main-border-color: #424242;
+	--light-border-color: #555555;
+
+	/* ── Accent / link ── */
+	--post-anchor: rgb(215, 218, 220);
+	--post-anchor-visited: #a0a0a0;
+	--post-link-text: #7c83fd;
+
+	--bs-primary: var(--post-link-text);
+	--bs-primary-rgb: 124, 131, 253;
+	--post-avatar-border: #ccc;
+
+	--color-neutral-background: #0e1113;
+	--color-neutral-background-container: #181c1f;
+
+	/* ── Text contrast tokens ── */
+	--text-secondary:   rgba(255, 255, 255, 0.65);
+	--text-muted:       rgba(255, 255, 255, 0.55);
+	--text-sep:         rgba(255, 255, 255, 0.45);
+	--text-placeholder: #888b8e;
+	--text-lowcontrast: #a0a3a6;
+}

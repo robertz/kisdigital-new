@@ -1,0 +1,21 @@
+{
+	"name": "kisdigital",
+	"slug": "kisdigital",
+	"version": "0.1.0",
+	"private": true,
+	"shortDescription": "KISDigital — built on BoxLang Express",
+	"type": "boxlang",
+	"dependencies": {},
+	"devDependencies": {},
+	"installPaths": {},
+	"testbox": {
+		"directory": "tests.specs",
+		"recurse": true,
+		"watchPaths": "**.bx"
+	},
+	"ignore": [
+		"**/.*",
+		"/test/",
+		"/tests/"
+	]
+}

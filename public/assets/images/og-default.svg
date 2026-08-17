@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <!-- Background -->
+  <rect width="1200" height="630" fill="#1a1a1b"/>
+
+  <!-- Subtle grid/texture lines for visual interest -->
+  <defs>
+    <linearGradient id="fade-top" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#4FBCFF" stop-opacity="0.06"/>
+      <stop offset="100%" stop-color="#4FBCFF" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="fade-bottom" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#4FBCFF" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#4FBCFF" stop-opacity="0.06"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Top accent bar -->
+  <rect width="1200" height="4" fill="#4FBCFF"/>
+
+  <!-- Subtle gradient overlays -->
+  <rect width="1200" height="200" fill="url(#fade-top)"/>
+  <rect y="430" width="1200" height="200" fill="url(#fade-bottom)"/>
+
+  <!-- Corner accent marks -->
+  <line x1="40" y1="40" x2="100" y2="40" stroke="#4FBCFF" stroke-width="2" opacity="0.3"/>
+  <line x1="40" y1="40" x2="40" y2="100" stroke="#4FBCFF" stroke-width="2" opacity="0.3"/>
+  <line x1="1100" y1="40" x2="1160" y2="40" stroke="#4FBCFF" stroke-width="2" opacity="0.3"/>
+  <line x1="1160" y1="40" x2="1160" y2="100" stroke="#4FBCFF" stroke-width="2" opacity="0.3"/>
+  <line x1="40" y1="530" x2="40" y2="590" stroke="#4FBCFF" stroke-width="2" opacity="0.3"/>
+  <line x1="40" y1="590" x2="100" y2="590" stroke="#4FBCFF" stroke-width="2" opacity="0.3"/>
+  <line x1="1160" y1="530" x2="1160" y2="590" stroke="#4FBCFF" stroke-width="2" opacity="0.3"/>
+  <line x1="1100" y1="590" x2="1160" y2="590" stroke="#4FBCFF" stroke-width="2" opacity="0.3"/>
+
+  <!-- Main logo: [ dt ] -->
+  <text x="600" y="295" font-family="Arial, Helvetica, sans-serif" font-size="120" font-weight="bold" text-anchor="middle" dominant-baseline="central">
+    <tspan fill="#4FBCFF">[</tspan><tspan fill="#ffffff" dx="8"> dtf </tspan><tspan fill="#4FBCFF" dx="8">]</tspan>
+  </text>
+
+  <!-- Tagline -->
+  <text x="600" y="390" font-family="Arial, Helvetica, sans-serif" font-size="28" fill="#9aa0a6" text-anchor="middle" letter-spacing="6">
+    DISMALTHREADS FORUMS
+  </text>
+
+  <!-- Bottom accent bar -->
+  <rect y="626" width="1200" height="4" fill="#4FBCFF"/>
+</svg>

@@ -1,0 +1,189 @@
+<bx:include template="../../partials/_head.bxm">
+<bx:output>
+<div class="c-manage">
+
+	<!--- Sidebar nav --->
+	<bx:include template="../../partials/manageNav.bxm">
+
+	<!--- Main content --->
+	<main class="c-manage-main">
+
+		<div class="c-manage-header">
+			<div>
+				<h1 class="c-manage-header__title">
+					<bx:if data.isNew>New author<bx:else>Edit author</bx:if>
+				</h1>
+			</div>
+			<a href="/manage/authors" class="c-manage-form__cancel">
+				<i class="bi bi-arrow-left me-1"></i> All authors
+			</a>
+		</div>
+
+		<!--- Populated by the AJAX save path below; server-rendered alerts (for the
+		      no-JS fallback) sit right after it. --->
+		<div id="author-flash" class="c-manage-alert" hidden></div>
+
+		<bx:if len( data.success )>
+			<div class="c-manage-alert c-manage-alert--success">
+				<i class="bi bi-check-circle-fill"></i>
+				#encodeForHTML( data.success )#
+			</div>
+		</bx:if>
+		<bx:if len( data.error )>
+			<div class="c-manage-alert c-manage-alert--error">
+				<i class="bi bi-exclamation-circle-fill"></i>
+				#encodeForHTML( data.error )#
+			</div>
+		</bx:if>
+
+		<form class="c-manage-form" method="post" action="/manage/authors/save">
+			<input type="hidden" name="_csrf" value="#encodeForHTMLAttribute( data.csrfToken )#">
+			<input type="hidden" name="author_id" value="#encodeForHTMLAttribute( data.author.getId() )#">
+
+			<div class="row g-4">
+
+				<!--- Display name --->
+				<div class="col-12 col-md-6">
+					<label for="author-display-name" class="c-manage-form__label">Display name <span class="text-danger">*</span></label>
+					<input
+						type="text"
+						id="author-display-name"
+						name="display_name"
+						class="c-manage-form__input"
+						value="#encodeForHTMLAttribute( data.author.getDisplayName() )#"
+						placeholder="Jane Smith"
+						maxlength="50"
+						required>
+				</div>
+
+				<!--- Email --->
+				<div class="col-12 col-md-6">
+					<label for="author-email" class="c-manage-form__label">Email <span class="text-danger">*</span></label>
+					<input
+						type="email"
+						id="author-email"
+						name="email"
+						class="c-manage-form__input"
+						value="#encodeForHTMLAttribute( data.author.getEmail() )#"
+						placeholder="jane@example.com"
+						required>
+				</div>
+
+				<!--- Role --->
+				<div class="col-12 col-md-6">
+					<label for="author-role" class="c-manage-form__label">Role</label>
+					<select id="author-role" name="role" class="c-manage-form__select">
+						<option value="author" <bx:if data.author.getRole() == "author">selected</bx:if>>Author</option>
+						<option value="admin"  <bx:if data.author.getRole() == "admin">selected</bx:if>>Admin</option>
+					</select>
+				</div>
+
+				<!--- Avatar label --->
+				<div class="col-12 col-md-3">
+					<label for="author-avatar-label" class="c-manage-form__label">Avatar label</label>
+					<input
+						type="text"
+						id="author-avatar-label"
+						name="avatar_label"
+						class="c-manage-form__input"
+						value="#encodeForHTMLAttribute( data.author.getAvatarLabel() )#"
+						placeholder="RZ"
+						maxlength="2">
+					<p class="c-manage-form__hint">Up to 2 characters shown in avatars (e.g. RZ for Robert Zehnder).</p>
+				</div>
+
+				<!--- About --->
+				<div class="col-12">
+					<label for="author-about" class="c-manage-form__label">Bio</label>
+					<textarea
+						id="author-about"
+						name="about"
+						class="c-manage-form__textarea"
+						rows="3"
+						maxlength="500"
+						placeholder="A short bio shown on posts…">#encodeForHTML( data.author.getAbout() )#</textarea>
+					<p class="c-manage-form__hint">Max 500 characters.</p>
+				</div>
+
+				<!--- Password --->
+				<div class="col-12 col-md-6">
+					<label for="author-password" class="c-manage-form__label">
+						Password
+						<bx:if !data.isNew>
+							<span class="c-manage-form__hint d-inline ms-1">(leave blank to keep current)</span>
+						<bx:else>
+							<span class="text-danger">*</span>
+						</bx:if>
+					</label>
+					<input
+						type="password"
+						id="author-password"
+						name="new_password"
+						class="c-manage-form__input"
+						autocomplete="new-password">
+				</div>
+
+			</div>
+
+			<!--- Actions --->
+			<div class="c-manage-form__actions mt-5">
+				<button type="submit" class="c-manage-form__submit">
+					<bx:if data.isNew>
+						<i class="bi bi-plus-lg me-1"></i> Create author
+					<bx:else>
+						<i class="bi bi-floppy me-1"></i> Save changes
+					</bx:if>
+				</button>
+				<a href="/manage/authors" class="c-manage-form__cancel">Cancel</a>
+			</div>
+
+		</form>
+
+		<script>
+		(function(){
+			// AJAX save — only for an existing author (author_id already set). A
+			// new author genuinely gets a new URL once saved, which is a real
+			// navigation; that form submit is left alone.
+			var form         = document.querySelector('.c-manage-form');
+			var authorIdField = form.querySelector('[name=author_id]');
+			var flashEl      = document.getElementById('author-flash');
+			var saveBtn      = form.querySelector('.c-manage-form__submit');
+			var passwordEl   = document.getElementById('author-password');
+
+			function showFlash(kind, message){
+				flashEl.className = 'c-manage-alert c-manage-alert--' + kind;
+				flashEl.innerHTML = '<i class="bi bi-' + (kind === 'success' ? 'check-circle-fill' : 'exclamation-circle-fill') + '"></i> ' + message;
+				flashEl.hidden = false;
+			}
+
+			if (authorIdField.value) {
+				form.addEventListener('submit', function(e){
+					e.preventDefault();
+					var originalHtml = saveBtn.innerHTML;
+					saveBtn.disabled = true;
+					saveBtn.textContent = 'Saving…';
+
+					fetch(form.action, {
+						method: 'POST',
+						headers: { 'X-Requested-With': 'XMLHttpRequest' },
+						body: new URLSearchParams(new FormData(form))
+					})
+					.then(function(res){ return res.json().then(function(data){ return { ok: res.ok, data: data }; }); })
+					.then(function(result){
+						saveBtn.disabled = false;
+						saveBtn.innerHTML = originalHtml;
+						if (result.ok && passwordEl) passwordEl.value = '';
+						showFlash(result.ok ? 'success' : 'error', result.ok ? result.data.message : result.data.error);
+					})
+					.catch(function(){
+						form.submit();
+					});
+				});
+			}
+		})();
+		</script>
+
+	</main>
+</div>
+</bx:output>
+<bx:include template="../../partials/_foot.bxm">

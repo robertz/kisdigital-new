@@ -1,0 +1,21 @@
+<bx:output>
+<bx:if data.trendingPosts.len() ?: 0>
+<p class="c-post-sidebar__label">Trending</p>
+<div class="c-post-sidebar__widget mb-5">
+	<bx:loop array="#data.trendingPosts#" item="tPost" index="ti">
+	<bx:if ti gt 1><hr class="divider"></bx:if>
+	<div class="d-flex gap-3 align-items-start #( ti lt data.trendingPosts.len() ? 'mb-4' : '' )#">
+		<div class="trending-num">#numberFormat( ti, "00" )#</div>
+		<div>
+			<a href="/posts/#year( tPost.publish_date )#/#numberFormat( month( tPost.publish_date ), "00" )#/#encodeForURL( tPost.slug )#" class="trending-link d-block mb-1">
+				#encodeForHTML( tPost.title )#
+			</a>
+			<span class="read-time">
+				#( tPost.views gte 1000 ? numberFormat( tPost.views / 1000, "0.0" ) & "k" : tPost.views )# views
+			</span>
+		</div>
+	</div>
+	</bx:loop>
+</div>
+</bx:if>
+</bx:output>

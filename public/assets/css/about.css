@@ -1,0 +1,58 @@
+/* ── About page ── */
+
+.c-about-hero {
+	border-bottom: 1px solid var(--ui-border-subtle);
+	padding: 3.5rem 0;
+}
+
+.c-about-hero__avatar {
+	width: 108px;
+	height: 108px;
+	border-radius: 50%;
+	background: var(--ui-surface-2);
+	border: 1px solid var(--ui-border-subtle);
+	color: var(--post-anchor);
+	font-family: var(--font-mono);
+	font-size: 2.1rem;
+	font-weight: 700;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	letter-spacing: 0.02em;
+}
+
+.c-about-hero__eyebrow {
+	font-family: var(--font-mono);
+	font-size: 0.78rem;
+	font-weight: 500;
+	letter-spacing: 0.04em;
+	color: var(--post-link-text);
+	margin-bottom: 0.5rem;
+}
+
+.c-about-hero__name {
+	font-size: clamp(1.75rem, 4vw, 2.5rem);
+	font-weight: 800;
+	letter-spacing: -0.025em;
+	color: var(--post-anchor);
+	margin-bottom: 0.35rem;
+}
+
+.c-about-hero__role {
+	font-family: var(--font-mono);
+	font-size: 0.9rem;
+	color: var(--text-muted);
+	margin-bottom: 1rem;
+}
+
+.c-about-hero__bio {
+	font-size: 1.05rem;
+	color: var(--text-secondary);
+	line-height: 1.65;
+	max-width: 620px;
+	margin-bottom: 0;
+}
+
+.c-about-posts {
+	background: var(--site-background-color);
+}

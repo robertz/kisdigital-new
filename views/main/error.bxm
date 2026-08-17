@@ -1,0 +1,30 @@
+<bx:include template="../partials/_head.bxm">
+<bx:output>
+<section class="py-5 posts-section">
+	<div class="container">
+		<div class="row g-5">
+
+			<!--- Main content --->
+			<div class="col-lg-8">
+				<div class="c-500">
+					<p class="c-500__code">500</p>
+					<h1 class="c-500__title">Something went wrong</h1>
+					<p class="c-500__message">
+						An unexpected error occurred while processing your request.
+						We've been notified and are looking into it.
+					</p>
+					<a href="/" class="btn btn-primary-custom">Back to home</a>
+					<a href="/posts" class="btn btn-outline-custom ms-2">Browse articles</a>
+				</div>
+			</div>
+
+			<!--- Sidebar --->
+			<div class="col-lg-4">
+				<bx:include template="../partials/trendingSidebar.bxm">
+			</div>
+
+		</div>
+	</div>
+</section>
+</bx:output>
+<bx:include template="../partials/_foot.bxm">

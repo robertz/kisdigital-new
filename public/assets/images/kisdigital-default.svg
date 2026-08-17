@@ -1,0 +1,138 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <!-- Background gradient -->
+    <linearGradient id="bg-grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f0f10"/>
+      <stop offset="100%" stop-color="#1a1a1b"/>
+    </linearGradient>
+
+    <!-- Radial glow behind logo -->
+    <radialGradient id="glow" cx="50%" cy="48%" r="42%">
+      <stop offset="0%" stop-color="#6366f1" stop-opacity="0.18"/>
+      <stop offset="60%" stop-color="#4FBCFF" stop-opacity="0.06"/>
+      <stop offset="100%" stop-color="#1a1a1b" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Top edge gradient -->
+    <linearGradient id="top-bar-grad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="50%" stop-color="#4FBCFF"/>
+      <stop offset="100%" stop-color="#6366f1"/>
+    </linearGradient>
+
+    <!-- Subtle dot pattern -->
+    <pattern id="dots" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
+      <circle cx="20" cy="20" r="1" fill="#4FBCFF" opacity="0.07"/>
+    </pattern>
+
+    <!-- Clip path for dot area -->
+    <clipPath id="dot-clip">
+      <rect width="1200" height="630"/>
+    </clipPath>
+
+    <!-- Left glow line -->
+    <linearGradient id="line-glow-left" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#6366f1" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#6366f1" stop-opacity="0.5"/>
+    </linearGradient>
+
+    <!-- Right glow line -->
+    <linearGradient id="line-glow-right" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#6366f1" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#6366f1" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- Tag pill gradient -->
+    <linearGradient id="pill-grad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#6366f1" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#4FBCFF" stop-opacity="0.15"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Base background -->
+  <rect width="1200" height="630" fill="url(#bg-grad)"/>
+
+  <!-- Dot texture -->
+  <rect width="1200" height="630" fill="url(#dots)" clip-path="url(#dot-clip)"/>
+
+  <!-- Central radial glow -->
+  <rect width="1200" height="630" fill="url(#glow)"/>
+
+  <!-- Top accent bar (gradient) -->
+  <rect width="1200" height="3" fill="url(#top-bar-grad)"/>
+
+  <!-- Bottom accent bar -->
+  <rect y="627" width="1200" height="3" fill="url(#top-bar-grad)"/>
+
+  <!-- Horizontal divider lines left/right of center -->
+  <rect x="0" y="314" width="360" height="1" fill="url(#line-glow-left)"/>
+  <rect x="840" y="314" width="360" height="1" fill="url(#line-glow-right)"/>
+
+  <!-- Corner accent brackets -->
+  <!-- Top-left -->
+  <line x1="48" y1="48" x2="116" y2="48" stroke="#4FBCFF" stroke-width="1.5" opacity="0.35"/>
+  <line x1="48" y1="48" x2="48" y2="116" stroke="#4FBCFF" stroke-width="1.5" opacity="0.35"/>
+  <!-- Top-right -->
+  <line x1="1084" y1="48" x2="1152" y2="48" stroke="#4FBCFF" stroke-width="1.5" opacity="0.35"/>
+  <line x1="1152" y1="48" x2="1152" y2="116" stroke="#4FBCFF" stroke-width="1.5" opacity="0.35"/>
+  <!-- Bottom-left -->
+  <line x1="48" y1="514" x2="48" y2="582" stroke="#4FBCFF" stroke-width="1.5" opacity="0.35"/>
+  <line x1="48" y1="582" x2="116" y2="582" stroke="#4FBCFF" stroke-width="1.5" opacity="0.35"/>
+  <!-- Bottom-right -->
+  <line x1="1152" y1="514" x2="1152" y2="582" stroke="#4FBCFF" stroke-width="1.5" opacity="0.35"/>
+  <line x1="1084" y1="582" x2="1152" y2="582" stroke="#4FBCFF" stroke-width="1.5" opacity="0.35"/>
+
+  <!-- Decorative code bracket — left -->
+  <text x="130" y="345" font-family="'Courier New', Courier, monospace" font-size="200" font-weight="400"
+        fill="#6366f1" opacity="0.06" text-anchor="middle" dominant-baseline="central">{</text>
+
+  <!-- Decorative code bracket — right -->
+  <text x="1070" y="345" font-family="'Courier New', Courier, monospace" font-size="200" font-weight="400"
+        fill="#6366f1" opacity="0.06" text-anchor="middle" dominant-baseline="central">}</text>
+
+  <!-- Main logo wordmark -->
+  <!-- "KIS" -->
+  <text x="420" y="290" font-family="'Arial Black', 'Helvetica Neue', Arial, sans-serif"
+        font-size="130" font-weight="900" text-anchor="end" dominant-baseline="auto"
+        fill="#ffffff" letter-spacing="-3">KIS</text>
+  <!-- "Digital" in cyan -->
+  <text x="440" y="290" font-family="'Arial Black', 'Helvetica Neue', Arial, sans-serif"
+        font-size="130" font-weight="900" text-anchor="start" dominant-baseline="auto"
+        fill="#4FBCFF" letter-spacing="-3">Digital</text>
+
+  <!-- Separator dot -->
+  <circle cx="600" cy="330" r="3" fill="#6366f1" opacity="0.8"/>
+
+  <!-- Tagline -->
+  <text x="600" y="382" font-family="Arial, Helvetica, sans-serif"
+        font-size="26" font-weight="400" fill="#9aa5b4"
+        text-anchor="middle" letter-spacing="0.5">
+    Deep dives into ColdFusion, Lucee &amp; BoxLang
+  </text>
+
+  <!-- Tech tag pills -->
+  <!-- ColdFusion pill -->
+  <rect x="314" y="434" width="172" height="38" rx="19" fill="url(#pill-grad)" stroke="#6366f1" stroke-width="1" stroke-opacity="0.4"/>
+  <text x="400" y="453" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="600"
+        fill="#a5b4fc" text-anchor="middle" dominant-baseline="central" letter-spacing="0.3">ColdFusion</text>
+
+  <!-- Lucee pill -->
+  <rect x="506" y="434" width="100" height="38" rx="19" fill="url(#pill-grad)" stroke="#6366f1" stroke-width="1" stroke-opacity="0.4"/>
+  <text x="556" y="453" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="600"
+        fill="#a5b4fc" text-anchor="middle" dominant-baseline="central" letter-spacing="0.3">Lucee</text>
+
+  <!-- BoxLang pill -->
+  <rect x="626" y="434" width="120" height="38" rx="19" fill="url(#pill-grad)" stroke="#4FBCFF" stroke-width="1" stroke-opacity="0.5"/>
+  <text x="686" y="453" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="600"
+        fill="#7dd3fc" text-anchor="middle" dominant-baseline="central" letter-spacing="0.3">BoxLang</text>
+
+  <!-- JVM pill -->
+  <rect x="766" y="434" width="120" height="38" rx="19" fill="url(#pill-grad)" stroke="#6366f1" stroke-width="1" stroke-opacity="0.4"/>
+  <text x="826" y="453" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="600"
+        fill="#a5b4fc" text-anchor="middle" dominant-baseline="central" letter-spacing="0.3">JVM Web</text>
+
+  <!-- Domain / URL hint at bottom -->
+  <text x="600" y="560" font-family="'Courier New', Courier, monospace"
+        font-size="20" font-weight="400" fill="#4FBCFF"
+        text-anchor="middle" opacity="0.55" letter-spacing="1">kisdigital.com</text>
+</svg>

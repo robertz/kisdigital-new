@@ -1,0 +1,128 @@
+<bx:include template="../partials/_head.bxm">
+<bx:output>
+<!--- Hero --->
+<section class="hero py-5">
+	<div class="container py-4">
+		<div class="row align-items-center g-5">
+			<div class="col-lg-7">
+				<p class="hero-eyebrow mb-3">Welcome to KISDigital</p>
+				<h1 class="hero-title mb-4">
+					ColdFusion, Lucee<br><span>&amp; BoxLang.</span>
+				</h1>
+				<p class="hero-subtext fs-5 mb-5">
+					Deep dives into ColdFusion, Lucee, and BoxLang — modern CFML development, runtime internals, and the future of the JVM web stack.
+				</p>
+				<div class="d-flex gap-3 flex-wrap">
+					<a href="##posts" class="btn btn-primary-custom">Browse Articles</a>
+					<a href="/about" class="btn btn-outline-custom">About the Author</a>
+				</div>
+			</div>
+		</div>
+	</div>
+</section>
+
+<!--- Featured Post --->
+<bx:if data.featuredPost.exists()>
+<section class="py-5 posts-section">
+	<div class="container">
+		<p class="section-label mb-4">Featured</p>
+		<div class="featured-post">
+			<div class="row g-0">
+				<div class="col-lg-5">
+					<bx:if len( data.featuredPost.getCoverImage() )>
+						<img src="#encodeForHTML( data.featuredPost.getCoverImage() )#"
+							alt=""
+							class="featured-cover-img h-100 w-100">
+					<bx:else>
+						<div class="featured-cover h-100">&lt;/&gt;</div>
+					</bx:if>
+				</div>
+				<div class="col-lg-7 p-4 p-lg-5 d-flex flex-column justify-content-center">
+					<bx:if data.featuredPost.getTags().len()>
+					<div class="mb-3">
+						<bx:loop array="#data.featuredPost.getTags()#" item="tag">
+							<a href="/tag/#encodeForURL( tag )#" class="tag-badge me-1">#encodeForHTML( tag )#</a>
+						</bx:loop>
+					</div>
+					</bx:if>
+					<h2 class="text-body fw-bold featured-post__title mb-3">
+						#encodeForHTML( data.featuredPost.getTitle() )#
+					</h2>
+					<p class="text-muted featured-post__body mb-4">
+						#encodeForHTML( data.featuredPost.getDescription() )#
+					</p>
+					<div class="d-flex align-items-center gap-3 mb-4">
+						<bx:if len( data.featuredPost.getAuthorName() )>
+							<div class="author-avatar">#encodeForHTML( data.featuredPost.getAuthorInitials() )#</div>
+							<div>
+								<div class="text-body small fw-semibold">#encodeForHTML( data.featuredPost.getAuthorName() )#</div>
+								<div class="read-time">#dateFormat( data.featuredPost.getPublishDate(), "MMMM D, YYYY" )#</div>
+							</div>
+						</bx:if>
+					</div>
+					<div>
+						<a href="#data.featuredPost.getPostUrl()#" class="btn btn-primary-custom">Read Article &rarr;</a>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+</section>
+</bx:if>
+
+<!--- Recent Posts Grid --->
+<section id="posts" class="py-5 posts-section">
+	<div class="container">
+		<div class="row g-5">
+
+			<!--- Posts column --->
+			<div class="col-lg-8">
+				<p class="section-label mb-4">Latest Articles</p>
+				<div class="post-list">
+
+					<bx:loop array="#data.latestPosts#" item="post" index="cardIndex">
+						<bx:include template="../partials/postCard.bxm">
+					</bx:loop>
+
+				</div>
+
+				<div class="text-center mt-5">
+					<a href="/posts" class="btn btn-outline-custom">Load More Articles</a>
+				</div>
+			</div>
+
+			<!--- Sidebar --->
+			<div class="col-lg-4">
+
+				<!--- Trending --->
+				<bx:include template="../partials/trendingSidebar.bxm">
+
+				<!--- Tags --->
+				<bx:include template="../partials/tagsSidebar.bxm">
+
+				<!--- About --->
+				<bx:if data.siteAuthor.exists()>
+				<p class="section-label mb-4">About</p>
+				<div class="sidebar-widget pt-1">
+					<div class="d-flex align-items-center gap-3 mb-3">
+						<div class="author-avatar author-avatar--lg">#encodeForHTML( data.siteAuthor.getAvatarLabel().len() ? data.siteAuthor.getAvatarLabel() : left( data.siteAuthor.getDisplayName(), 2 ).uCase() )#</div>
+						<div>
+							<div class="text-body fw-bold">#encodeForHTML( data.siteAuthor.getDisplayName() )#</div>
+							<bx:if len( data.siteAuthor.getRole() )>
+							<div class="read-time">#encodeForHTML( data.siteAuthor.getRole() )#</div>
+							</bx:if>
+						</div>
+					</div>
+					<bx:if len( data.siteAuthor.getAbout() )>
+					<p class="text-muted small mb-3 about-bio">#encodeForHTML( data.siteAuthor.getAbout() )#</p>
+					</bx:if>
+					<a href="/about" class="btn btn-outline-custom btn-sm-text w-100">More about me &rarr;</a>
+				</div>
+				</bx:if>
+
+			</div>
+		</div>
+	</div>
+</section>
+</bx:output>
+<bx:include template="../partials/_foot.bxm">

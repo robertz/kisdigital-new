@@ -1,0 +1,300 @@
+/**
+ * Represents a single blog post.
+ *
+ * Accessors are enabled so that all properties are accessible via generated
+ * getters and setters (e.g. getCoverImage() / setCoverImage()). BoxLang's
+ * dot-notation normalises underscored names to camelCase, so templates can
+ * use either post.coverImage or post.cover_image interchangeably.
+ *
+ * Hydration options:
+ *  - populate(struct)  — hydrate from a query-result struct
+ *  - loadById(id)      — query by UUID; loads any status (admin use)
+ *  - loadBySlug(slug)  — query by slug; published posts only (public use)
+ *
+ * Use toStruct() to produce a snake_case struct for PostService.savePost().
+ * Use exists() to check whether the bean holds a real post after a load call.
+ */
+class accessors="true" {
+
+	property name="id"          type="string"  default="";
+	property name="title"       type="string"  default="";
+	property name="slug"        type="string"  default="";
+	property name="description" type="string"  default="";
+	property name="coverImage"  type="string"  default="";
+	property name="body"        type="string"  default="";
+	property name="status"      type="string"  default="draft";
+	property name="featured"    type="boolean" default=false;
+	property name="publishDate" type="any"     default="";
+	property name="tags"        type="array";
+	property name="authorName"        type="string"  default="";
+	property name="authorAvatarLabel" type="string"  default="";
+	property name="authorAbout"       type="string"  default="";
+	property name="views"       type="numeric" default=0;
+	property name="created"     type="any"     default="";
+	property name="lastUpdated" type="any"     default="";
+
+	/**
+	 * Resets all properties to their defaults.
+	 * Called before every load so a failed lookup leaves the bean empty (exists() → false).
+	 */
+	function init(){
+		setId(          "" );
+		setTitle(       "" );
+		setSlug(        "" );
+		setDescription( "" );
+		setCoverImage(  "" );
+		setBody(        "" );
+		setStatus(      "draft" );
+		setFeatured(    false );
+		setPublishDate( "" );
+		setTags(        [] );
+		setAuthorName(        "" );
+		setAuthorAvatarLabel( "" );
+		setAuthorAbout(       "" );
+		setViews(       0 );
+		setCreated(     "" );
+		setLastUpdated( "" );
+		return this;
+	}
+
+	/**
+	 * Populates this bean from a query-result struct or any struct with post data.
+	 *
+	 * Handles snake_case keys returned by queryExecute (e.g. cover_image, publish_date).
+	 * All keys are read with bracket notation to bypass BoxLang's camelCase normalisation.
+	 *
+	 * @param {struct} data - Query row struct or hand-built struct with post data.
+	 * @return {PostBean} this, for chaining.
+	 */
+	function populate( required struct data ){
+		setId(          data["id"]           ?: "" );
+		setTitle(       data["title"]        ?: "" );
+		setSlug(        data["slug"]         ?: "" );
+		setDescription( data["description"]  ?: "" );
+		setCoverImage(  data["cover_image"]  ?: "" );
+		setBody(        data["body"]         ?: "" );
+		setStatus(      data["status"]       ?: "draft" );
+		setFeatured(    data["featured"]     ?: false );
+		setPublishDate( data["publish_date"] ?: "" );
+		setTags(        data["tags"]         ?: [] );
+		setAuthorName(        data["author_name"]         ?: "" );
+		setAuthorAvatarLabel( data["author_avatar_label"] ?: "" );
+		setAuthorAbout(       data["author_about"]        ?: "" );
+		setViews(       data["views"]        ?: 0 );
+		setCreated(     data["created"]      ?: "" );
+		setLastUpdated( data["last_updated"] ?: "" );
+		return this;
+	}
+
+	/**
+	 * Returns true when the bean holds a real post (i.e. has a non-empty id).
+	 * Use this after loadById() or loadBySlug() to check whether a post was found.
+	 *
+	 * @return {boolean}
+	 */
+	function exists(){
+		return len( getId() ) > 0;
+	}
+
+	/**
+	 * Returns the canonical URL path for this post: /posts/{year}/{month}/{slug}.
+	 * Falls back to /posts/{slug} when no valid publish date is available.
+	 *
+	 * @return {string}
+	 */
+	function getPostUrl(){
+		var pd = getPublishDate();
+		if ( !isDate( pd ) ) return "/posts/#encodeForURL( getSlug() )#";
+		return "/posts/#year( pd )#/#numberFormat( month( pd ), '00' )#/#encodeForURL( getSlug() )#";
+	}
+
+	/**
+	 * Returns the avatar label for the author.
+	 * Uses avatar_label when set, otherwise falls back to the first two characters
+	 * of the author's display name in upper case.
+	 *
+	 * @return {string}
+	 */
+	function getAuthorInitials(){
+		return len( getAuthorAvatarLabel() ) ? getAuthorAvatarLabel() : left( getAuthorName(), 2 ).uCase();
+	}
+
+	/**
+	 * Returns true when this post is marked published but its publish_date is
+	 * still in the future — i.e. scheduled rather than actually live yet.
+	 * Public-facing queries already exclude these; this is for the admin UI
+	 * (list badges, editor bar) to tell "published" and "scheduled" apart.
+	 *
+	 * @return {boolean}
+	 */
+	function getIsScheduled(){
+		return getStatus() == "published" && isDate( getPublishDate() ) && getPublishDate() > now();
+	}
+
+	/**
+	 * Estimated reading time in whole minutes, from the markdown source word
+	 * count at ~200 words/minute (rounded up, minimum 1). Markdown syntax
+	 * inflates the count slightly (link URLs, code fences, etc.) but that's
+	 * the same approximation most blogs make — not worth stripping markdown
+	 * just to shave a few seconds of estimate accuracy.
+	 *
+	 * @return {numeric}
+	 */
+	function getReadingTime(){
+		var wordCount = reMatch( "\S+", getBody() ).len();
+		return max( 1, ceiling( wordCount / 200 ) );
+	}
+
+	/**
+	 * Loads a post by UUID, regardless of status. Intended for admin/edit use.
+	 *
+	 * Fetches the full post row plus its tag list. Clears all properties first
+	 * so a failed lookup leaves the bean in an empty state (exists() → false).
+	 *
+	 * @param {string} postId - The post UUID.
+	 * @return {PostBean} this, for chaining.
+	 */
+	function loadById( required string postId ){
+		init();
+
+		var rows = queryExecute(
+			"SELECT id, title, slug, description, cover_image, body, status, featured,
+				publish_date, created, last_updated
+			FROM Post
+			WHERE id = :id
+			LIMIT 1",
+			{ "id": { value: arguments.postId, cfsqltype: "cf_sql_varchar" } },
+			{ returnType: "array" }
+		);
+
+		if ( !rows.len() ) return this;
+
+		var row = rows[ 1 ];
+
+		row[ "tags" ] = queryExecute(
+			"SELECT T.tag
+			FROM Tag T
+			INNER JOIN TagPost TP ON TP.tag_id = T.id
+			WHERE TP.post_id = :post_id
+			ORDER BY T.tag ASC",
+			{ "post_id": { value: row.id, cfsqltype: "cf_sql_varchar" } },
+			{ returnType: "array" }
+		).map( ( r ) => r.tag );
+
+		var authorRows = queryExecute(
+			"SELECT U.display_name
+			FROM User U
+			INNER JOIN UserPost UP ON UP.user_id = U.id
+			WHERE UP.post_id = :post_id
+				AND UP.author_role = 'author'
+			LIMIT 1",
+			{ "post_id": { value: row.id, cfsqltype: "cf_sql_varchar" } },
+			{ returnType: "array" }
+		);
+		row[ "author_name" ] = authorRows.len() ? authorRows[ 1 ].display_name : "";
+
+		return populate( row );
+
+	}
+
+	/**
+	 * Loads a post by URL slug. Intended for public post display.
+	 *
+	 * Fetches the full post body, view count (via LEFT JOIN on Views), tags,
+	 * and primary author name. When publishedOnly is true (the default) only
+	 * published posts are matched — pass false to also load drafts and archived
+	 * posts (e.g. for CMS preview).
+	 * Clears all properties first so a failed lookup leaves the bean empty.
+	 *
+	 * @param {string}  postSlug      - The URL slug of the post.
+	 * @param {boolean} publishedOnly - Restrict to published posts only. Defaults to true.
+	 * @return {PostBean} this, for chaining.
+	 */
+	function loadBySlug( required string postSlug, boolean publishedOnly = true ){
+		init();
+
+		var statusFilter = arguments.publishedOnly ? "AND P.status = 'published' AND P.publish_date <= NOW()" : "";
+
+		var rows = queryExecute(
+			"SELECT
+				P.id,
+				P.title,
+				P.slug,
+				P.description,
+				P.cover_image,
+				P.body,
+				P.status,
+				P.publish_date,
+				P.created,
+				P.last_updated,
+				COALESCE(V.views, 0) AS views,
+				(
+					SELECT U.display_name
+					FROM User U
+					INNER JOIN UserPost UP ON UP.user_id = U.id
+					WHERE UP.post_id = P.id
+						AND UP.author_role = 'author'
+					LIMIT 1
+				) AS author_name,
+				(
+					SELECT U.avatar_label
+					FROM User U
+					INNER JOIN UserPost UP ON UP.user_id = U.id
+					WHERE UP.post_id = P.id
+						AND UP.author_role = 'author'
+					LIMIT 1
+				) AS author_avatar_label,
+				(
+					SELECT U.about
+					FROM User U
+					INNER JOIN UserPost UP ON UP.user_id = U.id
+					WHERE UP.post_id = P.id
+						AND UP.author_role = 'author'
+					LIMIT 1
+				) AS author_about
+			FROM Post P
+			LEFT JOIN Views V ON V.post_id = P.id
+			WHERE P.slug = :slug
+				#statusFilter#
+			LIMIT 1",
+			{ "slug": { value: arguments.postSlug, cfsqltype: "cf_sql_varchar" } },
+			{ returnType: "array" }
+		);
+
+		if ( !rows.len() ) return this;
+
+		var row = rows[ 1 ];
+
+		row[ "tags" ] = queryExecute(
+			"SELECT T.tag
+			FROM Tag T
+			INNER JOIN TagPost TP ON TP.tag_id = T.id
+			WHERE TP.post_id = :post_id
+			ORDER BY T.tag ASC",
+			{ "post_id": { value: row.id, cfsqltype: "cf_sql_varchar" } },
+			{ returnType: "array" }
+		).map( ( r ) => r.tag );
+
+		return populate( row );
+	}
+
+	/**
+	 * Returns a snake_case struct suitable for PostService.savePost().
+	 *
+	 * @return {struct}
+	 */
+	function toStruct(){
+		return {
+			"id"           : getId(),
+			"title"        : getTitle(),
+			"slug"         : getSlug(),
+			"description"  : getDescription(),
+			"cover_image"  : getCoverImage(),
+			"body"         : getBody(),
+			"status"       : getStatus(),
+			"featured"     : getFeatured(),
+			"publish_date" : getPublishDate()
+		};
+	}
+
+}

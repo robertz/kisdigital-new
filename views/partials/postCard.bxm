@@ -1,0 +1,31 @@
+<bx:output>
+<article class="post-row">
+	<div class="post-row__head">
+		<h3 class="post-row__title">
+			<a href="#post.getPostUrl()#">#encodeForHTML( post.getTitle() )#</a>
+			<bx:if post.getFeatured()>
+				<i class="bi bi-star-fill post-row__featured" title="Featured"></i>
+			</bx:if>
+		</h3>
+		<time class="post-row__date">#dateFormat( post.getPublishDate(), "MMM D, YYYY" )#</time>
+	</div>
+	<bx:if len( post.getDescription() )>
+	<p class="post-row__excerpt">#encodeForHTML( post.getDescription() )#</p>
+	</bx:if>
+	<div class="post-row__meta">
+		<bx:if len( post.getAuthorName() )>
+			<span class="d-inline-flex align-items-center gap-2">
+				<span class="author-avatar author-avatar--sm">#encodeForHTML( post.getAuthorInitials() )#</span>
+				<span class="read-time">#encodeForHTML( post.getAuthorName() )#</span>
+			</span>
+		</bx:if>
+		<bx:if post.getTags().len()>
+		<span class="post-row__tags">
+			<bx:loop array="#post.getTags()#" item="tag">
+				<a href="/tag/#encodeForURL( tag )#" class="tag-badge">#encodeForHTML( tag )#</a>
+			</bx:loop>
+		</span>
+		</bx:if>
+	</div>
+</article>
+</bx:output>

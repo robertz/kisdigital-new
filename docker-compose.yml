@@ -1,0 +1,63 @@
+# Local dev only — production deploys via .do/app.yaml, building the same
+# Dockerfile directly (no compose). app.bxs already has reloadOnChange +
+# env=development on (once ENV=development is set below), so editing a
+# bind-mounted .bx/.bxs/.bxm file restarts the server inside the container
+# automatically.
+#
+# Assets (public/assets/dist) are built once at image-build time by the
+# Dockerfile's Node stage, not bind-mounted — CSS/JS edits need a rebuild
+# (`docker compose up --build`), same as any other Dockerfile change.
+#
+# Points at the same "chron" MySQL database used for local (non-Docker) dev
+# (see start.sh) via host.docker.internal, so this runs against real data
+# rather than an empty container-only database.
+#
+# Usage:
+#   docker compose up --build   (first run, or after changing the Dockerfile)
+#   docker compose up           (every time after that)
+
+services:
+  web:
+    build: .
+    # reloadOnChange (on when ENV=development, see app.bxs) restarts BoxLang
+    # by spawning a *child* process and exiting the old one — fine on a
+    # normal machine (the child gets reparented to the OS's own init and
+    # keeps running), but boxlang runs directly as the container's PID 1
+    # (see Dockerfile's CMD), and PID 1 exiting tears down the whole
+    # container instantly regardless of what it spawned first.
+    #
+    # `init: true` (Docker's built-in tini) does NOT fix this — confirmed
+    # directly against boxlang-express's own FileWatcher: tini only waits on
+    # its one direct child and exits right along with it, it doesn't wait
+    # for orphaned grandchildren. `restart: unless-stopped` is what actually
+    # gives a working edit-and-reload loop: Compose brings the container
+    # straight back up. BOXLANG_MODULES is baked into the image at build
+    # time now (see Dockerfile), so this restart is just a cold boxlang
+    # start — no reinstall, no network dependency.
+    restart: unless-stopped
+    ports:
+      - "3005:3005"
+    env_file:
+      - .env
+    environment:
+      ENV: development
+      # The base image sets PORT=8080 for its own CommandBox/Runwar server
+      # convention — override it, since app.bxs's app.listen() reads the
+      # same var and would otherwise bind 8080 instead of the port mapped
+      # below.
+      PORT: 3005
+      CHRON_DB_HOST: host.docker.internal
+    extra_hosts:
+      # host.docker.internal resolves natively on Docker Desktop (Mac/Windows);
+      # this mapping is what makes it resolve on Linux too.
+      - "host.docker.internal:host-gateway"
+    volumes:
+      # App source — edited on the host, picked up by reloadOnChange inside
+      # the container. Individually mounted (not the whole /app) so this
+      # doesn't shadow public/assets/dist or boxlang_modules/ (both built
+      # into the image).
+      - ./app.bxs:/app/app.bxs
+      - ./boxlang.json:/app/boxlang.json
+      - ./views:/app/views
+      - ./routes:/app/routes
+      - ./models:/app/models

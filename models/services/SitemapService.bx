@@ -1,0 +1,142 @@
+/**
+ * SitemapService
+ *
+ * Builds the XML sitemap and RSS feed on demand — both are generated fresh on
+ * every request to /sitemap.xml and /rss rather than written to a static file
+ * on a schedule (boxlang-express has no built-in task scheduler, and a blog
+ * this size doesn't need one; regenerating per-request is cheap).
+ *
+ * Sitemap format: Sitemap Protocol 0.9 (https://www.sitemaps.org/schemas/sitemap/0.9).
+ * Post URL format mirrors the application router: /posts/{year}/{month}/{slug}
+ */
+class {
+
+	variables.postService = "";
+
+	function init( required postService ){
+		variables.postService = arguments.postService;
+		return this;
+	}
+
+	/**
+	 * Builds sitemap.xml.
+	 *
+	 * Includes:
+	 *  - The homepage at priority 1.00
+	 *  - The posts index at priority 0.90
+	 *  - Up to 5,000 published posts at priority 0.80, each stamped with
+	 *    the post's last_updated date so edits are reflected in crawl scheduling.
+	 *
+	 * The site URL is read from the SITEURL environment variable.
+	 *
+	 * @return {string} The sitemap XML document.
+	 */
+	function buildSitemap(){
+		var siteUrl  = getSystemSetting( "SITEURL", "https://kisdigital.com" );
+		var posts    = variables.postService.getSitemapPosts();
+		var out      = [];
+
+		out.append( "<?xml version=""1.0"" encoding=""UTF-8""?>" );
+		out.append( "<urlset xmlns=""http://www.sitemaps.org/schemas/sitemap/0.9"">" );
+
+		// ── Homepage ──────────────────────────────────────────────────────────────
+		out.append( "<url>" );
+		out.append( "<loc>" & siteUrl & "/</loc>" );
+		out.append( "<lastmod>" & dateTimeFormat( now(), "iso" ) & "</lastmod>" );
+		out.append( "<changefreq>daily</changefreq>" );
+		out.append( "<priority>1.00</priority>" );
+		out.append( "</url>" );
+
+		// ── Posts index ───────────────────────────────────────────────────────────
+		out.append( "<url>" );
+		out.append( "<loc>" & siteUrl & "/posts</loc>" );
+		out.append( "<lastmod>" & dateTimeFormat( now(), "iso" ) & "</lastmod>" );
+		out.append( "<changefreq>daily</changefreq>" );
+		out.append( "<priority>0.90</priority>" );
+		out.append( "</url>" );
+
+		// ── Published posts ───────────────────────────────────────────────────────
+		for ( var post in posts ) {
+			var pd      = post.publish_date;
+			var yr      = dateFormat( pd, "yyyy" );
+			var mo      = dateFormat( pd, "mm" );
+			var lastmod = dateTimeFormat( post.last_updated, "iso" );
+			var postUrl = siteUrl & "/posts/" & yr & "/" & mo & "/" & encodeForURL( post.slug );
+
+			out.append( "<url>" );
+			out.append( "<loc>" & postUrl & "</loc>" );
+			out.append( "<lastmod>" & lastmod & "</lastmod>" );
+			out.append( "<changefreq>weekly</changefreq>" );
+			out.append( "<priority>0.80</priority>" );
+			out.append( "</url>" );
+		}
+
+		out.append( "</urlset>" );
+
+		return out.toList( char( 10 ) );
+	}
+
+	/**
+	 * Builds the RSS 2.0 feed of the 20 most recently published posts.
+	 * Each item includes title, link, description, pubDate, guid, author,
+	 * and an optional enclosure for the cover image.
+	 *
+	 * The site URL is read from the SITEURL environment variable.
+	 *
+	 * @return {string} The RSS XML document.
+	 */
+	function buildRSS(){
+		var siteUrl   = getSystemSetting( "SITEURL", "https://kisdigital.com" );
+		var posts     = variables.postService.getRSSPosts();
+		var out       = [];
+		var buildDate = dateTimeFormat( now(), "EEE, dd MMM yyyy HH:nn:ss Z" );
+
+		out.append( "<?xml version=""1.0"" encoding=""UTF-8""?>" );
+		out.append( "<rss version=""2.0"" xmlns:atom=""http://www.w3.org/2005/Atom"">" );
+		out.append( "<channel>" );
+
+		// ── Channel metadata ──────────────────────────────────────────────────────
+		out.append( "<title>KISDigital</title>" );
+		out.append( "<link>" & siteUrl & "</link>" );
+		out.append( "<description>Deep dives into ColdFusion, Lucee, and BoxLang — modern CFML development, runtime internals, and the future of the JVM web stack.</description>" );
+		out.append( "<language>en-us</language>" );
+		out.append( "<lastBuildDate>" & buildDate & "</lastBuildDate>" );
+		out.append( "<atom:link href=""" & siteUrl & "/rss"" rel=""self"" type=""application/rss+xml""/>" );
+
+		// ── Items ─────────────────────────────────────────────────────────────────
+		for ( var post in posts ) {
+			var pd      = post.publish_date;
+			var yr      = dateFormat( pd, "yyyy" );
+			var mo      = dateFormat( pd, "mm" );
+			var postUrl = siteUrl & "/posts/" & yr & "/" & mo & "/" & encodeForURL( post.slug );
+			var pubDate = dateTimeFormat( pd, "EEE, dd MMM yyyy HH:nn:ss Z" );
+
+			out.append( "<item>" );
+			out.append( "<title>" & xmlFormat( post.title ) & "</title>" );
+			out.append( "<link>" & postUrl & "</link>" );
+			out.append( "<description>" & xmlFormat( post.description ) & "</description>" );
+			out.append( "<pubDate>" & pubDate & "</pubDate>" );
+			out.append( "<guid isPermaLink=""true"">" & postUrl & "</guid>" );
+
+			if ( len( trim( post.author_email ) ) ) {
+				var authorTag = post.author_email;
+				if ( len( trim( post.author_name ) ) ) {
+					authorTag &= " (" & post.author_name & ")";
+				}
+				out.append( "<author>" & xmlFormat( authorTag ) & "</author>" );
+			}
+
+			if ( len( trim( post.cover_image ) ) ) {
+				out.append( "<enclosure url=""" & xmlFormat( post.cover_image ) & """ type=""image/jpeg"" length=""0""/>" );
+			}
+
+			out.append( "</item>" );
+		}
+
+		out.append( "</channel>" );
+		out.append( "</rss>" );
+
+		return out.toList( char( 10 ) );
+	}
+
+}

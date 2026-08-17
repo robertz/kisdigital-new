@@ -1,0 +1,30 @@
+/**
+ * RSS feed and XML sitemap — both built fresh on every request.
+ */
+class {
+
+	variables.sitemapService = "";
+
+	function init( required sitemapService ){
+		variables.sitemapService = arguments.sitemapService;
+
+		this.router = boxExpressRouter();
+		this.router.get( "/rss", ( req, res ) => rss( req, res ) );
+		this.router.get( "/sitemap.xml", ( req, res ) => sitemap( req, res ) );
+
+		return this;
+	}
+
+	// route: /rss
+	function rss( req, res ){
+		res.set( "Content-Type", "application/rss+xml; charset=UTF-8" );
+		res.send( variables.sitemapService.buildRSS() );
+	}
+
+	// route: /sitemap.xml
+	function sitemap( req, res ){
+		res.set( "Content-Type", "application/xml; charset=UTF-8" );
+		res.send( variables.sitemapService.buildSitemap() );
+	}
+
+}

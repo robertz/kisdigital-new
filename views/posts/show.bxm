@@ -1,0 +1,209 @@
+<bx:include template="../partials/_head.bxm">
+<bx:output>
+<section class="py-5 posts-section">
+	<div class="container">
+
+		<bx:if data.isPreview>
+		<div class="c-post__preview-banner">
+			<i class="bi bi-eye me-2"></i>
+			<bx:if data.post.getIsScheduled()>
+				You are previewing a scheduled post &mdash; goes live
+				<strong>#dateTimeFormat( data.post.getPublishDate(), "mmm d, yyyy" )# at #dateTimeFormat( data.post.getPublishDate(), "h:nn tt" )#</strong>.
+			<bx:else>
+				You are previewing an unpublished draft &mdash;
+				<strong>#encodeForHTML( data.post.getStatus() )#</strong>.
+			</bx:if>
+			<a href="/manage/posts/#encodeForURL( data.post.getId() )#/edit" class="c-post__preview-banner__link">Edit post</a>
+		</div>
+		</bx:if>
+
+		<div class="c-post__nav">
+			<a href="/" class="c-post__back">
+				<i class="bi bi-arrow-left"></i> All Articles
+			</a>
+			<bx:if len( data.manageUser ?: "" )>
+				<a href="/manage/posts/#encodeForURL( data.post.getId() )#/edit" class="c-post__edit-link">
+					<i class="bi bi-pencil"></i> Edit post
+				</a>
+			</bx:if>
+		</div>
+
+		<div class="row g-5">
+
+			<!--- Main content --->
+			<div class="col-lg-8">
+				<article class="c-post">
+
+					<bx:if len( data.post.getCoverImage() )>
+						<img src="#encodeForHTML( data.post.getCoverImage() )#"
+							alt=""
+							class="c-post__cover">
+					</bx:if>
+
+					<header class="c-post__header">
+
+						<bx:if data.post.getTags().len()>
+						<div class="c-post__tags mb-4">
+							<bx:loop array="#data.post.getTags()#" item="tag">
+								<a href="/tag/#encodeForURL( tag )#" class="tag-badge">#encodeForHTML( tag )#</a>
+							</bx:loop>
+						</div>
+						</bx:if>
+
+						<h1 class="c-post__title">#encodeForHTML( data.post.getTitle() )#</h1>
+
+						<bx:if len( data.post.getDescription() )>
+						<p class="c-post__description">#encodeForHTML( data.post.getDescription() )#</p>
+						</bx:if>
+
+						<div class="c-post__meta">
+							<bx:if len( data.post.getAuthorName() )>
+								<div class="c-post__author-avatar">
+									#encodeForHTML( data.post.getAuthorInitials() )#
+								</div>
+								<span>#encodeForHTML( data.post.getAuthorName() )#</span>
+								<span class="c-post__meta-sep">&middot;</span>
+							</bx:if>
+							<bx:if len( data.post.getPublishDate() )>
+								<span>#dateFormat( data.post.getPublishDate(), "MMMM D, YYYY" )#</span>
+								<span class="c-post__meta-sep">&middot;</span>
+							</bx:if>
+							<span>#data.post.getReadingTime()# min read</span>
+							<span class="c-post__meta-sep">&middot;</span>
+							<span>
+								#( data.post.getViews() gte 1000 ? numberFormat( data.post.getViews() / 1000, "0.0" ) & "k" : data.post.getViews() )# views
+							</span>
+						</div>
+
+					</header>
+
+					<div class="c-post__share">
+						<span class="c-post__share-label">Share</span>
+						<div class="c-post__share-links">
+
+							<a href="https://www.facebook.com/sharer/sharer.php?u=#encodeForURL( data.canonicalUrl )#"
+								class="c-post__share-btn"
+								target="_blank" rel="noopener"
+								aria-label="Share on Facebook">
+								<svg aria-hidden="true" viewBox="0 0 24 24" fill="currentColor">
+									<path d="M22 12.07C22 6.5 17.52 2 12 2S2 6.5 2 12.07c0 4.99 3.66 9.13 8.44 9.93v-7.03H7.9v-2.9h2.54V9.41c0-2.5 1.5-3.89 3.79-3.89 1.1 0 2.24.2 2.24.2v2.46h-1.26c-1.24 0-1.63.77-1.63 1.56v1.87h2.77l-.44 2.9h-2.33v7.03C18.34 21.2 22 17.06 22 12.07Z" />
+								</svg>
+							</a>
+
+							<a href="https://twitter.com/share?url=#encodeForURL( data.canonicalUrl )#&text=#encodeForURL( data.post.getTitle() )#"
+								class="c-post__share-btn"
+								target="_blank" rel="noopener"
+								aria-label="Share on X">
+								<svg aria-hidden="true" viewBox="0 0 24 24" fill="currentColor">
+									<path d="M20.98 3.5h-3.3l-4.27 5.54L9.73 3.5H3.02l7.43 9.9-6.9 9.1h3.3l4.74-6.25 4.74 6.25h6.7l-7.79-10.38 6.74-8.62ZM6.44 5.45h1.88l9.24 12.32h-1.88L6.44 5.45Zm10.13-.03h1.79l-9.03 11.56h-1.8l9.04-11.56Z" />
+								</svg>
+							</a>
+
+							<a href="https://www.linkedin.com/sharing/share-offsite/?url=#encodeForURL( data.canonicalUrl )#"
+								class="c-post__share-btn"
+								target="_blank" rel="noopener"
+								aria-label="Share on LinkedIn">
+								<svg aria-hidden="true" viewBox="0 0 24 24" fill="currentColor">
+									<path d="M4.98 3.5c0 1.38-1.09 2.5-2.49 2.5H2.47C1.1 6 0 4.88 0 3.5 0 2.12 1.1 1 2.47 1s2.51 1.12 2.51 2.5ZM.24 22h4.45V7.98H.24V22ZM8.55 7.98h4.26v1.91h.06c.59-1.12 2.03-2.3 4.19-2.3 4.48 0 5.31 2.95 5.31 6.78V22h-4.45v-6.46c0-1.54-.03-3.52-2.15-3.52-2.15 0-2.48 1.67-2.48 3.41V22H8.55V7.98Z" />
+								</svg>
+							</a>
+
+						</div>
+					</div>
+
+					<div class="c-post__body">
+						#data.postBodyHtml#
+					</div>
+
+				</article>
+
+				<bx:if data.relatedPosts.len()>
+				<section class="c-related-posts">
+					<p class="section-label mb-4">Related Articles</p>
+					<div class="post-list">
+						<bx:loop array="#data.relatedPosts#" item="post" index="cardIndex">
+							<bx:include template="../partials/postCard.bxm">
+						</bx:loop>
+					</div>
+				</section>
+				</bx:if>
+
+				<div class="giscus"></div>
+				<script>
+					(function () {
+						var theme = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+						var s = document.createElement('script');
+						s.src = 'https://giscus.app/client.js';
+						s.setAttribute('data-repo', 'robertz/kdfe-ssg');
+						s.setAttribute('data-repo-id', 'R_kgDOK8F-Yw');
+						s.setAttribute('data-category', 'Comments');
+						s.setAttribute('data-category-id', 'DIC_kwDOK8F-Y84CcVjP');
+						s.setAttribute('data-mapping', 'pathname');
+						s.setAttribute('data-strict', '0');
+						s.setAttribute('data-reactions-enabled', '1');
+						s.setAttribute('data-emit-metadata', '0');
+						s.setAttribute('data-input-position', 'bottom');
+						s.setAttribute('data-theme', theme);
+						s.setAttribute('data-lang', 'en');
+						s.setAttribute('crossorigin', 'anonymous');
+						s.async = true;
+						document.currentScript.parentNode.appendChild(s);
+
+						// Update giscus when the site theme changes
+						new MutationObserver(function () {
+							var newTheme = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+							var iframe = document.querySelector('iframe.giscus-frame');
+							if (iframe) {
+								iframe.contentWindow.postMessage(
+									{ giscus: { setConfig: { theme: newTheme } } },
+									'https://giscus.app'
+								);
+							}
+						}).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+					})();
+				</script>
+
+			</div>
+
+			<!--- Sidebar --->
+			<div class="col-lg-4">
+
+				<!--- Author --->
+				<bx:if len( data.post.getAuthorName() )>
+					<p class="c-post-sidebar__label">Author</p>
+					<div class="c-post-sidebar__widget mb-5">
+						<div class="d-flex align-items-center gap-3 mb-3">
+							<div class="c-post-sidebar__author-avatar">
+								#encodeForHTML( data.post.getAuthorInitials() )#
+							</div>
+							<div class="text-body fw-bold">#encodeForHTML( data.post.getAuthorName() )#</div>
+						</div>
+						<bx:if len( data.post.getAuthorAbout() )>
+						<p class="c-post-sidebar__author-bio">#encodeForHTML( data.post.getAuthorAbout() )#</p>
+						</bx:if>
+					</div>
+				</bx:if>
+
+				<!--- Tags --->
+				<bx:if data.post.getTags().len()>
+				<p class="c-post-sidebar__label">Tags</p>
+				<div class="c-post-sidebar__widget mb-5">
+					<div class="d-flex flex-wrap gap-2">
+						<bx:loop array="#data.post.getTags()#" item="tag">
+							<a href="/tag/#encodeForURL( tag )#" class="tag-badge">#encodeForHTML( tag )#</a>
+						</bx:loop>
+					</div>
+				</div>
+				</bx:if>
+
+				<!--- Trending --->
+				<bx:include template="../partials/trendingSidebar.bxm">
+
+			</div>
+
+		</div>
+
+	</div>
+</section>
+</bx:output>
+<bx:include template="../partials/_foot.bxm">

@@ -1,0 +1,48 @@
+/**
+ * Home page and About page.
+ */
+class {
+
+	variables.postService   = "";
+	variables.authorService = "";
+	variables.siteDefaults  = "";
+
+	function init( required postService, required authorService, required siteDefaults ){
+		variables.postService   = arguments.postService;
+		variables.authorService = arguments.authorService;
+		variables.siteDefaults  = arguments.siteDefaults;
+
+		this.router = boxExpressRouter();
+
+		this.router.get( "/", ( req, res ) => index( req, res ) );
+		this.router.get( "/about", ( req, res ) => about( req, res ) );
+
+		return this;
+	}
+
+	// route: /
+	function index( req, res ){
+		res.render( "main/index", {
+			pageTitle     : "",
+			canonicalUrl  : variables.siteDefaults.canonicalUrl( req.path ),
+			meta          : variables.siteDefaults.defaultMeta( req.path ),
+			featuredPost  : variables.postService.getFeaturedPost(),
+			latestPosts   : variables.postService.getLatestPosts(),
+			trendingPosts : variables.postService.getTrendingPosts(),
+			allTags       : variables.postService.getAllTags(),
+			siteAuthor    : variables.authorService.getFirstAuthor()
+		} );
+	}
+
+	// route: /about
+	function about( req, res ){
+		res.render( "main/about", {
+			pageTitle    : "About",
+			canonicalUrl : variables.siteDefaults.canonicalUrl( req.path ),
+			meta         : variables.siteDefaults.defaultMeta( req.path ),
+			author       : variables.authorService.getFirstAuthor(),
+			latestPosts  : variables.postService.getLatestPosts()
+		} );
+	}
+
+}

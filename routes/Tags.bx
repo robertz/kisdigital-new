@@ -1,0 +1,47 @@
+/**
+ * Tag-filtered article list.
+ */
+class {
+
+	variables.postService  = "";
+	variables.siteDefaults = "";
+
+	function init( required postService, required siteDefaults ){
+		variables.postService  = arguments.postService;
+		variables.siteDefaults = arguments.siteDefaults;
+
+		this.router = boxExpressRouter();
+		this.router.get( "/tag/:tag", ( req, res ) => index( req, res ) );
+
+		return this;
+	}
+
+	// route: /tag/:tag
+	function index( req, res ){
+		// [H3] Truncate tag to the max column length defined in schema.sql (50 chars).
+		var currentTag = left( trim( req.params.tag ?: "" ), 50 );
+
+		// [H3, L1] Validate page number and cap to prevent expensive high-OFFSET queries.
+		var rawPage     = req.query.page ?: "";
+		var currentPage = isNumeric( rawPage ) && rawPage > 0 ? int( rawPage ) : 1;
+		currentPage     = min( currentPage, 1000 );
+
+		var paging = variables.postService.getPostsByTag( tag = currentTag, page = currentPage );
+
+		if ( !paging.total ){
+			res.status( 404 ).redirect( "/posts" );
+			return;
+		}
+
+		res.render( "tags/index", {
+			pageTitle     : "Tagged: " & currentTag,
+			canonicalUrl  : variables.siteDefaults.canonicalUrl( req.path ),
+			meta          : variables.siteDefaults.defaultMeta( req.path ),
+			currentTag    : currentTag,
+			paging        : paging,
+			trendingPosts : variables.postService.getTrendingPosts(),
+			allTags       : variables.postService.getAllTags()
+		} );
+	}
+
+}

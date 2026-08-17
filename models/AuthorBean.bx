@@ -1,0 +1,93 @@
+/**
+ * Represents a CMS user / author.
+ *
+ * Does not carry the password hash — only data safe to pass to views.
+ * Use exists() after a load call to check whether a user was found.
+ */
+class accessors="true" {
+
+	property name="id"          type="string"  default="";
+	property name="displayName" type="string"  default="";
+	property name="email"       type="string"  default="";
+	property name="role"        type="string"  default="author";
+	property name="about"       type="string"  default="";
+	property name="avatarLabel" type="string"  default="";
+	property name="postCount"   type="numeric" default=0;
+	property name="created"     type="any"     default="";
+
+	/**
+	 * Resets all properties to their defaults.
+	 */
+	function init(){
+		setId(          "" );
+		setDisplayName( "" );
+		setEmail(       "" );
+		setRole(        "author" );
+		setAbout(       "" );
+		setAvatarLabel( "" );
+		setPostCount(   0 );
+		setCreated(     "" );
+		return this;
+	}
+
+	/**
+	 * Populates this bean from a query-result struct.
+	 *
+	 * @param {struct} data - Query row struct with user data.
+	 * @return {AuthorBean} this, for chaining.
+	 */
+	function populate( required struct data ){
+		setId(          data["id"]           ?: "" );
+		setDisplayName( data["display_name"] ?: "" );
+		setEmail(       data["email"]        ?: "" );
+		setRole(        data["role"]         ?: "author" );
+		setAbout(       data["about"]        ?: "" );
+		setAvatarLabel( data["avatar_label"] ?: "" );
+		setPostCount(   data["post_count"]   ?: 0 );
+		setCreated(     data["created"]      ?: "" );
+		return this;
+	}
+
+	/**
+	 * Returns true when the bean holds a real user (non-empty id).
+	 *
+	 * @return {boolean}
+	 */
+	function exists(){
+		return len( getId() ) > 0;
+	}
+
+	/**
+	 * Loads a user by UUID.
+	 *
+	 * @param {string} userId - The user UUID.
+	 * @return {AuthorBean} this, for chaining.
+	 */
+	function loadById( required string userId ){
+		init();
+
+		var rows = queryExecute(
+			"SELECT
+				U.id,
+				U.display_name,
+				U.email,
+				U.role,
+				U.about,
+				U.avatar_label,
+				U.created,
+				COUNT(UP.post_id) AS post_count
+			FROM User U
+			LEFT JOIN UserPost UP ON UP.user_id = U.id
+			WHERE U.id = :id
+			GROUP BY U.id
+			LIMIT 1",
+			{ "id": { value: arguments.userId, cfsqltype: "cf_sql_varchar" } },
+			{ returnType: "array" }
+		);
+
+		if ( !rows.len() ) return this;
+
+		return populate( rows[ 1 ] );
+	}
+
+}

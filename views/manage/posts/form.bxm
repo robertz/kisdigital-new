@@ -1,0 +1,768 @@
+<bx:include template="../../partials/_head.bxm">
+<bx:output>
+<div class="c-manage">
+
+	<!--- Sidebar nav --->
+	<bx:include template="../../partials/manageNav.bxm">
+
+	<!--- Main content --->
+	<main class="c-manage-main c-manage-main--flush">
+
+		<!--- Populated by the AJAX save path below; server-rendered alerts (for the
+		      no-JS fallback) sit right after it. --->
+		<div id="editor-flash" class="c-manage-alert" hidden></div>
+
+		<!--- Populated on load if a newer localStorage draft exists than what's
+		      on screen — see the autosave script below. --->
+		<div id="draft-restore-banner" class="c-manage-alert c-manage-alert--draft" hidden>
+			<i class="bi bi-clock-history"></i>
+			<span id="draft-restore-text">An unsaved draft was found from a previous session.</span>
+			<button type="button" id="draft-restore-accept" class="c-manage-alert__action">Restore it</button>
+			<button type="button" id="draft-restore-dismiss" class="c-manage-alert__action c-manage-alert__action--muted">Discard</button>
+		</div>
+
+		<bx:if len( data.success )>
+			<div class="c-manage-alert c-manage-alert--success">
+				<i class="bi bi-check-circle-fill"></i>
+				#encodeForHTML( data.success )#
+			</div>
+		</bx:if>
+		<bx:if len( data.error )>
+			<div class="c-manage-alert c-manage-alert--error">
+				<i class="bi bi-exclamation-circle-fill"></i>
+				#encodeForHTML( data.error )#
+			</div>
+		</bx:if>
+
+		<form class="c-post-editor" method="post" action="/manage/posts/save">
+			<input type="hidden" name="_csrf" value="#encodeForHTMLAttribute( data.csrfToken )#">
+			<input type="hidden" name="post_id" value="#encodeForHTMLAttribute( data.post.getId() )#">
+
+			<!--- ── Sticky action bar ── --->
+			<header class="c-post-editor__bar">
+				<div class="c-post-editor__bar-lead">
+					<a href="/manage/posts" class="c-post-editor__back" title="Back to posts">
+						<i class="bi bi-arrow-left"></i>
+					</a>
+					<div>
+						<span class="c-post-editor__eyebrow">
+							<bx:if data.isNew>New post<bx:else>Editing post</bx:if>
+						</span>
+						<div class="c-post-editor__bar-meta">
+							<bx:if data.post.getIsScheduled()>
+								<span class="c-status-badge c-status-badge--scheduled" title="Goes live #dateTimeFormat( data.post.getPublishDate(), 'mmm d, yyyy' )# at #dateTimeFormat( data.post.getPublishDate(), 'h:nn tt' )#">
+									<i class="bi bi-clock-fill c-status-badge__dot"></i> Scheduled
+								</span>
+							<bx:elseif data.post.getStatus() == "published">
+								<span class="c-status-badge c-status-badge--published">
+									<i class="bi bi-circle-fill c-status-badge__dot"></i> Published
+								</span>
+							<bx:elseif data.post.getStatus() == "archived">
+								<span class="c-status-badge c-status-badge--archived">Archived</span>
+							<bx:else>
+								<span class="c-status-badge c-status-badge--draft">Draft</span>
+							</bx:if>
+							<bx:if !data.isNew && len( data.post.getSlug() )>
+								<a href="#data.post.getPostUrl()#" target="_blank" rel="noopener" class="c-post-editor__link">
+									<bx:if data.post.getStatus() == "published" && !data.post.getIsScheduled()>
+										View live <i class="bi bi-box-arrow-up-right"></i>
+									<bx:else>
+										Preview <i class="bi bi-eye"></i>
+									</bx:if>
+								</a>
+							</bx:if>
+						</div>
+					</div>
+				</div>
+				<div class="c-post-editor__bar-actions">
+					<span id="autosave-status" class="c-post-editor__autosave-status"></span>
+					<button type="button" id="distraction-free-toggle" class="c-post-editor__icon-btn" title="Distraction-free mode">
+						<i class="bi bi-arrows-fullscreen"></i>
+					</button>
+					<a href="/manage/posts" class="c-post-editor__cancel">Cancel</a>
+					<button type="submit" class="c-post-editor__save">
+						<bx:if data.isNew>
+							<i class="bi bi-plus-lg"></i> Create post
+						<bx:else>
+							<i class="bi bi-floppy"></i> Save changes
+						</bx:if>
+					</button>
+				</div>
+			</header>
+
+			<div class="c-post-editor__grid">
+
+				<!--- ── Main column ── --->
+				<div class="c-post-editor__main">
+
+					<!--- Title (headline-style, borderless) --->
+					<div class="c-post-editor__headline">
+						<input
+							type="text"
+							id="editor-title"
+							name="title"
+							class="c-post-editor__title-input"
+							value="#encodeForHTMLAttribute( data.post.getTitle() )#"
+							placeholder="Your post title…"
+							required>
+
+						<div class="c-post-editor__slug">
+							<span class="c-post-editor__slug-prefix">/posts/</span>
+							<input
+								type="text"
+								id="editor-slug"
+								name="slug"
+								class="c-post-editor__slug-input"
+								value="#encodeForHTMLAttribute( data.post.getSlug() )#"
+								placeholder="auto-generated-from-title">
+						</div>
+						<p class="c-manage-form__hint">Leave blank to auto-generate from the title.</p>
+					</div>
+
+					<!--- Description panel --->
+					<section class="c-post-editor__panel">
+						<header class="c-post-editor__panel-head">
+							<h2 class="c-post-editor__panel-title">Description</h2>
+						</header>
+						<textarea
+							id="editor-description"
+							name="description"
+							class="c-manage-form__textarea"
+							rows="3"
+							maxlength="500"
+							placeholder="Short summary shown in post cards…">#encodeForHTML( data.post.getDescription() )#</textarea>
+						<p class="c-manage-form__hint"><span id="desc-count">#len( data.post.getDescription() )#</span> / 500 characters.</p>
+					</section>
+
+					<!--- Body panel --->
+					<section class="c-post-editor__panel">
+						<header class="c-post-editor__panel-head">
+							<h2 class="c-post-editor__panel-title">Body <span class="c-post-editor__panel-hint">Markdown</span></h2>
+							<div class="c-editor-tabs" role="tablist">
+								<button type="button" class="c-editor-tabs__btn is-active" data-tab="write" role="tab" aria-selected="true">Write</button>
+								<button type="button" class="c-editor-tabs__btn" data-tab="preview" role="tab" aria-selected="false">Preview</button>
+							</div>
+						</header>
+
+						<div class="c-editor-toolbar" id="editor-toolbar">
+							<button type="button" data-md="bold" title="Bold (Ctrl/Cmd+B)"><i class="bi bi-type-bold"></i></button>
+							<button type="button" data-md="italic" title="Italic (Ctrl/Cmd+I)"><i class="bi bi-type-italic"></i></button>
+							<button type="button" data-md="link" title="Link"><i class="bi bi-link-45deg"></i></button>
+							<span class="c-editor-toolbar__sep"></span>
+							<button type="button" data-md="h2" title="Heading"><i class="bi bi-type-h2"></i></button>
+							<button type="button" data-md="code" title="Code"><i class="bi bi-code-slash"></i></button>
+							<button type="button" data-md="quote" title="Quote"><i class="bi bi-quote"></i></button>
+							<span class="c-editor-toolbar__sep"></span>
+							<button type="button" data-md="ul" title="Bulleted list"><i class="bi bi-list-ul"></i></button>
+							<button type="button" data-md="ol" title="Numbered list"><i class="bi bi-list-ol"></i></button>
+						</div>
+
+						<textarea
+							id="editor-body"
+							name="body"
+							class="c-manage-form__textarea c-post-editor__body"
+							rows="24"
+							placeholder="Write your post in Markdown…">#encodeForHTML( data.post.getBody() )#</textarea>
+
+						<div id="editor-preview" class="c-post-editor__preview c-post__body" hidden>
+							<p class="text-muted">Nothing to preview yet.</p>
+						</div>
+					</section>
+
+				</div>
+
+				<!--- ── Sidebar column ── --->
+				<aside class="c-post-editor__sidebar">
+
+					<!--- Publish panel --->
+					<section class="c-post-editor__panel">
+						<header class="c-post-editor__panel-head">
+							<h2 class="c-post-editor__panel-title">
+								<i class="bi bi-broadcast"></i> Publish
+							</h2>
+						</header>
+
+						<div class="c-post-editor__field">
+							<label for="editor-status" class="c-manage-form__label">Status</label>
+							<select id="editor-status" name="status" class="c-manage-form__select">
+								<option value="draft"     <bx:if data.post.getStatus() == "draft">selected</bx:if>>Draft</option>
+								<option value="published" <bx:if data.post.getStatus() == "published">selected</bx:if>>Published</option>
+								<option value="archived"  <bx:if data.post.getStatus() == "archived">selected</bx:if>>Archived</option>
+							</select>
+						</div>
+
+						<div class="c-post-editor__field">
+							<label for="editor-publish-date" class="c-manage-form__label">Publish date</label>
+							<input
+								type="datetime-local"
+								id="editor-publish-date"
+								name="publish_date"
+								class="c-manage-form__input"
+								value="#encodeForHTMLAttribute( isDate( data.post.getPublishDate() ) ? dateTimeFormat( data.post.getPublishDate(), "yyyy-mm-dd'T'HH:nn" ) : '' )#">
+							<p class="c-manage-form__hint">A future date + Published status = scheduled. It stays hidden from visitors (and out of RSS/sitemap) until then.</p>
+						</div>
+
+						<div class="c-post-editor__field c-post-editor__featured">
+							<div class="c-manage-form__check-row">
+								<input
+									type="checkbox"
+									id="editor-featured"
+									name="featured"
+									value="1"
+									<bx:if data.post.getFeatured()>checked</bx:if>>
+								<label for="editor-featured" class="c-manage-form__label mb-0">
+									<i class="bi bi-star-fill"></i> Feature this post
+								</label>
+							</div>
+						</div>
+
+						<bx:if len( data.post.getAuthorName() )>
+							<div class="c-post-editor__field c-post-editor__author">
+								<span class="c-manage-form__label">Author</span>
+								<p class="c-post-editor__author-name">
+									<i class="bi bi-person-circle"></i>
+									#encodeForHTML( data.post.getAuthorName() )#
+								</p>
+							</div>
+						</bx:if>
+					</section>
+
+					<!--- Cover image panel --->
+					<section class="c-post-editor__panel">
+						<header class="c-post-editor__panel-head">
+							<h2 class="c-post-editor__panel-title">
+								<i class="bi bi-image"></i> Cover image
+							</h2>
+						</header>
+
+						<div id="editor-cover-preview" class="c-post-editor__cover-preview" #( len( data.post.getCoverImage() ) ? "" : "hidden" )#>
+							<img id="editor-cover-preview-img" src="#encodeForHTMLAttribute( data.post.getCoverImage() )#" alt="Cover preview">
+						</div>
+
+						<input
+							type="url"
+							id="editor-cover-image"
+							name="cover_image"
+							class="c-manage-form__input"
+							value="#encodeForHTMLAttribute( data.post.getCoverImage() )#"
+							placeholder="https://…">
+						<p class="c-manage-form__hint">Paste a full image URL, or upload one below.</p>
+
+						<div class="c-post-editor__cover-upload">
+							<input type="file" id="editor-cover-file" accept="image/jpeg,image/png,image/webp,image/gif" hidden>
+							<button type="button" id="editor-cover-upload-btn" class="c-manage-form__btn">
+								<i class="bi bi-upload"></i> Upload image
+							</button>
+							<button type="button" id="editor-cover-browse-btn" class="c-manage-form__btn">
+								<i class="bi bi-images"></i> Choose existing
+							</button>
+							<span id="editor-cover-upload-status" class="c-post-editor__cover-upload-status"></span>
+						</div>
+
+						<div id="editor-cover-browse-modal" class="c-image-picker" hidden>
+							<div class="c-image-picker__backdrop" id="editor-cover-browse-backdrop"></div>
+							<div class="c-image-picker__dialog" role="dialog" aria-modal="true" aria-labelledby="editor-cover-browse-title">
+								<header class="c-image-picker__head">
+									<h2 id="editor-cover-browse-title" class="c-image-picker__title">Choose an existing image</h2>
+									<button type="button" id="editor-cover-browse-close" class="c-post-editor__icon-btn" title="Close">
+										<i class="bi bi-x-lg"></i>
+									</button>
+								</header>
+								<div id="editor-cover-browse-body" class="c-image-picker__body">
+									<p class="text-muted">Loading…</p>
+								</div>
+							</div>
+						</div>
+					</section>
+
+					<!--- Tags panel --->
+					<section class="c-post-editor__panel">
+						<header class="c-post-editor__panel-head">
+							<h2 class="c-post-editor__panel-title">
+								<i class="bi bi-tags"></i> Tags
+							</h2>
+						</header>
+
+						<input
+							type="text"
+							id="editor-tags"
+							name="tags"
+							class="c-manage-form__input"
+							value="#encodeForHTMLAttribute( data.tagsList )#"
+							placeholder="boxlang, tutorial, tips">
+						<p class="c-manage-form__hint">Comma-separated. Click below to toggle.</p>
+
+						<bx:if data.allTags.len()>
+							<div class="c-manage-form__tag-picker" id="tag-picker">
+								<bx:loop array="#data.allTags#" item="existingTag">
+									<button
+										type="button"
+										class="c-manage-form__tag-chip"
+										data-tag="#encodeForHTMLAttribute( existingTag )#">
+										#encodeForHTML( existingTag )#
+									</button>
+								</bx:loop>
+							</div>
+						</bx:if>
+					</section>
+
+				</aside>
+
+			</div>
+
+		</form>
+
+		<script>
+		(function(){
+			var descEl    = document.getElementById('editor-description');
+			var descCount = document.getElementById('desc-count');
+			if (descEl && descCount) {
+				descEl.addEventListener('input', function(){ descCount.textContent = this.value.length; });
+			}
+
+			var titleEl = document.getElementById('editor-title');
+			var slugEl  = document.getElementById('editor-slug');
+			if (titleEl && slugEl) {
+				var locked = slugEl.value.length > 0;
+				slugEl.addEventListener('input', function(){ locked = true; });
+				titleEl.addEventListener('input', function(){
+					if (locked) return;
+					slugEl.value = this.value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+				});
+			}
+
+			// Tag chip picker — toggles a tag name in/out of the comma-separated
+			// tags input. Pure client-side DOM manipulation, no server round trip.
+			var tagsInput = document.getElementById('editor-tags');
+			var tagPicker = document.getElementById('tag-picker');
+			function currentTags(){
+				return tagsInput.value.split(',').map(function(t){ return t.trim(); }).filter(function(t){ return t.length; });
+			}
+			function syncChipState(){
+				if (!tagPicker) return;
+				var active = currentTags().map(function(t){ return t.toLowerCase(); });
+				Array.prototype.forEach.call(tagPicker.querySelectorAll('.c-manage-form__tag-chip'), function(chip){
+					chip.classList.toggle('is-active', active.indexOf(chip.dataset.tag.toLowerCase()) !== -1);
+				});
+			}
+			if (tagPicker && tagsInput) {
+				tagPicker.addEventListener('click', function(e){
+					var chip = e.target.closest('.c-manage-form__tag-chip');
+					if (!chip) return;
+					var tag = chip.dataset.tag;
+					var tags = currentTags();
+					var idx = tags.map(function(t){ return t.toLowerCase(); }).indexOf(tag.toLowerCase());
+					if (idx === -1) { tags.push(tag); } else { tags.splice(idx, 1); }
+					tagsInput.value = tags.join(', ');
+					syncChipState();
+				});
+				tagsInput.addEventListener('input', syncChipState);
+				syncChipState();
+			}
+
+			var form         = document.querySelector('.c-post-editor');
+			var postIdField  = form.querySelector('[name=post_id]');
+			var flashEl      = document.getElementById('editor-flash');
+			var saveBtn      = form.querySelector('.c-post-editor__save');
+			var bodyTextarea = document.getElementById('editor-body');
+			var csrfToken    = form.querySelector('[name=_csrf]').value;
+
+			function showFlash(kind, message){
+				flashEl.className = 'c-manage-alert c-manage-alert--' + kind;
+				flashEl.innerHTML = '<i class="bi bi-' + (kind === 'success' ? 'check-circle-fill' : 'exclamation-circle-fill') + '"></i> ' + message;
+				flashEl.hidden = false;
+			}
+
+			// ── Cover image: upload + existing-image picker ─────────────────────
+			// Both paths end up calling setCoverImage(), which fills in the URL
+			// field the same way a pasted URL would — that field stays editable
+			// throughout, so manual URLs still work exactly as before.
+			(function(){
+				var fileInput    = document.getElementById('editor-cover-file');
+				var uploadBtn    = document.getElementById('editor-cover-upload-btn');
+				var browseBtn    = document.getElementById('editor-cover-browse-btn');
+				var statusEl     = document.getElementById('editor-cover-upload-status');
+				var urlInput     = document.getElementById('editor-cover-image');
+				var previewWrap  = document.getElementById('editor-cover-preview');
+				var previewImg   = document.getElementById('editor-cover-preview-img');
+				var modal        = document.getElementById('editor-cover-browse-modal');
+				var modalBody    = document.getElementById('editor-cover-browse-body');
+				var modalClose   = document.getElementById('editor-cover-browse-close');
+				var modalBackdrop = document.getElementById('editor-cover-browse-backdrop');
+
+				function setCoverImage(url){
+					urlInput.value = url;
+					previewImg.src = url;
+					previewWrap.hidden = false;
+					urlInput.dispatchEvent(new Event('input', { bubbles: true }));
+				}
+
+				// ── Upload ──
+				uploadBtn.addEventListener('click', function(){ fileInput.click(); });
+
+				fileInput.addEventListener('change', function(){
+					var file = fileInput.files[0];
+					if (!file) return;
+
+					statusEl.className = 'c-post-editor__cover-upload-status';
+					statusEl.textContent = 'Uploading…';
+					uploadBtn.disabled = true;
+
+					var formData = new FormData();
+					formData.append('image', file);
+
+					fetch('/manage/posts/upload-image', {
+						method: 'POST',
+						headers: { 'X-CSRF-Token': csrfToken },
+						body: formData
+					})
+					.then(function(res){ return res.json(); })
+					.then(function(data){
+						uploadBtn.disabled = false;
+						fileInput.value = '';
+						if (!data.success) {
+							statusEl.className = 'c-post-editor__cover-upload-status c-post-editor__cover-upload-status--error';
+							statusEl.textContent = data.error || 'Upload failed.';
+							return;
+						}
+						statusEl.textContent = 'Uploaded.';
+						setCoverImage(data.url);
+					})
+					.catch(function(){
+						uploadBtn.disabled = false;
+						fileInput.value = '';
+						statusEl.className = 'c-post-editor__cover-upload-status c-post-editor__cover-upload-status--error';
+						statusEl.textContent = 'Upload failed — check your connection and try again.';
+					});
+				});
+
+				// ── Existing-image picker ──
+				function closeModal(){ modal.hidden = true; }
+				function openModal(){
+					modal.hidden = false;
+					modalBody.innerHTML = '<p class="text-muted">Loading…</p>';
+
+					fetch('/manage/posts/images', { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+					.then(function(res){ return res.json(); })
+					.then(function(data){
+						if (!data.success) {
+							modalBody.innerHTML = '<p class="text-danger">' + (data.error || 'Could not load images.') + '</p>';
+							return;
+						}
+						if (!data.images.length) {
+							modalBody.innerHTML = '<p class="text-muted">No uploaded images yet — use "Upload image" to add one.</p>';
+							return;
+						}
+						var grid = document.createElement('div');
+						grid.className = 'c-image-picker__grid';
+						data.images.forEach(function(img){
+							var item = document.createElement('button');
+							item.type = 'button';
+							item.className = 'c-image-picker__item';
+							item.title = img.key;
+							var thumb = document.createElement('img');
+							thumb.src = img.url;
+							thumb.alt = img.key;
+							thumb.loading = 'lazy';
+							item.appendChild(thumb);
+							item.addEventListener('click', function(){
+								setCoverImage(img.url);
+								statusEl.className = 'c-post-editor__cover-upload-status';
+								statusEl.textContent = 'Selected.';
+								closeModal();
+							});
+							grid.appendChild(item);
+						});
+						modalBody.innerHTML = '';
+						modalBody.appendChild(grid);
+					})
+					.catch(function(){
+						modalBody.innerHTML = '<p class="text-danger">Couldn\'t load existing images — check your connection and try again.</p>';
+					});
+				}
+
+				browseBtn.addEventListener('click', openModal);
+				modalClose.addEventListener('click', closeModal);
+				modalBackdrop.addEventListener('click', closeModal);
+				document.addEventListener('keydown', function(e){
+					if (e.key === 'Escape' && !modal.hidden) closeModal();
+				});
+			})();
+
+			// ── Autosave + dirty tracking ──────────────────────────────────────
+			// Snapshots the fields that matter into localStorage a beat after
+			// the user stops typing, so an accidental tab close doesn't lose
+			// work. Keyed by post_id (or "new") — a create's draft is orphaned
+			// once it gets a real ID on save, which is fine, it's no longer
+			// "unsaved" at that point anyway.
+			var DRAFT_FIELDS = ['title', 'slug', 'description', 'body', 'status', 'publish_date', 'featured', 'cover_image', 'tags'];
+			var draftKey     = 'kisdigital:post-draft:' + (postIdField.value || 'new');
+			var autosaveStatusEl = document.getElementById('autosave-status');
+			var autosaveTimer;
+
+			function serializeDraft(){
+				var data = {};
+				DRAFT_FIELDS.forEach(function(name){
+					var el = form.querySelector('[name="' + name + '"]');
+					if (!el) return;
+					data[name] = el.type === 'checkbox' ? el.checked : el.value;
+				});
+				return data;
+			}
+
+			function applyDraft(data){
+				DRAFT_FIELDS.forEach(function(name){
+					var el = form.querySelector('[name="' + name + '"]');
+					if (!el || !(name in data)) return;
+					if (el.type === 'checkbox') { el.checked = data[name]; } else { el.value = data[name]; }
+				});
+				if (typeof syncChipState === 'function') syncChipState();
+				if (typeof descEl !== 'undefined' && descEl && descCount) descCount.textContent = descEl.value.length;
+			}
+
+			// What's actually persisted right now (server-rendered values on load,
+			// or the last successful save) — beforeunload and the autosave timer
+			// both compare the live form against this to decide if anything's
+			// actually changed.
+			var lastSyncedSnapshot = serializeDraft();
+
+			function hasUnsavedChanges(){
+				return JSON.stringify( serializeDraft() ) !== JSON.stringify( lastSyncedSnapshot );
+			}
+
+			function clearDraft(){
+				try { localStorage.removeItem(draftKey); } catch (e) {}
+				lastSyncedSnapshot = serializeDraft();
+			}
+
+			function scheduleAutosave(){
+				clearTimeout(autosaveTimer);
+				autosaveTimer = setTimeout(function(){
+					if (!hasUnsavedChanges()) return;
+					try {
+						localStorage.setItem(draftKey, JSON.stringify({ data: serializeDraft(), savedAt: Date.now() }));
+						if (autosaveStatusEl) {
+							autosaveStatusEl.textContent = 'Draft saved locally';
+							setTimeout(function(){ if (autosaveStatusEl.textContent === 'Draft saved locally') autosaveStatusEl.textContent = ''; }, 2000);
+						}
+					} catch (e) { /* localStorage unavailable (private mode, quota, etc.) — not fatal */ }
+				}, 1500);
+			}
+
+			form.addEventListener('input', scheduleAutosave);
+			form.addEventListener('change', scheduleAutosave);
+
+			window.addEventListener('beforeunload', function(e){
+				if (!hasUnsavedChanges()) return;
+				e.preventDefault();
+				e.returnValue = '';
+			});
+
+			// Offer to restore a localStorage draft that's newer than what's on
+			// screen — e.g. the tab crashed, or was closed before a save landed.
+			(function offerDraftRestore(){
+				var stored;
+				try { stored = localStorage.getItem(draftKey); } catch (e) { return; }
+				if (!stored) return;
+
+				var parsed;
+				try { parsed = JSON.parse(stored); } catch (e) { return; }
+				if (!parsed || !parsed.data || JSON.stringify(parsed.data) === JSON.stringify(lastSyncedSnapshot)) return;
+
+				var banner = document.getElementById('draft-restore-banner');
+				var text   = document.getElementById('draft-restore-text');
+				text.textContent = 'An unsaved draft from ' + new Date(parsed.savedAt).toLocaleString() + ' differs from what’s shown here.';
+				banner.hidden = false;
+
+				document.getElementById('draft-restore-accept').addEventListener('click', function(){
+					applyDraft(parsed.data);
+					banner.hidden = true;
+					scheduleAutosave();
+				});
+				document.getElementById('draft-restore-dismiss').addEventListener('click', function(){
+					try { localStorage.removeItem(draftKey); } catch (e) {}
+					banner.hidden = true;
+				});
+			})();
+
+			// ── Distraction-free mode ───────────────────────────────────────────
+			(function(){
+				var toggle = document.getElementById('distraction-free-toggle');
+				var key    = 'kisdigital:distraction-free';
+				if (!toggle) return;
+
+				function setDistraction(on){
+					form.classList.toggle('is-distraction-free', on);
+					toggle.classList.toggle('is-active', on);
+					try { localStorage.setItem(key, on ? '1' : '0'); } catch (e) {}
+				}
+
+				toggle.addEventListener('click', function(){
+					setDistraction(!form.classList.contains('is-distraction-free'));
+				});
+
+				try { if (localStorage.getItem(key) === '1') setDistraction(true); } catch (e) {}
+			})();
+
+			// ── Write / Preview tabs ────────────────────────────────────────────
+			// Preview re-renders server-side (same PostRenderer the public post
+			// page uses — markdown() plus the link/image enhancement passes) each
+			// time the tab is opened, rather than live-as-you-type, so it doesn't
+			// fire a request per keystroke.
+			(function(){
+				var tabButtons  = document.querySelectorAll('.c-editor-tabs__btn');
+				var previewPane = document.getElementById('editor-preview');
+				var toolbar     = document.getElementById('editor-toolbar');
+				if (!tabButtons.length) return;
+
+				function activateTab(tab){
+					tabButtons.forEach(function(btn){
+						var active = btn.dataset.tab === tab;
+						btn.classList.toggle('is-active', active);
+						btn.setAttribute('aria-selected', active ? 'true' : 'false');
+					});
+
+					if (tab !== 'preview') {
+						bodyTextarea.hidden = false;
+						toolbar.hidden = false;
+						previewPane.hidden = true;
+						return;
+					}
+
+					bodyTextarea.hidden = true;
+					toolbar.hidden = true;
+					previewPane.hidden = false;
+					previewPane.innerHTML = '<p class="text-muted">Loading preview…</p>';
+
+					fetch('/manage/posts/preview', {
+						method: 'POST',
+						headers: { 'X-Requested-With': 'XMLHttpRequest' },
+						body: new URLSearchParams({ _csrf: csrfToken, body: bodyTextarea.value })
+					})
+					.then(function(res){ return res.json(); })
+					.then(function(data){
+						previewPane.innerHTML = data.success
+							? (data.html.length ? data.html : '<p class="text-muted">Nothing to preview yet.</p>')
+							: '<p class="text-danger">' + data.error + '</p>';
+					})
+					.catch(function(){
+						previewPane.innerHTML = '<p class="text-danger">Preview failed to load — check your connection and try again.</p>';
+					});
+				}
+
+				tabButtons.forEach(function(btn){
+					btn.addEventListener('click', function(){ activateTab(btn.dataset.tab); });
+				});
+			})();
+
+			// ── Formatting toolbar ──────────────────────────────────────────────
+			// Wraps/prefixes the current textarea selection with markdown syntax
+			// — no rich-text editor, just cursor-position string surgery, so it
+			// works on the exact same plain markdown the body always was.
+			function wrapSelection(before, after){
+				after = after === undefined ? before : after;
+				var start = bodyTextarea.selectionStart;
+				var end   = bodyTextarea.selectionEnd;
+				var value = bodyTextarea.value;
+				var selected = value.slice(start, end);
+				bodyTextarea.value = value.slice(0, start) + before + selected + after + value.slice(end);
+				bodyTextarea.focus();
+				bodyTextarea.setSelectionRange(start + before.length, start + before.length + selected.length);
+				scheduleAutosave();
+			}
+
+			function prefixLines(prefix, numbered){
+				var start = bodyTextarea.selectionStart;
+				var end   = bodyTextarea.selectionEnd;
+				var value = bodyTextarea.value;
+				var lineStart = value.lastIndexOf('\n', start - 1) + 1;
+				var lineEnd   = value.indexOf('\n', end);
+				if (lineEnd === -1) lineEnd = value.length;
+				var newBlock = value.slice(lineStart, lineEnd).split('\n').map(function(line, i){
+					return (numbered ? (i + 1) + '. ' : prefix) + line;
+				}).join('\n');
+				bodyTextarea.value = value.slice(0, lineStart) + newBlock + value.slice(lineEnd);
+				bodyTextarea.focus();
+				bodyTextarea.setSelectionRange(lineStart, lineStart + newBlock.length);
+				scheduleAutosave();
+			}
+
+			(function(){
+				var toolbar = document.getElementById('editor-toolbar');
+				if (!toolbar) return;
+				toolbar.addEventListener('click', function(e){
+					var btn = e.target.closest('button[data-md]');
+					if (!btn) return;
+					switch (btn.dataset.md) {
+						case 'bold':   wrapSelection('**'); break;
+						case 'italic': wrapSelection('_'); break;
+						case 'link':   wrapSelection('[', '](https://)'); break;
+						case 'h2':     prefixLines('## '); break;
+						case 'code':   wrapSelection('`'); break;
+						case 'quote':  prefixLines('> '); break;
+						case 'ul':     prefixLines('- '); break;
+						case 'ol':     prefixLines('', true); break;
+					}
+				});
+			})();
+
+			// ── Save (AJAX for an existing post; Ctrl/Cmd+S shortcut for both) ──
+			// A new post genuinely gets a new URL (/manage/posts/:id/edit once
+			// saved), which is a real navigation, not something to fake here —
+			// the submit listener below only intercepts when post_id is already set.
+			function doAjaxSave(){
+				var originalHtml = saveBtn.innerHTML;
+				saveBtn.disabled = true;
+				saveBtn.textContent = 'Saving…';
+
+				fetch(form.action, {
+					method: 'POST',
+					headers: { 'X-Requested-With': 'XMLHttpRequest' },
+					body: new URLSearchParams(new FormData(form))
+				})
+				.then(function(res){ return res.json().then(function(data){ return { ok: res.ok, data: data }; }); })
+				.then(function(result){
+					saveBtn.disabled = false;
+					saveBtn.innerHTML = originalHtml;
+					showFlash(result.ok ? 'success' : 'error', result.ok ? result.data.message : result.data.error);
+					if (result.ok) clearDraft();
+				})
+				.catch(function(){
+					// Network/parse failure — fall back to a real form submit.
+					form.submit();
+				});
+			}
+
+			if (postIdField.value) {
+				form.addEventListener('submit', function(e){
+					e.preventDefault();
+					doAjaxSave();
+				});
+			} else {
+				// Creating: still a real submit, but clear the "new" draft on the
+				// way out since it's about to become a real saved post.
+				form.addEventListener('submit', clearDraft);
+			}
+
+			document.addEventListener('keydown', function(e){
+				var mod = e.metaKey || e.ctrlKey;
+				if (!mod) return;
+
+				if (e.key === 's') {
+					e.preventDefault();
+					if (form.requestSubmit) { form.requestSubmit(); } else { form.dispatchEvent(new Event('submit', { cancelable: true })); }
+				} else if (e.key === 'b' && document.activeElement === bodyTextarea) {
+					e.preventDefault();
+					wrapSelection('**');
+				} else if (e.key === 'i' && document.activeElement === bodyTextarea) {
+					e.preventDefault();
+					wrapSelection('_');
+				}
+			});
+		})();
+		</script>
+
+	</main>
+</div>
+</bx:output>
+<bx:include template="../../partials/_foot.bxm">

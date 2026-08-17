@@ -1,0 +1,85 @@
+# WARNING: do not apply this file wholesale with `doctl apps update --spec`.
+# The R2_* values below are EDIT_IN_UI placeholders, while the live app holds
+# real encrypted secrets — applying this file would overwrite them with the
+# literal string "EDIT_IN_UI". To change live configuration, export the
+# current spec (`doctl apps get <id> -o json`), edit only what you mean to
+# change so the EV[...] ciphertext is carried through untouched, and apply
+# that. This file is the record of intent, not the deployment source; git
+# pushes deploy against the live spec.
+name: kisdigital
+region: nyc
+
+domains:
+  - domain: kisdigital.com
+    type: PRIMARY
+  - domain: www.kisdigital.com
+    type: ALIAS
+
+databases:
+  - name: kisdigital-db
+    cluster_name: kisdigital-db
+    db_name: chron
+    db_user: kisdigital
+    engine: MYSQL
+    production: true
+
+services:
+  - name: kisdigital
+    dockerfile_path: /Dockerfile
+    source_dir: /
+    github:
+      repo: robertz/kisdigital-new
+      branch: main
+      deploy_on_push: true
+    http_port: 3005
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-1gb
+    # /health (app.bxs) touches no datasource and renders no view — a MySQL
+    # blip shouldn't fail the whole service's health check when the process
+    # itself is fine. Module install now happens at image build time (see
+    # Dockerfile), not container start, so cold boot is fast and doesn't
+    # depend on ForgeBox being reachable — initial_delay_seconds is generous
+    # anyway since it's cheap insurance against a slow platform-side cold
+    # start.
+    health_check:
+      http_path: /health
+      initial_delay_seconds: 20
+      period_seconds: 10
+      timeout_seconds: 5
+      failure_threshold: 6
+      success_threshold: 1
+    envs:
+      - key: ENV
+        value: production
+      - key: PORT
+        value: "3005"
+      - key: APPNAME
+        value: KISDigital
+      - key: SITEURL
+        value: https://kisdigital.com
+      - key: CHRON_DB_HOST
+        value: ${kisdigital-db.HOSTNAME}
+      - key: CHRON_DB_PORT
+        value: ${kisdigital-db.PORT}
+      - key: CHRON_DB_NAME
+        value: ${kisdigital-db.DATABASE}
+      - key: CHRON_DB_USER
+        value: ${kisdigital-db.USERNAME}
+      - key: CHRON_DB_PASSWORD
+        value: ${kisdigital-db.PASSWORD}
+        type: SECRET
+      - key: R2_ACCOUNT_ID
+        value: EDIT_IN_UI
+        type: SECRET
+      - key: R2_BUCKET
+        value: kisdigital
+      - key: R2_ACCESS_KEY_ID
+        value: EDIT_IN_UI
+        type: SECRET
+      - key: R2_SECRET_ACCESS_KEY
+        value: EDIT_IN_UI
+        type: SECRET
+      - key: R2_PUBLIC_BASE_URL
+        value: https://static.kisdigital.com
+      - key: R2_UPLOAD_PREFIX
+        value: posts

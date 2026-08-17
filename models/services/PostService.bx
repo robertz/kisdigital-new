@@ -1,0 +1,1047 @@
+/**
+ * Service for querying and persisting Post data.
+ *
+ * All methods that return individual posts or collections of posts return
+ * PostBean instances (or arrays/structs containing them). savePost() accepts
+ * a PostBean and uses its getters to build the SQL parameters.
+ */
+class {
+
+	/**
+	 * Returns the most recently published featured post as a PostBean.
+	 *
+	 * Tags and primary author are fetched in separate queries and merged
+	 * before the bean is populated. When no featured post exists, returns
+	 * an unpopulated PostBean (exists() → false).
+	 *
+	 * @return {PostBean} Populated bean, or empty bean if none found.
+	 */
+	function getFeaturedPost(){
+		var rows = queryExecute(
+			"SELECT
+				id,
+				title,
+				slug,
+				description,
+				cover_image,
+				publish_date
+			FROM Post
+			WHERE featured = 1
+				AND status = 'published'
+				AND publish_date <= NOW()
+			ORDER BY RAND()
+			LIMIT 1",
+			{},
+			{ returnType: "array" }
+		);
+
+		if ( !rows.len() ) return new models.PostBean().init();
+
+		var row = rows[ 1 ];
+
+		row[ "tags" ] = queryExecute(
+			"SELECT T.tag
+			FROM Tag T
+			INNER JOIN TagPost TP ON TP.tag_id = T.id
+			WHERE TP.post_id = :post_id
+			ORDER BY T.tag ASC",
+			{ "post_id": { value: row.id, cfsqltype: "cf_sql_varchar" } },
+			{ returnType: "array" }
+		).map( ( r ) => r.tag );
+
+		var author = queryExecute(
+			"SELECT U.display_name, U.avatar_label
+			FROM User U
+			INNER JOIN UserPost UP ON UP.user_id = U.id
+			WHERE UP.post_id = :post_id
+				AND UP.author_role = 'author'
+			LIMIT 1",
+			{ "post_id": { value: row.id, cfsqltype: "cf_sql_varchar" } },
+			{ returnType: "array" }
+		);
+
+		row[ "author_name" ]         = author.len() ? author[ 1 ].display_name : "";
+		row[ "author_avatar_label" ] = author.len() ? author[ 1 ].avatar_label  : "";
+
+		return new models.PostBean().populate( row );
+	}
+
+	/**
+	 * Returns the most recently published non-featured posts for the home page feed.
+	 *
+	 * Tags are fetched via GROUP_CONCAT and split into an array before the bean
+	 * is populated. The primary author is resolved with a correlated subquery.
+	 *
+	 * @param {numeric} limit - Maximum number of posts to return. Defaults to 6.
+	 * @return {array} Array of PostBeans.
+	 */
+	function getLatestPosts( numeric limit = 6 ){
+		var rows = queryExecute(
+			"SELECT
+				P.id,
+				P.title,
+				P.slug,
+				P.description,
+				P.cover_image,
+				P.publish_date,
+				GROUP_CONCAT(T.tag ORDER BY T.tag ASC SEPARATOR ',') AS tags,
+				(
+					SELECT U.display_name
+					FROM User U
+					INNER JOIN UserPost UP ON UP.user_id = U.id
+					WHERE UP.post_id = P.id
+						AND UP.author_role = 'author'
+					LIMIT 1
+				) AS author_name,
+				(
+					SELECT U.avatar_label
+					FROM User U
+					INNER JOIN UserPost UP ON UP.user_id = U.id
+					WHERE UP.post_id = P.id
+						AND UP.author_role = 'author'
+					LIMIT 1
+				) AS author_avatar_label
+			FROM Post P
+			LEFT JOIN TagPost TP ON TP.post_id = P.id
+			LEFT JOIN Tag T ON T.id = TP.tag_id
+			WHERE P.status = 'published'
+			AND P.publish_date <= NOW()
+				AND P.featured != 1
+			GROUP BY P.id
+			ORDER BY P.publish_date DESC
+			LIMIT :lim",
+			{ "lim": { value: arguments.limit, cfsqltype: "cf_sql_integer" } },
+			{ returnType: "array" }
+		);
+
+		return rows.map( ( row ) => {
+			row[ "tags" ] = len( row.tags ) ? row.tags.listToArray( "," ) : [];
+			return new models.PostBean().populate( row );
+		} );
+	}
+
+	/**
+	 * Returns a single published post by slug as a PostBean.
+	 * Delegates to PostBean.loadBySlug() — published posts only.
+	 *
+	 * @param {string} slug - The URL slug of the post.
+	 * @return {PostBean} Populated bean. Call exists() to check if the post was found.
+	 */
+	function getPostBySlug( required string slug, boolean publishedOnly = true ){
+		return new models.PostBean().loadBySlug( arguments.slug, arguments.publishedOnly );
+	}
+
+	/**
+	 * Returns other published posts that share at least one tag with the
+	 * given post, ranked by how many tags they share (most first), then by
+	 * recency. Excludes the post itself. Returns an empty array immediately
+	 * (no query) when the post has no tags — nothing to relate on.
+	 *
+	 * @param {string}  postId - The current post's UUID, excluded from results.
+	 * @param {array}   tags   - The current post's tag names.
+	 * @param {numeric} limit  - Maximum related posts to return. Defaults to 3.
+	 * @return {array} Array of PostBeans.
+	 */
+	function getRelatedPosts( required string postId, required array tags, numeric limit = 3 ){
+		if ( !arguments.tags.len() ) return [];
+
+		var tagParams = {};
+		var placeholders = [];
+		var i = 0;
+		for ( var tagName in arguments.tags ){
+			i++;
+			var key = "tag" & i;
+			placeholders.append( ":" & key );
+			tagParams[ key ] = { value: tagName, cfsqltype: "cf_sql_varchar" };
+		}
+
+		tagParams[ "excludeId" ] = { value: arguments.postId, cfsqltype: "cf_sql_varchar" };
+		tagParams[ "lim" ]       = { value: arguments.limit,  cfsqltype: "cf_sql_integer" };
+
+		var rows = queryExecute(
+			"SELECT
+				P.id,
+				P.title,
+				P.slug,
+				P.description,
+				P.cover_image,
+				P.publish_date,
+				P.featured,
+				GROUP_CONCAT(DISTINCT T_all.tag ORDER BY T_all.tag ASC SEPARATOR ',') AS tags,
+				(
+					SELECT U.display_name
+					FROM User U
+					INNER JOIN UserPost UP ON UP.user_id = U.id
+					WHERE UP.post_id = P.id
+						AND UP.author_role = 'author'
+					LIMIT 1
+				) AS author_name,
+				(
+					SELECT U.avatar_label
+					FROM User U
+					INNER JOIN UserPost UP ON UP.user_id = U.id
+					WHERE UP.post_id = P.id
+						AND UP.author_role = 'author'
+					LIMIT 1
+				) AS author_avatar_label,
+				COUNT(DISTINCT TP_match.tag_id) AS shared_tags
+			FROM Post P
+			INNER JOIN TagPost TP_match ON TP_match.post_id = P.id
+			INNER JOIN Tag T_match ON T_match.id = TP_match.tag_id
+				AND T_match.tag IN (#placeholders.toList( ', ' )#)
+			LEFT JOIN TagPost TP_all ON TP_all.post_id = P.id
+			LEFT JOIN Tag T_all ON T_all.id = TP_all.tag_id
+			WHERE P.id != :excludeId
+				AND P.status = 'published'
+				AND P.publish_date <= NOW()
+			GROUP BY P.id
+			ORDER BY shared_tags DESC, P.publish_date DESC
+			LIMIT :lim",
+			tagParams,
+			{ returnType: "array" }
+		);
+
+		return rows.map( ( row ) => {
+			row[ "tags" ] = len( row.tags ) ? row.tags.listToArray( "," ) : [];
+			return new models.PostBean().populate( row );
+		} );
+	}
+
+	/**
+	 * Returns a paginated list of all published posts for the posts index page.
+	 *
+	 * @param {numeric} page     - 1-based page number. Defaults to 1.
+	 * @param {numeric} pageSize - Number of posts per page. Defaults to 12.
+	 * @return {struct} Keys: posts (array of PostBeans), total, page, pageSize, totalPages.
+	 */
+	function getPosts( numeric page = 1, numeric pageSize = 12 ){
+		var safePageSize = arguments.pageSize;
+		var offset       = ( arguments.page - 1 ) * safePageSize;
+
+		var total = queryExecute(
+			"SELECT COUNT(*) AS cnt FROM Post WHERE status = 'published' AND publish_date <= NOW()",
+			{},
+			{ returnType: "array" }
+		)[ 1 ].cnt;
+
+		var rows = queryExecute(
+			"SELECT
+				P.id,
+				P.title,
+				P.slug,
+				P.description,
+				P.cover_image,
+				P.publish_date,
+				P.featured,
+				GROUP_CONCAT(T.tag ORDER BY T.tag ASC SEPARATOR ',') AS tags,
+				(
+					SELECT U.display_name
+					FROM User U
+					INNER JOIN UserPost UP ON UP.user_id = U.id
+					WHERE UP.post_id = P.id
+						AND UP.author_role = 'author'
+					LIMIT 1
+				) AS author_name,
+				(
+					SELECT U.avatar_label
+					FROM User U
+					INNER JOIN UserPost UP ON UP.user_id = U.id
+					WHERE UP.post_id = P.id
+						AND UP.author_role = 'author'
+					LIMIT 1
+				) AS author_avatar_label
+			FROM Post P
+			LEFT JOIN TagPost TP ON TP.post_id = P.id
+			LEFT JOIN Tag T ON T.id = TP.tag_id
+			WHERE P.status = 'published'
+			AND P.publish_date <= NOW()
+			GROUP BY P.id
+			ORDER BY P.publish_date DESC
+			LIMIT :lim OFFSET :offset",
+			{
+				"lim"    : { value: safePageSize, cfsqltype: "cf_sql_integer" },
+				"offset" : { value: offset,       cfsqltype: "cf_sql_integer" }
+			},
+			{ returnType: "array" }
+		);
+
+		return {
+			"posts"      : rows.map( ( row ) => {
+				row[ "tags" ] = len( row.tags ) ? row.tags.listToArray( "," ) : [];
+				return new models.PostBean().populate( row );
+			} ),
+			"total"      : total,
+			"page"       : arguments.page,
+			"pageSize"   : safePageSize,
+			"totalPages" : ceiling( total / safePageSize )
+		};
+	}
+
+	/**
+	 * Returns a paginated list of published posts filtered by tag name.
+	 *
+	 * @param {string}  tag      - Exact tag name to filter by.
+	 * @param {numeric} page     - 1-based page number. Defaults to 1.
+	 * @param {numeric} pageSize - Number of posts per page. Defaults to 12.
+	 * @return {struct} Keys: posts (array of PostBeans), total, page, pageSize, totalPages.
+	 */
+	function getPostsByTag( required string tag, numeric page = 1, numeric pageSize = 12 ){
+		var safePageSize = arguments.pageSize;
+		var offset       = ( arguments.page - 1 ) * safePageSize;
+
+		var total = queryExecute(
+			"SELECT COUNT(DISTINCT P.id) AS cnt
+			FROM Post P
+			INNER JOIN TagPost TP ON TP.post_id = P.id
+			INNER JOIN Tag T ON T.id = TP.tag_id
+			WHERE P.status = 'published'
+			AND P.publish_date <= NOW()
+				AND T.tag = :tag",
+			{ "tag": { value: arguments.tag, cfsqltype: "cf_sql_varchar" } },
+			{ returnType: "array" }
+		)[ 1 ].cnt;
+
+		var rows = queryExecute(
+			"SELECT
+				P.id,
+				P.title,
+				P.slug,
+				P.description,
+				P.cover_image,
+				P.publish_date,
+				P.featured,
+				GROUP_CONCAT(T_all.tag ORDER BY T_all.tag ASC SEPARATOR ',') AS tags,
+				(
+					SELECT U.display_name
+					FROM User U
+					INNER JOIN UserPost UP ON UP.user_id = U.id
+					WHERE UP.post_id = P.id
+						AND UP.author_role = 'author'
+					LIMIT 1
+				) AS author_name,
+				(
+					SELECT U.avatar_label
+					FROM User U
+					INNER JOIN UserPost UP ON UP.user_id = U.id
+					WHERE UP.post_id = P.id
+						AND UP.author_role = 'author'
+					LIMIT 1
+				) AS author_avatar_label
+			FROM Post P
+			INNER JOIN TagPost TP_f ON TP_f.post_id = P.id
+			INNER JOIN Tag T_f ON T_f.id = TP_f.tag_id AND T_f.tag = :tag
+			LEFT JOIN TagPost TP_all ON TP_all.post_id = P.id
+			LEFT JOIN Tag T_all ON T_all.id = TP_all.tag_id
+			WHERE P.status = 'published'
+			AND P.publish_date <= NOW()
+			GROUP BY P.id
+			ORDER BY P.publish_date DESC
+			LIMIT :lim OFFSET :offset",
+			{
+				"tag"    : { value: arguments.tag,  cfsqltype: "cf_sql_varchar" },
+				"lim"    : { value: safePageSize,   cfsqltype: "cf_sql_integer" },
+				"offset" : { value: offset,         cfsqltype: "cf_sql_integer" }
+			},
+			{ returnType: "array" }
+		);
+
+		return {
+			"posts"      : rows.map( ( row ) => {
+				row[ "tags" ] = len( row.tags ) ? row.tags.listToArray( "," ) : [];
+				return new models.PostBean().populate( row );
+			} ),
+			"total"      : total,
+			"page"       : arguments.page,
+			"pageSize"   : safePageSize,
+			"totalPages" : ceiling( total / safePageSize )
+		};
+	}
+
+	/**
+	 * Full-text search over published posts (title, description, and body),
+	 * relevance-ranked via MySQL's natural-language MATCH ... AGAINST — see
+	 * db/migrations/0002_add_post_fulltext.sql for the backing index.
+	 *
+	 * Blank/whitespace-only queries return an empty result without hitting
+	 * the database — natural language mode has no meaningful match against
+	 * nothing, and this keeps a bare GET /search from running a query at all.
+	 *
+	 * @param {string}  q        - Search terms.
+	 * @param {numeric} page     - 1-based page number. Defaults to 1.
+	 * @param {numeric} pageSize - Number of results per page. Defaults to 12.
+	 * @return {struct} Keys: posts (array of PostBeans), total, page, pageSize, totalPages, q.
+	 */
+	function searchPosts( required string q, numeric page = 1, numeric pageSize = 12 ){
+		var term = trim( arguments.q );
+
+		if ( !len( term ) ){
+			return { "posts": [], "total": 0, "page": 1, "pageSize": arguments.pageSize, "totalPages": 0, "q": "" };
+		}
+
+		var safePageSize = arguments.pageSize;
+		var offset        = ( arguments.page - 1 ) * safePageSize;
+
+		var total = queryExecute(
+			"SELECT COUNT(*) AS cnt
+			FROM Post P
+			WHERE P.status = 'published'
+				AND P.publish_date <= NOW()
+				AND MATCH(P.title, P.description, P.body) AGAINST(:q IN NATURAL LANGUAGE MODE)",
+			{ "q": { value: term, cfsqltype: "cf_sql_varchar" } },
+			{ returnType: "array" }
+		)[ 1 ].cnt;
+
+		// Only log on the first page of a query — later pages are the same
+		// search, not a new one, and would just inflate the counts below.
+		if ( arguments.page == 1 ){
+			queryExecute(
+				"INSERT INTO SearchLog (query, result_count) VALUES (:q, :total)",
+				{
+					"q"     : { value: term,  cfsqltype: "cf_sql_varchar" },
+					"total" : { value: total, cfsqltype: "cf_sql_integer" }
+				}
+			);
+		}
+
+		var rows = queryExecute(
+			"SELECT
+				P.id,
+				P.title,
+				P.slug,
+				P.description,
+				P.cover_image,
+				P.publish_date,
+				P.featured,
+				GROUP_CONCAT(T.tag ORDER BY T.tag ASC SEPARATOR ',') AS tags,
+				(
+					SELECT U.display_name
+					FROM User U
+					INNER JOIN UserPost UP ON UP.user_id = U.id
+					WHERE UP.post_id = P.id
+						AND UP.author_role = 'author'
+					LIMIT 1
+				) AS author_name,
+				(
+					SELECT U.avatar_label
+					FROM User U
+					INNER JOIN UserPost UP ON UP.user_id = U.id
+					WHERE UP.post_id = P.id
+						AND UP.author_role = 'author'
+					LIMIT 1
+				) AS author_avatar_label,
+				MATCH(P.title, P.description, P.body) AGAINST(:q IN NATURAL LANGUAGE MODE) AS relevance
+			FROM Post P
+			LEFT JOIN TagPost TP ON TP.post_id = P.id
+			LEFT JOIN Tag T ON T.id = TP.tag_id
+			WHERE P.status = 'published'
+				AND P.publish_date <= NOW()
+				AND MATCH(P.title, P.description, P.body) AGAINST(:q IN NATURAL LANGUAGE MODE)
+			GROUP BY P.id
+				ORDER BY relevance DESC
+			LIMIT :lim OFFSET :offset",
+			{
+				"q"      : { value: term,        cfsqltype: "cf_sql_varchar" },
+				"lim"    : { value: safePageSize, cfsqltype: "cf_sql_integer" },
+				"offset" : { value: offset,       cfsqltype: "cf_sql_integer" }
+			},
+			{ returnType: "array" }
+		);
+
+		return {
+			"posts"      : rows.map( ( row ) => {
+				row[ "tags" ] = len( row.tags ) ? row.tags.listToArray( "," ) : [];
+				return new models.PostBean().populate( row );
+			} ),
+			"total"      : total,
+			"page"       : arguments.page,
+			"pageSize"   : safePageSize,
+			"totalPages" : ceiling( total / safePageSize ),
+			"q"          : term
+		};
+	}
+
+	/**
+	 * Returns all tags that have at least one published post, with post counts.
+	 *
+	 * @return {array} Array of structs with keys: tag, post_count. Ordered alphabetically.
+	 */
+	function getAllTags(){
+		return queryExecute(
+			"SELECT
+				T.tag,
+				COUNT(TP.post_id) AS post_count
+			FROM Tag T
+			INNER JOIN TagPost TP ON TP.tag_id = T.id
+			INNER JOIN Post P ON P.id = TP.post_id
+			WHERE P.status = 'published'
+			AND P.publish_date <= NOW()
+			GROUP BY T.id, T.tag
+			ORDER BY T.tag ASC",
+			{},
+			{ returnType: "array" }
+		);
+	}
+
+	/**
+	 * Returns every tag name in the Tag table, regardless of whether any post
+	 * is currently published. Used by the post editor's tag picker so authors
+	 * can re-apply existing tags to drafts.
+	 *
+	 * @return {array} Array of tag name strings, ordered alphabetically.
+	 */
+	function getAllTagNames(){
+		return queryExecute(
+			"SELECT tag FROM Tag ORDER BY tag ASC",
+			{},
+			{ returnType: "array" }
+		).map( ( r ) => r.tag );
+	}
+
+	/**
+	 * Returns a paginated list of all posts for the management area, regardless of status.
+	 *
+	 * @param {numeric} page     - 1-based page number. Defaults to 1.
+	 * @param {numeric} pageSize - Posts per page. Defaults to 20.
+	 * @return {struct} Keys: posts (array of PostBeans), total, page, pageSize, totalPages.
+	 */
+	function getManagePosts( numeric page = 1, numeric pageSize = 20 ){
+		var safePageSize = arguments.pageSize;
+		var offset       = ( arguments.page - 1 ) * safePageSize;
+
+		var total = queryExecute(
+			"SELECT COUNT(*) AS cnt FROM Post",
+			{},
+			{ returnType: "array" }
+		)[ 1 ].cnt;
+
+		var rows = queryExecute(
+			"SELECT
+				P.id,
+				P.title,
+				P.slug,
+				P.status,
+				P.featured,
+				P.publish_date,
+				P.last_updated,
+				GROUP_CONCAT(T.tag ORDER BY T.tag ASC SEPARATOR ',') AS tags,
+				COALESCE(V.views, 0) AS views,
+				(
+					SELECT U.display_name
+					FROM User U
+					INNER JOIN UserPost UP ON UP.user_id = U.id
+					WHERE UP.post_id = P.id
+						AND UP.author_role = 'author'
+					LIMIT 1
+				) AS author_name,
+				(
+					SELECT U.avatar_label
+					FROM User U
+					INNER JOIN UserPost UP ON UP.user_id = U.id
+					WHERE UP.post_id = P.id
+						AND UP.author_role = 'author'
+					LIMIT 1
+				) AS author_avatar_label
+			FROM Post P
+			LEFT JOIN TagPost TP ON TP.post_id = P.id
+			LEFT JOIN Tag T ON T.id = TP.tag_id
+			LEFT JOIN Views V ON V.post_id = P.id
+			GROUP BY P.id
+			ORDER BY CASE WHEN P.status = 'draft' THEN 0 ELSE 1 END ASC, P.publish_date DESC
+			LIMIT :lim OFFSET :offset",
+			{
+				"lim"    : { value: safePageSize, cfsqltype: "cf_sql_integer" },
+				"offset" : { value: offset,       cfsqltype: "cf_sql_integer" }
+			},
+			{ returnType: "array" }
+		);
+
+		return {
+			"posts"      : rows.map( ( row ) => {
+				row[ "tags" ] = len( row.tags ?: "" ) ? row.tags.listToArray( "," ) : [];
+				return new models.PostBean().populate( row );
+			} ),
+			"total"      : total,
+			"page"       : arguments.page,
+			"pageSize"   : safePageSize,
+			"totalPages" : ceiling( max( total, 1 ) / safePageSize )
+		};
+	}
+
+	/**
+	 * Returns a single post by id for the management edit form, regardless of status.
+	 * Delegates to PostBean.loadById() — all statuses included.
+	 *
+	 * @param {string} postId - The post UUID.
+	 * @return {PostBean} Populated bean. Call exists() to check if the post was found.
+	 */
+	function getPostById( required string postId ){
+		return new models.PostBean().loadById( arguments.postId );
+	}
+
+	/**
+	 * Creates or updates a post from a PostBean.
+	 *
+	 * Slug is auto-generated from the title when the bean's slug is blank, and
+	 * made unique within the Post table. Returns the post id.
+	 *
+	 * @param {PostBean} bean - Populated PostBean to persist.
+	 * @return {string} The post id (new UUID on create, existing id on update).
+	 */
+	function savePost( required PostBean bean ){
+		var isNew     = !len( trim( bean.getId() ) );
+		var postId    = isNew ? lcase(createGUID()) : bean.getId();
+		var baseSlug  = len( trim( bean.getSlug() ) ) ? trim( bean.getSlug() ) : slugify( bean.getTitle() );
+		var finalSlug = makeUniqueSlug( baseSlug, isNew ? "" : postId );
+
+		var coverImage     = bean.getCoverImage();
+		var publishDateVal = bean.getPublishDate() ?: "";
+
+		var epoch       = createDateTime( 1970, 1, 1, 0, 0, 1 );
+		var publishDate = ( len( trim( publishDateVal ) ) && bean.getStatus() == "published" )
+			? publishDateVal
+			: ( bean.getStatus() == "published" ? now() : epoch );
+
+		if ( isNew ){
+			queryExecute(
+				"INSERT INTO Post (id, title, slug, description, cover_image, body, status, featured, publish_date)
+				VALUES (:id, :title, :slug, :description, :cover_image, :body, :status, :featured, :publish_date)",
+				{
+					"id"           : { value: postId,                             cfsqltype: "cf_sql_varchar" },
+					"title"        : { value: bean.getTitle(),                    cfsqltype: "cf_sql_varchar" },
+					"slug"         : { value: finalSlug,                          cfsqltype: "cf_sql_varchar" },
+					"description"  : { value: bean.getDescription(),              cfsqltype: "cf_sql_varchar" },
+					"cover_image"  : { value: coverImage,                         cfsqltype: "cf_sql_varchar", null: !len( trim( coverImage ) ) },
+					"body"         : { value: bean.getBody(),                     cfsqltype: "cf_sql_longvarchar" },
+					"status"       : { value: bean.getStatus(),                   cfsqltype: "cf_sql_varchar" },
+					"featured"     : { value: bean.getFeatured() ? 1 : 0,         cfsqltype: "cf_sql_bit" },
+					"publish_date" : { value: publishDate, cfsqltype: "cf_sql_timestamp" }
+				}
+			);
+		} else {
+			queryExecute(
+				"UPDATE Post
+				SET title = :title, slug = :slug, description = :description,
+					cover_image = :cover_image, body = :body, status = :status,
+					featured = :featured, publish_date = :publish_date
+				WHERE id = :id",
+				{
+					"id"           : { value: postId,                             cfsqltype: "cf_sql_varchar" },
+					"title"        : { value: bean.getTitle(),                    cfsqltype: "cf_sql_varchar" },
+					"slug"         : { value: finalSlug,                          cfsqltype: "cf_sql_varchar" },
+					"description"  : { value: bean.getDescription(),              cfsqltype: "cf_sql_varchar" },
+					"cover_image"  : { value: coverImage,                         cfsqltype: "cf_sql_varchar", null: !len( trim( coverImage ) ) },
+					"body"         : { value: bean.getBody(),                     cfsqltype: "cf_sql_longvarchar" },
+					"status"       : { value: bean.getStatus(),                   cfsqltype: "cf_sql_varchar" },
+					"featured"     : { value: bean.getFeatured() ? 1 : 0,         cfsqltype: "cf_sql_bit" },
+					"publish_date" : { value: publishDate, cfsqltype: "cf_sql_timestamp" }
+				}
+			);
+		}
+
+		return postId;
+	}
+
+	/**
+	 * Synchronises the TagPost join table for a post from a comma-separated tag string.
+	 *
+	 * Ensures each tag exists in the Tag table (INSERT IGNORE), removes all existing
+	 * TagPost rows for the post, then re-inserts from the current list.
+	 *
+	 * @param {string} postId     - The post UUID.
+	 * @param {string} tagsString - Comma-separated tag names (may be empty).
+	 */
+	function syncTags( required string postId, required string tagsString ){
+		var tagNames = listToArray( trim( arguments.tagsString ), "," )
+			.map( ( t ) => trim( t ) )
+			.filter( ( t ) => len( t ) );
+
+		queryExecute(
+			"DELETE FROM TagPost WHERE post_id = :post_id",
+			{ "post_id": { value: arguments.postId, cfsqltype: "cf_sql_varchar" } }
+		);
+
+		for ( var tagName in tagNames ){
+			queryExecute(
+				"INSERT IGNORE INTO Tag (id, tag) VALUES (UUID(), :tag)",
+				{ "tag": { value: tagName, cfsqltype: "cf_sql_varchar" } }
+			);
+			queryExecute(
+				"INSERT INTO TagPost (tag_id, post_id)
+				SELECT id, :post_id FROM Tag WHERE tag = :tag",
+				{
+					"post_id" : { value: arguments.postId, cfsqltype: "cf_sql_varchar" },
+					"tag"     : { value: tagName,          cfsqltype: "cf_sql_varchar" }
+				}
+			);
+		}
+	}
+
+	/**
+	 * Ensures a UserPost author row exists for the given user/post pair.
+	 * Used when creating a new post to assign the current CMS user as author.
+	 *
+	 * @param {string} postId - Post UUID.
+	 * @param {string} userId - User UUID.
+	 */
+	function ensureAuthor( required string postId, required string userId ){
+		queryExecute(
+			"INSERT IGNORE INTO UserPost (user_id, post_id, author_role)
+			VALUES (:user_id, :post_id, 'author')",
+			{
+				"user_id" : { value: arguments.userId, cfsqltype: "cf_sql_varchar" },
+				"post_id" : { value: arguments.postId, cfsqltype: "cf_sql_varchar" }
+			}
+		);
+	}
+
+	/**
+	 * Returns true if the given user is authorised to edit the given post.
+	 *
+	 * Admins may edit any post. Non-admin users may only edit posts for which
+	 * a UserPost row links them as author.
+	 *
+	 * SECURITY [C5]: Single authoritative ownership check — called from both
+	 *               the handler and wire components so the rule cannot diverge.
+	 *
+	 * @param {string} postId   - The post UUID.
+	 * @param {string} userId   - The current user's UUID.
+	 * @param {string} userRole - The current user's role ('admin' or 'author').
+	 * @return {boolean}
+	 */
+	function canUserEditPost( required string postId, required string userId, required string userRole ){
+		if ( arguments.userRole == "admin" ) return true;
+
+		var rows = queryExecute(
+			"SELECT 1 FROM UserPost
+			 WHERE user_id = :userId AND post_id = :postId
+			 LIMIT 1",
+			{
+				"userId"  : { value: arguments.userId,  cfsqltype: "cf_sql_varchar" },
+				"postId"  : { value: arguments.postId,  cfsqltype: "cf_sql_varchar" }
+			},
+			{ returnType: "array" }
+		);
+
+		return rows.len() > 0;
+	}
+
+	/**
+	 * Flips the featured flag for a single post.
+	 *
+	 * @param {string} postId - The post UUID.
+	 */
+	function toggleFeatured( required string postId ){
+		queryExecute(
+			"UPDATE Post SET featured = IF(featured = 1, 0, 1) WHERE id = :id",
+			{ "id": { value: arguments.postId, cfsqltype: "cf_sql_varchar" } }
+		);
+	}
+
+	// "Trending" is a rolling window over ViewDaily, not the all-time Views
+	// counter — a post that was popular last year but dead since shouldn't
+	// outrank something getting real traffic this month. Code-level constant
+	// rather than a Settings row: it's a rare-to-change editorial choice, not
+	// something that needs runtime tuning.
+	variables.trendingWindowDays = 30;
+
+	/**
+	 * Returns the most-viewed published posts over the trailing
+	 * trendingWindowDays (see above) for the trending sidebar.
+	 *
+	 * Only published posts with at least one ViewDaily row in the window are
+	 * included. Returns plain structs as trending items carry only title,
+	 * slug, and views — not full post data.
+	 *
+	 * @param {numeric} limit - Maximum number of posts to return. Defaults to 4.
+	 * @return {array} Array of structs with keys: title, slug, views.
+	 */
+	function getTrendingPosts( numeric limit = 4 ){
+		return queryExecute(
+			"SELECT
+				P.title,
+				P.slug,
+				P.publish_date,
+				SUM(VD.views) AS views
+			FROM Post P
+			INNER JOIN ViewDaily VD ON VD.post_id = P.id
+			WHERE P.status = 'published'
+				AND P.publish_date <= NOW()
+				AND VD.view_date >= DATE_SUB(CURDATE(), INTERVAL :windowDays DAY)
+			GROUP BY P.id, P.title, P.slug, P.publish_date
+			ORDER BY views DESC
+			LIMIT :lim",
+			{
+				"windowDays" : { value: variables.trendingWindowDays, cfsqltype: "cf_sql_integer" },
+				"lim"        : { value: arguments.limit,             cfsqltype: "cf_sql_integer" }
+			},
+			{ returnType: "array" }
+		);
+	}
+
+	/**
+	 * Records a view for the given post.
+	 *
+	 * Upserts the all-time Views row (still backs the view count shown on the
+	 * post page itself) and today's ViewDaily row (backs getTrendingPosts()'s
+	 * rolling window). Does nothing when postId is blank.
+	 *
+	 * @param {string} postId - The post UUID.
+	 */
+	function recordView( required string postId ){
+		if ( !len( trim( arguments.postId ) ) ) return;
+
+		queryExecute(
+			"INSERT INTO Views (post_id, views, last_viewed)
+			VALUES (:post_id, 1, NOW())
+			ON DUPLICATE KEY UPDATE views = views + 1, last_viewed = NOW()",
+			{ "post_id": { value: arguments.postId, cfsqltype: "cf_sql_varchar" } }
+		);
+
+		queryExecute(
+			"INSERT INTO ViewDaily (post_id, view_date, views)
+			VALUES (:post_id, CURDATE(), 1)
+			ON DUPLICATE KEY UPDATE views = views + 1",
+			{ "post_id": { value: arguments.postId, cfsqltype: "cf_sql_varchar" } }
+		);
+	}
+
+	/**
+	 * Returns site-wide daily view totals (summed across all posts) for the
+	 * last N days, for the admin dashboard's traffic sparkline. Uses a
+	 * recursive CTE to generate the full date range so days with zero views
+	 * still get a row — a sparkline built only from ViewDaily's actual rows
+	 * would silently skip quiet days instead of showing them as a dip.
+	 *
+	 * @param {numeric} days - How many trailing days to include. Defaults to 30.
+	 * @return {array} Array of structs with keys: view_date, total_views. Ordered oldest to newest.
+	 */
+	function getDailyViewTotals( numeric days = 30 ){
+		return queryExecute(
+			"WITH RECURSIVE date_series AS (
+				SELECT DATE_SUB(CURDATE(), INTERVAL :days DAY) AS d
+				UNION ALL
+				SELECT DATE_ADD(d, INTERVAL 1 DAY) FROM date_series WHERE d < CURDATE()
+			)
+			SELECT
+				ds.d AS view_date,
+				COALESCE(SUM(vd.views), 0) AS total_views
+			FROM date_series ds
+			LEFT JOIN ViewDaily vd ON vd.view_date = ds.d
+			GROUP BY ds.d
+			ORDER BY ds.d ASC",
+			{ "days": { value: arguments.days, cfsqltype: "cf_sql_integer" } },
+			{ returnType: "array" }
+		);
+	}
+
+	/**
+	 * Converts a string to a URL-safe slug.
+	 *
+	 * @param {string} text - Input string.
+	 * @return {string} Slugified string.
+	 */
+	function slugify( required string text ){
+		var result = lCase( arguments.text );
+		result = reReplace( result, "[^a-z0-9]+", "-", "ALL" );
+		result = reReplace( result, "^-+|-+$", "", "ALL" );
+		return result;
+	}
+
+	/**
+	 * Returns a slug that is unique within the Post table.
+	 *
+	 * Appends -2, -3, … until no existing row matches.
+	 * excludeId is used in the edit case to ignore the post being updated.
+	 *
+	 * @param {string} baseSlug  - The desired slug.
+	 * @param {string} excludeId - Post id to exclude from the uniqueness check.
+	 * @return {string} A unique slug.
+	 */
+	function makeUniqueSlug( required string baseSlug, string excludeId = "" ){
+		var candidate = arguments.baseSlug;
+		var counter   = 2;
+
+		while ( true ){
+			var sql    = "SELECT COUNT(*) AS cnt FROM Post WHERE slug = :slug";
+			var params = { "slug": { value: candidate, cfsqltype: "cf_sql_varchar" } };
+
+			if ( len( arguments.excludeId ) ){
+				sql    &= " AND id != :id";
+				params[ "id" ] = { value: arguments.excludeId, cfsqltype: "cf_sql_varchar" };
+			}
+
+			var cnt = queryExecute( sql, params, { returnType: "array" } )[ 1 ].cnt;
+
+			if ( cnt == 0 ) return candidate;
+
+			candidate = arguments.baseSlug & "-" & counter++;
+		}
+	}
+
+	/**
+	 * Returns a lightweight list of all published posts for sitemap generation.
+	 *
+	 * Only the fields needed to build a sitemap URL are fetched: slug, publish_date,
+	 * and last_updated. No joins — kept fast for large post counts.
+	 *
+	 * @param {numeric} limit - Maximum posts to include. Defaults to 5000 (sitemap protocol max).
+	 * @return {array} Array of plain structs with keys: slug, publish_date, last_updated.
+	 */
+	function getSitemapPosts( numeric limit = 5000 ){
+		return queryExecute(
+			"SELECT slug, publish_date, last_updated
+			FROM Post
+			WHERE status = 'published'
+			AND publish_date <= NOW()
+			ORDER BY publish_date DESC
+			LIMIT :lim",
+			{ "lim": { value: arguments.limit, cfsqltype: "cf_sql_integer" } },
+			{ returnType: "array" }
+		);
+	}
+
+	/**
+	 * Returns published posts for RSS feed generation.
+	 *
+	 * Fetches the fields required to build a full RSS item: title, slug, description,
+	 * cover_image, publish_date, and the primary author's display name.
+	 *
+	 * @param {numeric} limit - Maximum posts to include. Defaults to 20 (typical RSS feed length).
+	 * @return {array} Array of plain structs.
+	 */
+	function getRSSPosts( numeric limit = 20 ){
+		return queryExecute(
+			"SELECT
+				P.title,
+				P.slug,
+				P.description,
+				P.cover_image,
+				P.publish_date,
+				(
+					SELECT U.display_name
+					FROM User U
+					INNER JOIN UserPost UP ON UP.user_id = U.id
+					WHERE UP.post_id = P.id
+						AND UP.author_role = 'author'
+					LIMIT 1
+				) AS author_name,
+				(
+					SELECT U.email
+					FROM User U
+					INNER JOIN UserPost UP ON UP.user_id = U.id
+					WHERE UP.post_id = P.id
+						AND UP.author_role = 'author'
+					LIMIT 1
+				) AS author_email
+			FROM Post P
+			WHERE P.status = 'published'
+			AND P.publish_date <= NOW()
+			ORDER BY P.publish_date DESC
+			LIMIT :lim",
+			{ "lim": { value: arguments.limit, cfsqltype: "cf_sql_integer" } },
+			{ returnType: "array" }
+		);
+	}
+
+	/**
+	 * Returns the most-searched queries that came back empty, most recent
+	 * first-seen last. Groups repeat searches for the same term together so
+	 * one visitor retrying a typo five times doesn't crowd out everything
+	 * else. Backs the dashboard's "readers are looking for" card.
+	 *
+	 * @param {numeric} days - How far back to look. Defaults to 30.
+	 * @param {numeric} limit - Maximum distinct queries to return. Defaults to 8.
+	 * @return {array} Array of structs: query, search_count, last_searched.
+	 */
+	function getZeroResultSearches( numeric days = 30, numeric limit = 8 ){
+		return queryExecute(
+			"SELECT
+				query,
+				COUNT(*) AS search_count,
+				MAX(searched_at) AS last_searched
+			FROM SearchLog
+			WHERE result_count = 0
+				AND searched_at >= DATE_SUB(NOW(), INTERVAL :days DAY)
+			GROUP BY query
+			ORDER BY search_count DESC, last_searched DESC
+			LIMIT :lim",
+			{
+				"days": { value: arguments.days,  cfsqltype: "cf_sql_integer" },
+				"lim" : { value: arguments.limit, cfsqltype: "cf_sql_integer" }
+			},
+			{ returnType: "array" }
+		);
+	}
+
+	/**
+	 * Returns the most recently created or edited posts, across any status,
+	 * for the dashboard's activity feed. `last_updated` also moves on
+	 * publish/unpublish, so this doubles as a status-change feed.
+	 *
+	 * @param {numeric} limit - Maximum posts to return. Defaults to 8.
+	 * @return {array} Array of structs: id, title, slug, status, last_updated, author_name.
+	 */
+	function getRecentActivity( numeric limit = 8 ){
+		return queryExecute(
+			"SELECT
+				P.id,
+				P.title,
+				P.slug,
+				P.status,
+				P.last_updated,
+				(
+					SELECT U.display_name
+					FROM User U
+					INNER JOIN UserPost UP ON UP.user_id = U.id
+					WHERE UP.post_id = P.id
+						AND UP.author_role = 'author'
+					LIMIT 1
+				) AS author_name
+			FROM Post P
+			ORDER BY P.last_updated DESC
+			LIMIT :lim",
+			{ "lim": { value: arguments.limit, cfsqltype: "cf_sql_integer" } },
+			{ returnType: "array" }
+		);
+	}
+
+	/**
+	 * Rolls up a handful of "needs attention" content counts for the
+	 * dashboard's health card: open drafts, posts scheduled to publish in
+	 * the next 7 days, and published posts missing a cover image or tags.
+	 *
+	 * @return {struct} Keys: draftCount, upcomingCount, missingCoverCount, missingTagsCount.
+	 */
+	function getContentHealth(){
+		var counts = queryExecute(
+			"SELECT
+				SUM(CASE WHEN P.status = 'draft' THEN 1 ELSE 0 END) AS draft_count,
+				SUM(CASE WHEN P.status = 'published' AND P.publish_date > NOW()
+					AND P.publish_date <= DATE_ADD(NOW(), INTERVAL 7 DAY) THEN 1 ELSE 0 END) AS upcoming_count,
+				SUM(CASE WHEN P.status = 'published' AND P.publish_date <= NOW()
+					AND ( P.cover_image IS NULL OR P.cover_image = '' ) THEN 1 ELSE 0 END) AS missing_cover_count
+			FROM Post P",
+			{},
+			{ returnType: "array" }
+		)[ 1 ];
+
+		var missingTags = queryExecute(
+			"SELECT COUNT(*) AS cnt
+			FROM Post P
+			LEFT JOIN TagPost TP ON TP.post_id = P.id
+			WHERE P.status = 'published'
+				AND P.publish_date <= NOW()
+				AND TP.post_id IS NULL",
+			{},
+			{ returnType: "array" }
+		)[ 1 ].cnt;
+
+		return {
+			"draftCount"       : counts.draft_count,
+			"upcomingCount"    : counts.upcoming_count,
+			"missingCoverCount": counts.missing_cover_count,
+			"missingTagsCount" : missingTags
+		};
+	}
+
+}

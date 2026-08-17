@@ -1,0 +1,238 @@
+/**
+ * Minimal Cloudflare R2 client — signs and sends a single PUT-object request
+ * per upload using AWS Signature V4. R2 is S3-API-compatible, but a full S3
+ * SDK (WireBox-shaped, dozens of operations) is a lot of surface for the one
+ * thing this app needs, so this hand-signs the one request type instead —
+ * pure JDK crypto, no extra module.
+ */
+class {
+
+	variables.accountId       = "";
+	variables.bucket          = "";
+	variables.accessKeyId     = "";
+	variables.secretAccessKey = "";
+	variables.publicBaseUrl   = "";
+
+	function init(
+		required string accountId,
+		required string bucket,
+		required string accessKeyId,
+		required string secretAccessKey,
+		required string publicBaseUrl
+	){
+		variables.accountId       = arguments.accountId;
+		variables.bucket          = arguments.bucket;
+		variables.accessKeyId     = arguments.accessKeyId;
+		variables.secretAccessKey = arguments.secretAccessKey;
+		variables.publicBaseUrl   = arguments.publicBaseUrl.right( 1 ) == "/"
+			? left( arguments.publicBaseUrl, len( arguments.publicBaseUrl ) - 1 )
+			: arguments.publicBaseUrl;
+		return this;
+	}
+
+	/**
+	 * True once every credential needed to actually reach R2 is present.
+	 * Callers use this to fail fast with a clear message instead of a raw
+	 * signing/network error when the .env vars haven't been set yet.
+	 */
+	function isConfigured(){
+		return len( variables.accountId ) > 0
+			&& len( variables.bucket ) > 0
+			&& len( variables.accessKeyId ) > 0
+			&& len( variables.secretAccessKey ) > 0
+			&& len( variables.publicBaseUrl ) > 0;
+	}
+
+	/**
+	 * Uploads a single object and returns its public URL (under publicBaseUrl,
+	 * i.e. the static.kisdigital.com custom domain mapped to the bucket).
+	 *
+	 * @param {string} key - Object key/path within the bucket, e.g. "posts/uuid.jpg".
+	 * @param {binary} bytes - Raw file content.
+	 * @param {string} contentType - MIME type to store and serve the object as.
+	 * @return {string} Public URL of the uploaded object.
+	 */
+	function putObject( required string key, required binary bytes, required string contentType ){
+		var host        = "#variables.accountId#.r2.cloudflarestorage.com";
+		var objectPath  = "/#variables.bucket#/#arguments.key#";
+		var payloadHash = _sha256Hex( arguments.bytes );
+
+		var instant   = createObject( "java", "java.time.Instant" ).now();
+		var formatter = createObject( "java", "java.time.format.DateTimeFormatter" )
+			.ofPattern( "yyyyMMdd'T'HHmmss'Z'" )
+			.withZone( createObject( "java", "java.time.ZoneOffset" ).UTC );
+		var amzDate   = formatter.format( instant );
+		var dateStamp = left( amzDate, 8 );
+
+		var canonicalHeaders = "content-type:#arguments.contentType#" & char( 10 )
+			& "host:#host#" & char( 10 )
+			& "x-amz-content-sha256:#payloadHash#" & char( 10 )
+			& "x-amz-date:#amzDate#" & char( 10 );
+		var signedHeaders = "content-type;host;x-amz-content-sha256;x-amz-date";
+
+		var canonicalRequest = "PUT" & char( 10 )
+			& objectPath & char( 10 )
+			& "" & char( 10 ) // no query string
+			& canonicalHeaders & char( 10 )
+			& signedHeaders & char( 10 )
+			& payloadHash;
+
+		var credentialScope = "#dateStamp#/auto/s3/aws4_request";
+		var stringToSign = "AWS4-HMAC-SHA256" & char( 10 )
+			& amzDate & char( 10 )
+			& credentialScope & char( 10 )
+			& _sha256Hex( canonicalRequest.getBytes( "UTF-8" ) );
+
+		var kDate     = _hmacSha256( ( "AWS4" & variables.secretAccessKey ).getBytes( "UTF-8" ), dateStamp );
+		var kRegion   = _hmacSha256( kDate, "auto" );
+		var kService  = _hmacSha256( kRegion, "s3" );
+		var kSigning  = _hmacSha256( kService, "aws4_request" );
+		var signature = _hex( _hmacSha256( kSigning, stringToSign ) );
+
+		var authHeader = "AWS4-HMAC-SHA256 Credential=#variables.accessKeyId#/#credentialScope#, "
+			& "SignedHeaders=#signedHeaders#, Signature=#signature#";
+
+		// Uses the bx:http tag rather than java.net.http.HttpClient directly:
+		// BoxLang's Java interop layer has a reflection-caching bug where
+		// calling *any* two Java methods with differing arguments earlier in
+		// the request corrupts later overload resolution of HttpClient.send()
+		// (observed even with zero relation to the HTTP call itself — e.g. two
+		// StringBuilder.append() calls beforehand reproduces it). bx:http is a
+		// native tag, not a reflected call, so it isn't subject to that bug.
+		var uploadBytes = arguments.bytes;
+		bx:http url="https://#host##objectPath#" method="PUT" result="local.uploadResult" throwOnError="false" {
+			bx:httpparam type="header" name="Content-Type" value="#arguments.contentType#";
+			bx:httpparam type="header" name="x-amz-content-sha256" value="#payloadHash#";
+			bx:httpparam type="header" name="x-amz-date" value="#amzDate#";
+			bx:httpparam type="header" name="Authorization" value="#authHeader#";
+			bx:httpparam type="body" value="#uploadBytes#";
+		}
+
+		var statusCode = listFirst( local.uploadResult.statusCode, " " );
+		if ( !isNumeric( statusCode ) || statusCode < 200 || statusCode >= 300 ){
+			throw(
+				type    = "R2Client.UploadFailed",
+				message = "R2 upload failed with status #local.uploadResult.statusCode#: #local.uploadResult.fileContent#"
+			);
+		}
+
+		return "#variables.publicBaseUrl#/#arguments.key#";
+	}
+
+	/**
+	 * Lists objects under a key prefix (S3 ListObjectsV2) — backs the cover
+	 * image picker's "choose an existing upload" grid.
+	 *
+	 * @param {string} prefix - Key prefix to list under, e.g. "posts/". No leading slash.
+	 * @param {numeric} maxKeys - Maximum objects to return. Defaults to 100.
+	 * @return {array} Array of structs: key, url, size, lastModified — newest first.
+	 */
+	function listObjects( required string prefix, numeric maxKeys = 100 ){
+		var host = "#variables.accountId#.r2.cloudflarestorage.com";
+		var payloadHash = _sha256Hex( "".getBytes( "UTF-8" ) );
+
+		var instant   = createObject( "java", "java.time.Instant" ).now();
+		var formatter = createObject( "java", "java.time.format.DateTimeFormatter" )
+			.ofPattern( "yyyyMMdd'T'HHmmss'Z'" )
+			.withZone( createObject( "java", "java.time.ZoneOffset" ).UTC );
+		var amzDate   = formatter.format( instant );
+		var dateStamp = left( amzDate, 8 );
+
+		// Query params sorted by name — required for SigV4 canonical request.
+		var queryParams = "list-type=2&max-keys=#arguments.maxKeys#&prefix=#_uriEncode( arguments.prefix )#";
+
+		var canonicalHeaders = "host:#host#" & char( 10 )
+			& "x-amz-content-sha256:#payloadHash#" & char( 10 )
+			& "x-amz-date:#amzDate#" & char( 10 );
+		var signedHeaders = "host;x-amz-content-sha256;x-amz-date";
+
+		var canonicalRequest = "GET" & char( 10 )
+			& "/#variables.bucket#" & char( 10 )
+			& queryParams & char( 10 )
+			& canonicalHeaders & char( 10 )
+			& signedHeaders & char( 10 )
+			& payloadHash;
+
+		var credentialScope = "#dateStamp#/auto/s3/aws4_request";
+		var stringToSign = "AWS4-HMAC-SHA256" & char( 10 )
+			& amzDate & char( 10 )
+			& credentialScope & char( 10 )
+			& _sha256Hex( canonicalRequest.getBytes( "UTF-8" ) );
+
+		var kDate     = _hmacSha256( ( "AWS4" & variables.secretAccessKey ).getBytes( "UTF-8" ), dateStamp );
+		var kRegion   = _hmacSha256( kDate, "auto" );
+		var kService  = _hmacSha256( kRegion, "s3" );
+		var kSigning  = _hmacSha256( kService, "aws4_request" );
+		var signature = _hex( _hmacSha256( kSigning, stringToSign ) );
+
+		var authHeader = "AWS4-HMAC-SHA256 Credential=#variables.accessKeyId#/#credentialScope#, "
+			& "SignedHeaders=#signedHeaders#, Signature=#signature#";
+
+		bx:http url="https://#host#/#variables.bucket#?#queryParams#" method="GET" result="local.listResult" throwOnError="false" {
+			bx:httpparam type="header" name="x-amz-content-sha256" value="#payloadHash#";
+			bx:httpparam type="header" name="x-amz-date" value="#amzDate#";
+			bx:httpparam type="header" name="Authorization" value="#authHeader#";
+		}
+
+		var statusCode = listFirst( local.listResult.statusCode, " " );
+		if ( !isNumeric( statusCode ) || statusCode < 200 || statusCode >= 300 ){
+			throw(
+				type    = "R2Client.ListFailed",
+				message = "R2 list failed with status #local.listResult.statusCode#: #local.listResult.fileContent#"
+			);
+		}
+
+		var doc     = xmlParse( local.listResult.fileContent );
+		var results = [];
+		if ( !isNull( doc.ListBucketResult ) && !isNull( doc.ListBucketResult.XmlChildren ) ){
+			for ( var node in doc.ListBucketResult.XmlChildren ){
+				if ( node.XmlName != "Contents" ) continue;
+				var key = "";
+				var size = 0;
+				var lastModified = "";
+				for ( var field in node.XmlChildren ){
+					if ( field.XmlName == "Key" )          key          = field.XmlText;
+					if ( field.XmlName == "Size" )         size         = field.XmlText;
+					if ( field.XmlName == "LastModified" ) lastModified = field.XmlText;
+				}
+				if ( len( key ) && right( key, 1 ) != "/" ){
+					results.append( { "key": key, "url": "#variables.publicBaseUrl#/#key#", "size": size, "lastModified": lastModified } );
+				}
+			}
+		}
+
+		results.sort( ( a, b ) => compare( b.lastModified, a.lastModified ) );
+		return results;
+	}
+
+	private function _uriEncode( required string value ){
+		var bytes = arguments.value.getBytes( "UTF-8" );
+		var sb = createObject( "java", "java.lang.StringBuilder" ).init();
+		for ( var b in bytes ){
+			var c = bitAnd( b, 255 );
+			if ( ( c >= 65 && c <= 90 ) || ( c >= 97 && c <= 122 ) || ( c >= 48 && c <= 57 ) || c == 45 || c == 46 || c == 95 || c == 126 ){
+				sb.append( char( c ) );
+			} else {
+				sb.append( "%" & uCase( right( "0" & formatBaseN( c, 16 ), 2 ) ) );
+			}
+		}
+		return sb.toString();
+	}
+
+	private function _sha256Hex( required binary bytes ){
+		var digest = createObject( "java", "java.security.MessageDigest" ).getInstance( "SHA-256" );
+		return _hex( digest.digest( arguments.bytes ) );
+	}
+
+	private function _hmacSha256( required binary keyBytes, required string data ){
+		var mac    = createObject( "java", "javax.crypto.Mac" ).getInstance( "HmacSHA256" );
+		var secret = createObject( "java", "javax.crypto.spec.SecretKeySpec" ).init( arguments.keyBytes, "HmacSHA256" );
+		mac.init( secret );
+		return mac.doFinal( arguments.data.getBytes( "UTF-8" ) );
+	}
+
+	private function _hex( required binary bytes ){
+		return createObject( "java", "java.util.HexFormat" ).of().formatHex( arguments.bytes );
+	}
+
+}

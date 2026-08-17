@@ -1,0 +1,40 @@
+/**
+ * Builds the default OpenGraph/Twitter meta struct and canonical URL for a
+ * request path. Mirrors what the old ColdBox app's Main.onRequestStart() set
+ * on every request — individual routes take the result and override specific
+ * keys (see Posts route's per-post meta) before passing it to res.render().
+ */
+class {
+
+	variables.siteUrl = "";
+
+	function init( required string siteUrl ){
+		variables.siteUrl = arguments.siteUrl;
+		return this;
+	}
+
+	function canonicalUrl( required string path ){
+		return variables.siteUrl & arguments.path;
+	}
+
+	function defaultMeta( required string path ){
+		var url          = canonicalUrl( arguments.path );
+		var defaultImage = variables.siteUrl & "/assets/images/kisdigital-default.jpg";
+
+		return {
+			"og:type"             : "website",
+			"og:site_name"        : "KISDigital",
+			"og:title"            : "KISDigital",
+			"og:description"      : "Deep dives into ColdFusion, Lucee, and BoxLang — modern CFML development, runtime internals, and the future of the JVM web stack.",
+			"og:url"              : url,
+			"og:image"            : defaultImage,
+			"og:image:width"      : "1200",
+			"og:image:height"     : "630",
+			"twitter:card"        : "summary_large_image",
+			"twitter:image"       : defaultImage,
+			"twitter:title"       : "KISDigital",
+			"twitter:description" : "Deep dives into ColdFusion, Lucee, and BoxLang — modern CFML development, runtime internals, and the future of the JVM web stack."
+		};
+	}
+
+}

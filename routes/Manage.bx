@@ -1,0 +1,601 @@
+/**
+ * /manage — CMS admin area: auth, dashboard, posts/authors CRUD, settings.
+ *
+ * cbwire's live in-page components (post list star-toggle, post/author/settings
+ * editors) are rebuilt here as plain POST-and-redirect forms, per the decision
+ * to drop live no-reload interactivity in the boxlang-express port. Every
+ * state-changing route is protected by boxExpressCsrf() (mounted once on the
+ * whole router below) — the old app relied on cbwire's own session-bound wire
+ * snapshots for this, which plain forms don't get for free.
+ *
+ * SESSION FIXATION [H2] NOTE: the old ColdBox app called sessionInvalidate()
+ * on successful login to rotate the session ID. boxlang-express's Session
+ * middleware has no equivalent hook — req.destroySession() expires the
+ * *current* cookie (via a second Set-Cookie header) without the app being able
+ * to seed a new ID's server-side data, so calling it here would log the user
+ * right back out. Left as a known gap rather than worked around unreliably;
+ * the session cookie is httpOnly with a 256-bit random ID, which limits the
+ * practical exposure in the meantime.
+ */
+class {
+
+	variables.authService     = "";
+	variables.postService     = "";
+	variables.authorService   = "";
+	variables.settingsService = "";
+	variables.postRenderer    = "";
+	variables.r2Client        = "";
+	variables.r2UploadPrefix  = "posts";
+
+	function init( required authService, required postService, required authorService, required settingsService, required postRenderer, required r2Client, r2UploadPrefix = "posts" ){
+		variables.authService     = arguments.authService;
+		variables.postService     = arguments.postService;
+		variables.authorService   = arguments.authorService;
+		variables.settingsService = arguments.settingsService;
+		variables.postRenderer    = arguments.postRenderer;
+		variables.r2UploadPrefix  = len( trim( arguments.r2UploadPrefix ) ) ? trim( arguments.r2UploadPrefix ).reReplace( "^/+|/+$", "", "all" ) : "posts";
+		variables.r2Client        = arguments.r2Client;
+
+		// Bare method references passed as route handlers lose their binding to
+		// this instance (BoxLang's Router ends up calling them unbound), so every
+		// handler and middleware below is wrapped in a closure that calls the
+		// method through this lexically-captured scope instead.
+		var auth  = ( req, res, next ) => requireAuth( req, res, next );
+		var admin = ( req, res, next ) => requireAdmin( req, res, next );
+
+		this.router = boxExpressRouter();
+		this.router.use( boxExpressCsrf() );
+
+		this.router.get( "/manage/login", ( req, res ) => showLogin( req, res ) );
+		this.router.post( "/manage/login", boxExpressRateLimit( { windowMs: 15 * 60000, max: 5 } ), ( req, res ) => doLogin( req, res ) );
+		this.router.get( "/manage/logout", ( req, res ) => logout( req, res ) );
+
+		this.router.get( "/manage", auth, ( req, res ) => dashboard( req, res ) );
+
+		this.router.get( "/manage/posts", auth, ( req, res ) => postsList( req, res ) );
+		this.router.post( "/manage/posts/:id/toggle-featured", admin, ( req, res ) => toggleFeatured( req, res ) );
+		this.router.get( "/manage/posts/new", auth, ( req, res ) => newPost( req, res ) );
+		this.router.get( "/manage/posts/:id/edit", auth, ( req, res ) => editPost( req, res ) );
+		this.router.post( "/manage/posts/save", auth, ( req, res ) => savePost( req, res ) );
+		this.router.post( "/manage/posts/preview", auth, ( req, res ) => previewPost( req, res ) );
+		// boxExpressUpload() only runs its multipart parsing on requests whose
+		// Content-Type is actually multipart/form-data (see Multipart.bx), so
+		// scoping it to this one route rather than mounting it app-wide is
+		// just to keep it out of routes that will never see a file upload.
+		this.router.post( "/manage/posts/upload-image", auth, boxExpressUpload( { limit: 8388608 } ), ( req, res ) => uploadCoverImage( req, res ) );
+		this.router.get( "/manage/posts/images", auth, ( req, res ) => listCoverImages( req, res ) );
+
+		this.router.get( "/manage/authors", admin, ( req, res ) => authorsList( req, res ) );
+		this.router.get( "/manage/authors/new", admin, ( req, res ) => newAuthor( req, res ) );
+		this.router.get( "/manage/authors/:id/edit", auth, ( req, res ) => editAuthor( req, res ) );
+		this.router.post( "/manage/authors/save", auth, ( req, res ) => saveAuthor( req, res ) );
+
+		this.router.get( "/manage/settings", admin, ( req, res ) => settingsIndex( req, res ) );
+		this.router.post( "/manage/settings/update", admin, ( req, res ) => updateSetting( req, res ) );
+
+		return this;
+	}
+
+	// ── Auth guards ──────────────────────────────────────────────────────────
+	// Not private: passed by reference to the Router and invoked from there,
+	// outside this instance's own method-call scope.
+
+	function requireAuth( req, res, next ){
+		if ( !len( req.session.manage_user ?: "" ) ){
+			res.redirect( "/manage/login" );
+			return;
+		}
+		next();
+	}
+
+	function requireAdmin( req, res, next ){
+		if ( !len( req.session.manage_user ?: "" ) ){
+			res.redirect( "/manage/login" );
+			return;
+		}
+		if ( req.session.manage_user.role != "admin" ){
+			res.redirect( "/manage" );
+			return;
+		}
+		next();
+	}
+
+	// ── Flash messages (session-backed, survive one redirect) ─────────────────
+
+	private function flashSet( req, required struct data ){
+		req.session._flash = arguments.data;
+	}
+
+	private function flashConsume( req ){
+		var f = req.session._flash ?: {};
+		structDelete( req.session, "_flash" );
+		return f;
+	}
+
+	// True for fetch()-driven submits (see the JS in the relevant view templates)
+	// — those still use the same routes as the plain-form fallback, just ask for
+	// JSON back instead of a redirect/full-page render.
+	private function isAjax( req ){
+		return ( req.headers[ "X-Requested-With" ] ?: "" ) == "XMLHttpRequest";
+	}
+
+	// ── Login / logout ──────────────────────────────────────────────────────
+
+	// GET /manage/login
+	function showLogin( req, res ){
+		if ( len( req.session.manage_user ?: "" ) ){
+			res.redirect( "/manage" );
+			return;
+		}
+
+		var flash = flashConsume( req );
+
+		res.render( "manage/login", {
+			pageTitle : "Sign In",
+			error     : flash.loginError ?: "",
+			csrfToken : req.csrfToken()
+		} );
+	}
+
+	// POST /manage/login
+	function doLogin( req, res ){
+		var userEmail    = trim( req.body.email    ?: "" );
+		var userPassword = trim( req.body.password ?: "" );
+
+		if ( !len( userEmail ) || !len( userPassword ) ){
+			flashSet( req, { loginError: "Please enter your email and password." } );
+			res.redirect( "/manage/login" );
+			return;
+		}
+
+		// [L2] Email format validation.
+		if ( !isValid( "email", userEmail ) ){
+			flashSet( req, { loginError: "Please enter a valid email address." } );
+			res.redirect( "/manage/login" );
+			return;
+		}
+
+		var user = variables.authService.authenticate( userEmail, userPassword );
+
+		if ( user.isEmpty() ){
+			println( "[auth] failed login attempt for '" & userEmail & "' from " & req.ip );
+			flashSet( req, { loginError: "Invalid email or password." } );
+			res.redirect( "/manage/login" );
+			return;
+		}
+
+		req.session.manage_user = {
+			"id"           : user.id,
+			"display_name" : user.display_name,
+			"email"        : user.email,
+			"role"         : user.role
+		};
+
+		println( "[auth] successful login for '" & userEmail & "' from " & req.ip );
+		res.redirect( "/manage" );
+	}
+
+	// GET /manage/logout
+	function logout( req, res ){
+		req.destroySession();
+		res.redirect( "/manage/login" );
+	}
+
+	// ── Dashboard ────────────────────────────────────────────────────────────
+
+	// GET /manage
+	function dashboard( req, res ){
+		res.render( "manage/index", {
+			pageTitle       : "Dashboard",
+			manageSection   : "dashboard",
+			manageUser      : req.session.manage_user,
+			traffic         : buildTrafficSparkline( variables.postService.getDailyViewTotals( 30 ) ),
+			zeroResultSearches : variables.postService.getZeroResultSearches( 30 ),
+			recentActivity     : variables.postService.getRecentActivity( 8 ),
+			contentHealth      : variables.postService.getContentHealth()
+		} );
+	}
+
+	/**
+	 * Turns a day-by-day view-totals array into everything the dashboard's
+	 * inline SVG sparkline needs to draw itself: a "x,y x,y …" polyline
+	 * points string (normalized to a 300x56 viewBox, y inverted since SVG
+	 * grows downward), the period total, and the single busiest day for a
+	 * one-line caption. No charting library — this is one line, drawn once.
+	 */
+	private function buildTrafficSparkline( required array dailyTotals ){
+		var width  = 300;
+		var height = 56;
+		var n      = arguments.dailyTotals.len();
+
+		var maxViews = 0;
+		var total    = 0;
+		for ( var row in arguments.dailyTotals ){
+			total += row.total_views;
+			if ( row.total_views > maxViews ) maxViews = row.total_views;
+		}
+
+		var points = [];
+		for ( var i = 1; i <= n; i++ ){
+			var x = n > 1 ? ( ( i - 1 ) / ( n - 1 ) ) * width : width;
+			var y = maxViews > 0 ? height - ( arguments.dailyTotals[ i ].total_views / maxViews ) * height : height;
+			points.append( numberFormat( x, "0.0" ) & "," & numberFormat( y, "0.0" ) );
+		}
+
+		return {
+			"points"   : points.toList( " " ),
+			"width"    : width,
+			"height"   : height,
+			"total"    : total,
+			"maxViews" : maxViews,
+			"days"     : n
+		};
+	}
+
+	// ── Posts ────────────────────────────────────────────────────────────────
+
+	// GET /manage/posts
+	function postsList( req, res ){
+		var rawPage     = req.query.page ?: "";
+		var currentPage = isNumeric( rawPage ) && rawPage > 0 ? int( rawPage ) : 1;
+
+		var flash  = flashConsume( req );
+		var paging = variables.postService.getManagePosts( currentPage, 20 );
+
+		res.render( "manage/posts/index", {
+			pageTitle     : "Manage Posts",
+			manageSection : "posts",
+			paging        : paging,
+			isAdmin       : req.session.manage_user.role == "admin",
+			csrfToken     : req.csrfToken(),
+			success       : flash.success ?: ""
+		} );
+	}
+
+	// POST /manage/posts/:id/toggle-featured
+	function toggleFeatured( req, res ){
+		var postId = req.params.id ?: "";
+		if ( len( trim( postId ) ) ){
+			variables.postService.toggleFeatured( postId );
+		}
+
+		if ( isAjax( req ) ){
+			res.json( { success: true } );
+			return;
+		}
+
+		var page = req.body.page ?: 1;
+		res.redirect( "/manage/posts?page=" & page );
+	}
+
+	// GET /manage/posts/new
+	function newPost( req, res ){
+		renderPostForm( req, res, new models.PostBean(), true );
+	}
+
+	// GET /manage/posts/:id/edit
+	function editPost( req, res ){
+		var postId = req.params.id ?: "";
+		if ( !len( trim( postId ) ) ){
+			res.redirect( "/manage/posts" );
+			return;
+		}
+
+		var post = variables.postService.getPostById( postId );
+		if ( !post.exists() ){
+			res.redirect( "/manage/posts" );
+			return;
+		}
+
+		// [C5] Non-admin users may only edit posts they authored.
+		if ( !variables.postService.canUserEditPost( post.getId(), req.session.manage_user.id, req.session.manage_user.role ) ){
+			println( "[auth] unauthorized post edit attempt — user '" & req.session.manage_user.id & "' on post '" & postId & "' from " & req.ip );
+			res.redirect( "/manage/posts" );
+			return;
+		}
+
+		var flash = flashConsume( req );
+		renderPostForm( req, res, post, false, "", flash.success ?: "" );
+	}
+
+	// POST /manage/posts/save
+	function savePost( req, res ){
+		var isNew  = !len( trim( req.body.post_id ?: "" ) );
+		var errors = validatePostForm( req );
+
+		if ( !isNew && !variables.postService.canUserEditPost( req.body.post_id, req.session.manage_user.id, req.session.manage_user.role ) ){
+			errors.append( "You are not authorised to edit this post." );
+		}
+
+		// AJAX only covers the update case — a create genuinely gets a new
+		// resource URL (/manage/posts/:id/edit), which is a real navigation,
+		// not something to fake with a JSON response.
+		if ( errors.len() ){
+			if ( isAjax( req ) && !isNew ){
+				res.status( 422 ).json( { success: false, error: errors[ 1 ] } );
+				return;
+			}
+			renderPostForm( req, res, postFromForm( req ), isNew, errors[ 1 ] );
+			return;
+		}
+
+		var bean = postFromForm( req );
+		var postId = variables.postService.savePost( bean );
+		variables.postService.syncTags( postId, req.body.tags ?: "" );
+
+		if ( isNew ){
+			variables.postService.ensureAuthor( postId, req.session.manage_user.id );
+			res.redirect( "/manage/posts/" & postId & "/edit" );
+			return;
+		}
+
+		if ( isAjax( req ) ){
+			res.json( { success: true, message: "Post saved." } );
+			return;
+		}
+
+		flashSet( req, { success: "Post saved." } );
+		res.redirect( "/manage/posts/" & postId & "/edit" );
+	}
+
+	// POST /manage/posts/preview — renders the submitted (unsaved) markdown
+	// body exactly like the public post page would, for the editor's
+	// Write/Preview toggle. Never touches the database.
+	function previewPost( req, res ){
+		try {
+			res.json( { success: true, html: variables.postRenderer.render( req.body.body ?: "" ) } );
+		} catch ( any e ) {
+			res.status( 422 ).json( { success: false, error: "Couldn't render preview: " & e.message } );
+		}
+	}
+
+	// POST /manage/posts/upload-image — the editor's "Upload" button. Pushes
+	// the file straight to R2 (see models/util/R2Client.bx) and hands back
+	// its public static.kisdigital.com URL; the browser never talks to R2
+	// directly, so no R2 credentials or CORS config are needed client-side.
+	function uploadCoverImage( req, res ){
+		if ( !variables.r2Client.isConfigured() ){
+			return res.status( 501 ).json( { success: false, error: "Image hosting isn't configured (missing R2 env vars)." } );
+		}
+
+		var uploaded = ( req.files.image ?: [] );
+		if ( !uploaded.len() ){
+			return res.status( 400 ).json( { success: false, error: "No file was uploaded." } );
+		}
+		var file = uploaded[ 1 ];
+
+		var allowedTypes = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif" };
+		var ext = allowedTypes[ lCase( file.contentType ) ] ?: "";
+		if ( !len( ext ) ){
+			return res.status( 415 ).json( { success: false, error: "Unsupported image type: #encodeForHTML( file.contentType )#. Use JPEG, PNG, WebP, or GIF." } );
+		}
+
+		try {
+			var key = variables.r2UploadPrefix & "/" & slugifyFilename( file.filename ) & "." & ext;
+			var url = variables.r2Client.putObject( key, file.buffer, file.contentType );
+			res.json( { success: true, url: url } );
+		} catch ( any e ) {
+			println( "[error] cover image upload failed: " & e.message );
+			res.status( 502 ).json( { success: false, error: "Upload to image host failed." } );
+		}
+	}
+
+	/**
+	 * Turns a client-supplied filename into a safe R2 object-key segment:
+	 * strips the extension, lowercases, replaces anything that isn't
+	 * alphanumeric with a hyphen, and collapses/trims repeats. Re-uploading
+	 * the same filename overwrites the existing object at that key rather
+	 * than growing a new one — deliberate, since the point of using the
+	 * original name is a stable, predictable URL.
+	 */
+	private function slugifyFilename( required string filename ){
+		var base = listLen( arguments.filename, "." ) > 1
+			? listDeleteAt( arguments.filename, listLen( arguments.filename, "." ), "." )
+			: arguments.filename;
+		var slug = lCase( trim( base ) ).reReplace( "[^a-z0-9]+", "-", "all" ).reReplace( "^-+|-+$", "", "all" );
+		return len( slug ) ? slug : "image";
+	}
+
+	// GET /manage/posts/images — backs the editor's "Choose existing" picker
+	// modal with everything already uploaded under the configured R2 prefix.
+	function listCoverImages( req, res ){
+		if ( !variables.r2Client.isConfigured() ){
+			return res.status( 501 ).json( { success: false, error: "Image hosting isn't configured (missing R2 env vars)." } );
+		}
+
+		try {
+			var images = variables.r2Client.listObjects( variables.r2UploadPrefix & "/" );
+			res.json( { success: true, images: images } );
+		} catch ( any e ) {
+			println( "[error] cover image list failed: " & e.message );
+			res.status( 502 ).json( { success: false, error: "Couldn't load existing images." } );
+		}
+	}
+
+	private function validatePostForm( req ){
+		var errors = [];
+		if ( !len( trim( req.body.title ?: "" ) ) ) errors.append( "Title is required." );
+		return errors;
+	}
+
+	private function postFromForm( req ){
+		var bean = new models.PostBean();
+		bean.setId(          req.body.post_id ?: "" );
+		bean.setTitle(       req.body.title ?: "" );
+		bean.setSlug(        req.body.slug ?: "" );
+		bean.setDescription( req.body.description ?: "" );
+		bean.setCoverImage(  req.body.cover_image ?: "" );
+		bean.setBody(        req.body.body ?: "" );
+		bean.setStatus(      req.body.status ?: "draft" );
+		bean.setFeatured(    ( req.body.featured ?: "" ) == "1" );
+		bean.setPublishDate( req.body.publish_date ?: "" );
+		bean.setTags(        listToArray( req.body.tags ?: "", "," ) );
+		return bean;
+	}
+
+	private function renderPostForm( req, res, required post, required boolean isNew, string error = "", string success = "" ){
+		res.render( "manage/posts/form", {
+			pageTitle     : arguments.isNew ? "New Post" : "Edit Post",
+			manageSection : "posts",
+			post          : arguments.post,
+			isNew         : arguments.isNew,
+			allTags       : variables.postService.getAllTagNames(),
+			tagsList      : arguments.post.getTags().toList( ", " ),
+			error         : arguments.error,
+			success       : arguments.success,
+			csrfToken     : req.csrfToken()
+		} );
+	}
+
+	// ── Authors ──────────────────────────────────────────────────────────────
+
+	// GET /manage/authors
+	function authorsList( req, res ){
+		res.render( "manage/authors/index", {
+			pageTitle     : "Manage Authors",
+			manageSection : "authors",
+			authors       : variables.authorService.getAuthors()
+		} );
+	}
+
+	// GET /manage/authors/new
+	function newAuthor( req, res ){
+		renderAuthorForm( req, res, new models.AuthorBean(), true );
+	}
+
+	// GET /manage/authors/:id/edit
+	function editAuthor( req, res ){
+		var authorId = req.params.id ?: "";
+		if ( !len( trim( authorId ) ) ){
+			res.redirect( "/manage" );
+			return;
+		}
+
+		var author = variables.authorService.getAuthorById( authorId );
+		if ( !author.exists() ){
+			res.redirect( "/manage/authors" );
+			return;
+		}
+
+		// [C4, C5] Non-admin users may only edit their own profile.
+		if ( !variables.authorService.canUserEditAuthor( author.getId(), req.session.manage_user.id, req.session.manage_user.role ) ){
+			println( "[auth] unauthorized author edit attempt — user '" & req.session.manage_user.id & "' on author '" & authorId & "' from " & req.ip );
+			res.redirect( "/manage" );
+			return;
+		}
+
+		renderAuthorForm( req, res, author, false );
+	}
+
+	// POST /manage/authors/save
+	function saveAuthor( req, res ){
+		var isNew    = !len( trim( req.body.author_id ?: "" ) );
+		var newPassword = trim( req.body.new_password ?: "" );
+
+		// AJAX only covers the update case — a create genuinely gets a new
+		// resource URL (/manage/authors/:id/edit), which is a real navigation.
+		var ajax = isAjax( req ) && !isNew;
+
+		if ( !isNew && !variables.authorService.canUserEditAuthor( req.body.author_id, req.session.manage_user.id, req.session.manage_user.role ) ){
+			if ( ajax ){ res.status( 422 ).json( { success: false, error: "You are not authorised to edit this author." } ); return; }
+			renderAuthorForm( req, res, authorFromForm( req ), isNew, "You are not authorised to edit this author." );
+			return;
+		}
+
+		if ( !len( trim( req.body.display_name ?: "" ) ) ){
+			if ( ajax ){ res.status( 422 ).json( { success: false, error: "Display name is required." } ); return; }
+			renderAuthorForm( req, res, authorFromForm( req ), isNew, "Display name is required." );
+			return;
+		}
+		if ( !len( trim( req.body.email ?: "" ) ) ){
+			if ( ajax ){ res.status( 422 ).json( { success: false, error: "Email is required." } ); return; }
+			renderAuthorForm( req, res, authorFromForm( req ), isNew, "Email is required." );
+			return;
+		}
+		if ( isNew && !len( newPassword ) ){
+			renderAuthorForm( req, res, authorFromForm( req ), isNew, "Password is required for new authors." );
+			return;
+		}
+
+		var bean = authorFromForm( req );
+
+		// [C8] Only admins may assign/change roles — non-admins keep their existing role.
+		if ( req.session.manage_user.role != "admin" ){
+			var existing = variables.authorService.getAuthorById( req.body.author_id ?: "" );
+			bean.setRole( existing.exists() ? existing.getRole() : "author" );
+		}
+
+		var authorId = variables.authorService.saveAuthor( bean, newPassword );
+
+		if ( isNew ){
+			res.redirect( "/manage/authors/" & authorId & "/edit" );
+			return;
+		}
+
+		if ( ajax ){
+			res.json( { success: true, message: "Author saved." } );
+			return;
+		}
+
+		flashSet( req, { success: "Author saved." } );
+		res.redirect( "/manage/authors/" & authorId & "/edit" );
+	}
+
+	private function authorFromForm( req ){
+		var bean = new models.AuthorBean();
+		bean.setId(          req.body.author_id ?: "" );
+		bean.setDisplayName( req.body.display_name ?: "" );
+		bean.setEmail(       req.body.email ?: "" );
+		bean.setRole(        req.body.role ?: "author" );
+		bean.setAbout(       req.body.about ?: "" );
+		bean.setAvatarLabel( left( trim( req.body.avatar_label ?: "" ), 2 ).uCase() );
+		return bean;
+	}
+
+	private function renderAuthorForm( req, res, required author, required boolean isNew, string error = "" ){
+		var flash = flashConsume( req );
+		res.render( "manage/authors/form", {
+			pageTitle     : arguments.isNew ? "New Author" : "Edit Author",
+			manageSection : "authors",
+			author        : arguments.author,
+			isNew         : arguments.isNew,
+			error         : arguments.error,
+			success       : flash.success ?: "",
+			csrfToken     : req.csrfToken()
+		} );
+	}
+
+	// ── Settings ─────────────────────────────────────────────────────────────
+
+	// GET /manage/settings
+	function settingsIndex( req, res ){
+		var flash = flashConsume( req );
+		res.render( "manage/settings/index", {
+			pageTitle     : "Settings",
+			manageSection : "settings",
+			settings      : variables.settingsService.getAll(),
+			success       : flash.success ?: "",
+			error         : flash.error ?: "",
+			csrfToken     : req.csrfToken()
+		} );
+	}
+
+	// POST /manage/settings/update
+	function updateSetting( req, res ){
+		var category   = req.body.category ?: "";
+		var settingKey = req.body.setting_key ?: "";
+		var value      = req.body.setting_value ?: "";
+
+		variables.settingsService.updateSetting( category, settingKey, value );
+		var message = "Saved " & category & "." & settingKey & ".";
+
+		if ( isAjax( req ) ){
+			res.json( { success: true, message: message } );
+			return;
+		}
+
+		flashSet( req, { success: message } );
+		res.redirect( "/manage/settings" );
+	}
+
+}

@@ -1,0 +1,44 @@
+/**
+ * Handles user authentication for the CMS.
+ */
+class {
+
+	/**
+	 * Attempts to authenticate a user by email and password.
+	 *
+	 * Returns the user struct (id, display_name, email, role) on success,
+	 * or an empty struct on failure.
+	 *
+	 * SECURITY [H5]: Also checks the is_active flag — inactive/suspended accounts
+	 *               are rejected even if the password is correct.
+	 *
+	 * @param {string} email    - The user's email address.
+	 * @param {string} password - The plaintext password to verify against BCrypt hash.
+	 * @return {struct} User struct on success, empty struct on failure.
+	 */
+	function authenticate( required string email, required string password ){
+		var users = queryExecute(
+			"SELECT id, display_name, email, password, role, is_active
+			FROM User
+			WHERE email = :email
+			LIMIT 1",
+			{
+				"email" : { value: arguments.email, cfsqltype: "cf_sql_varchar" }
+			},
+			{ returnType: "array" }
+		);
+
+		if ( !users.len() ) return {};
+
+		var user = users[ 1 ];
+
+		// [H5] Reject suspended / deactivated accounts before checking the password,
+		// to avoid leaking account existence through timing differences.
+		if ( !user.is_active ){
+			return {};
+		}
+
+		return BCryptVerify( arguments.password, user.password ?: "" ) ? user : {};
+	}
+
+}

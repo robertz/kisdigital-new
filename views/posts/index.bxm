@@ -1,0 +1,72 @@
+<bx:include template="../partials/_head.bxm">
+<bx:output>
+<!--- Page header --->
+<header class="c-posts-header">
+	<div class="container">
+		<h1 class="c-posts-header__title mb-2">All Articles</h1>
+		<p class="c-posts-header__count mb-0">
+			#data.paging.total# #( data.paging.total == 1 ? "article" : "articles" )# published
+		</p>
+	</div>
+</header>
+
+<!--- Content --->
+<section class="py-5 posts-section">
+	<div class="container">
+		<div class="row g-5">
+
+			<!--- Posts grid --->
+			<div class="col-lg-8">
+				<bx:if data.paging.posts.len()>
+
+				<div class="post-list">
+					<bx:loop array="#data.paging.posts#" item="post" index="cardIndex">
+						<bx:include template="../partials/postCard.bxm">
+					</bx:loop>
+				</div>
+
+				<!--- Pagination --->
+				<bx:if data.paging.totalPages gt 1>
+				<nav class="c-pagination" aria-label="Article pages">
+					<a href="/posts?page=#data.paging.page - 1#"
+						class="c-pagination__btn #( data.paging.page lte 1 ? 'c-pagination__btn--disabled' : '' )#"
+						aria-label="Previous page">
+						<i class="bi bi-chevron-left"></i>
+					</a>
+
+					<bx:loop from="1" to="#data.paging.totalPages#" index="p">
+						<a href="/posts?page=#p#"
+							class="c-pagination__btn #( p == data.paging.page ? 'c-pagination__btn--active' : '' )#">
+							#p#
+						</a>
+					</bx:loop>
+
+					<a href="/posts?page=#data.paging.page + 1#"
+						class="c-pagination__btn #( data.paging.page gte data.paging.totalPages ? 'c-pagination__btn--disabled' : '' )#"
+						aria-label="Next page">
+						<i class="bi bi-chevron-right"></i>
+					</a>
+				</nav>
+				</bx:if>
+
+				<bx:else>
+				<p class="text-muted">No articles published yet.</p>
+				</bx:if>
+			</div>
+
+			<!--- Sidebar --->
+			<div class="col-lg-4">
+
+				<!--- Trending --->
+				<bx:include template="../partials/trendingSidebar.bxm">
+
+				<!--- Tags --->
+				<bx:include template="../partials/tagsSidebar.bxm">
+
+			</div>
+
+		</div>
+	</div>
+</section>
+</bx:output>
+<bx:include template="../partials/_foot.bxm">

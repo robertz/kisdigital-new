@@ -1,0 +1,60 @@
+<bx:include template="../partials/_head.bxm">
+<bx:output>
+<div class="c-auth-page">
+	<div class="c-auth-card">
+
+		<!--- Logo --->
+		<div class="text-center mb-4">
+			<a href="/" class="c-auth__logo">
+				<span class="c-auth__bracket">[</span>KISDigital<span class="c-auth__bracket">]</span>
+			</a>
+		</div>
+
+		<!--- Heading --->
+		<h1 class="c-auth__title">Sign in</h1>
+		<p class="c-auth__subtitle mb-4">Sign in to manage your content.</p>
+
+		<!--- Error message --->
+		<bx:if len( data.error )>
+			<div class="c-auth__error mb-4" role="alert">
+				<i class="bi bi-exclamation-circle-fill"></i>
+				#encodeForHTML( data.error )#
+			</div>
+		</bx:if>
+
+		<!--- Login form --->
+		<form method="post" action="/manage/login" novalidate>
+			<input type="hidden" name="_csrf" value="#encodeForHTMLAttribute( data.csrfToken )#">
+
+			<div class="mb-3">
+				<label for="email" class="c-auth__label">Email address</label>
+				<input
+					type="email"
+					id="email"
+					name="email"
+					class="c-auth__input"
+					placeholder="you@example.com"
+					autocomplete="email"
+					required>
+			</div>
+
+			<div class="mb-4">
+				<label for="password" class="c-auth__label">Password</label>
+				<input
+					type="password"
+					id="password"
+					name="password"
+					class="c-auth__input"
+					placeholder="••••••••"
+					autocomplete="current-password"
+					required>
+			</div>
+
+			<button type="submit" class="c-auth__submit">Sign in</button>
+
+		</form>
+
+	</div>
+</div>
+</bx:output>
+<bx:include template="../partials/_foot.bxm">

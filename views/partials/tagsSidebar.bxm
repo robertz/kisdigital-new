@@ -1,0 +1,16 @@
+<bx:output>
+<bx:if data.allTags.len()>
+<p class="c-post-sidebar__label">Browse by Tag</p>
+<div class="c-post-sidebar__widget mb-5">
+	<div class="d-flex flex-wrap gap-2 gap-md-3">
+		<bx:loop array="#data.allTags#" item="tagRow">
+			<a href="/tag/#encodeForURL( tagRow.tag )#"
+				class="tag-badge #( ( data.currentTag ?: "" ) == tagRow.tag ? 'tag-badge--active' : '' )#">
+				#encodeForHTML( tagRow.tag )#
+				<span class="tag-badge__count">#tagRow.post_count#</span>
+			</a>
+		</bx:loop>
+	</div>
+</div>
+</bx:if>
+</bx:output>

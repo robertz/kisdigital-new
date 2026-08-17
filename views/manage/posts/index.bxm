@@ -1,0 +1,197 @@
+<bx:include template="../../partials/_head.bxm">
+<bx:output>
+<div class="c-manage">
+
+	<!--- Sidebar nav --->
+	<bx:include template="../../partials/manageNav.bxm">
+
+	<!--- Main content --->
+	<main class="c-manage-main">
+
+		<bx:if len( data.success )>
+			<div class="c-manage-alert c-manage-alert--success">
+				<i class="bi bi-check-circle-fill"></i>
+				#encodeForHTML( data.success )#
+			</div>
+		</bx:if>
+
+		<div class="c-manage-posts">
+
+			<div class="c-manage-header">
+				<div class="c-manage-header__lead">
+					<span class="c-manage-header__eyebrow">Content</span>
+					<h1 class="c-manage-header__title">
+						Posts
+						<span class="c-manage-header__count">#numberFormat( data.paging.total )#</span>
+					</h1>
+					<p class="c-manage-header__sub">Draft, edit, publish, and feature blog posts.</p>
+				</div>
+				<a href="/manage/posts/new" class="c-manage-posts__new">
+					<i class="bi bi-plus-lg"></i> New post
+				</a>
+			</div>
+
+			<bx:if !data.paging.posts.len()>
+
+				<div class="c-manage-posts__empty">
+					<i class="bi bi-journal-text"></i>
+					<h2>No posts yet</h2>
+					<p>Your first post is a button click away.</p>
+					<a href="/manage/posts/new" class="c-manage-posts__new">
+						<i class="bi bi-plus-lg"></i> Create first post
+					</a>
+				</div>
+
+			<bx:else>
+
+				<div class="c-manage-posts__panel">
+					<div class="c-manage-table-wrap">
+						<table class="c-manage-table">
+							<thead>
+								<tr>
+									<th>Title</th>
+									<th>Status</th>
+									<th>Featured</th>
+									<th>Published</th>
+									<th>Author</th>
+									<th>Views</th>
+									<th></th>
+								</tr>
+							</thead>
+							<tbody>
+								<bx:loop array="#data.paging.posts#" item="post">
+									<tr>
+										<td>
+											<a href="/manage/posts/#encodeForURL( post.getId() )#/edit" class="c-manage-table__title">
+												#encodeForHTML( post.getTitle() )#
+											</a>
+											<bx:if post.getTags().len()>
+												<span class="c-manage-table__tags">
+													<bx:loop array="#post.getTags()#" item="tag">
+														<span class="tag-badge">#encodeForHTML( tag )#</span>
+													</bx:loop>
+												</span>
+											</bx:if>
+										</td>
+										<td>
+											<bx:if post.getIsScheduled()>
+												<span class="c-status-badge c-status-badge--scheduled" title="Goes live #dateTimeFormat( post.getPublishDate(), 'mmm d, yyyy' )# at #dateTimeFormat( post.getPublishDate(), 'h:nn tt' )#">
+													<i class="bi bi-clock-fill c-status-badge__dot"></i> Scheduled
+												</span>
+											<bx:elseif post.getStatus() == "published">
+												<span class="c-status-badge c-status-badge--published">
+													<i class="bi bi-circle-fill c-status-badge__dot"></i> Published
+												</span>
+											<bx:elseif post.getStatus() == "archived">
+												<span class="c-status-badge c-status-badge--archived">Archived</span>
+											<bx:else>
+												<span class="c-status-badge c-status-badge--draft">Draft</span>
+											</bx:if>
+										</td>
+										<td>
+											<bx:if data.isAdmin>
+												<form method="post" action="/manage/posts/#encodeForURL( post.getId() )#/toggle-featured" class="js-toggle-featured">
+													<input type="hidden" name="_csrf" value="#encodeForHTMLAttribute( data.csrfToken )#">
+													<input type="hidden" name="page" value="#data.paging.page#">
+													<button
+														type="submit"
+														class="c-manage-table__icon-btn #( post.getFeatured() ? 'c-manage-table__icon-btn--active' : '' )#"
+														title="#( post.getFeatured() ? 'Remove featured' : 'Mark as featured' )#">
+														<i class="bi #( post.getFeatured() ? 'bi-star-fill text-warning' : 'bi-star text-muted' )#"></i>
+													</button>
+												</form>
+											<bx:else>
+												<i class="bi #( post.getFeatured() ? 'bi-star-fill text-warning' : 'bi-star text-muted' )#"></i>
+											</bx:if>
+										</td>
+										<td class="c-manage-posts__cell-muted">
+											<bx:if len( post.getPublishDate() ) && isDate( post.getPublishDate() )>
+												#dateFormat( post.getPublishDate(), "d mmm yyyy" )#
+											<bx:else>
+												—
+											</bx:if>
+										</td>
+										<td class="c-manage-posts__cell-muted">#encodeForHTML( post.getAuthorName() )#</td>
+										<td class="c-manage-posts__cell-muted">#numberFormat( post.getViews() )#</td>
+										<td>
+											<a href="/manage/posts/#encodeForURL( post.getId() )#/edit" class="c-manage-posts__edit">
+												<i class="bi bi-pencil"></i> Edit
+											</a>
+										</td>
+									</tr>
+								</bx:loop>
+							</tbody>
+						</table>
+					</div>
+
+					<bx:if data.paging.totalPages gt 1>
+						<footer class="c-manage-posts__footer">
+							<span class="c-manage-posts__page-info">
+								Page <strong>#data.paging.page#</strong> of <strong>#data.paging.totalPages#</strong>
+							</span>
+							<div class="c-pagination">
+								<bx:if data.paging.page gt 1>
+									<a class="c-pagination__btn" href="/manage/posts?page=#data.paging.page - 1#" aria-label="Previous page">
+										<i class="bi bi-chevron-left"></i>
+									</a>
+								<bx:else>
+									<span class="c-pagination__btn c-pagination__btn--disabled"><i class="bi bi-chevron-left"></i></span>
+								</bx:if>
+
+								<bx:loop from="1" to="#data.paging.totalPages#" index="pg">
+									<a class="c-pagination__btn #pg == data.paging.page ? 'c-pagination__btn--active' : ''#" href="/manage/posts?page=#pg#">
+										#pg#
+									</a>
+								</bx:loop>
+
+								<bx:if data.paging.page lt data.paging.totalPages>
+									<a class="c-pagination__btn" href="/manage/posts?page=#data.paging.page + 1#" aria-label="Next page">
+										<i class="bi bi-chevron-right"></i>
+									</a>
+								<bx:else>
+									<span class="c-pagination__btn c-pagination__btn--disabled"><i class="bi bi-chevron-right"></i></span>
+								</bx:if>
+							</div>
+						</footer>
+					</bx:if>
+				</div>
+
+			</bx:if>
+
+		</div>
+
+	</main>
+</div>
+
+<script>
+(function(){
+	// Optimistic AJAX toggle — the button already reflects the *current* state,
+	// so a successful response just flips the classes/icon; a failure (or a
+	// network error) falls back to a real form submit rather than silently
+	// leaving the UI out of sync with the database.
+	document.querySelectorAll('.js-toggle-featured').forEach(function(form){
+		form.addEventListener('submit', function(e){
+			e.preventDefault();
+			var btn  = form.querySelector('button');
+			var icon = btn.querySelector('i');
+
+			fetch(form.action, {
+				method: 'POST',
+				headers: { 'X-Requested-With': 'XMLHttpRequest' },
+				body: new URLSearchParams(new FormData(form))
+			})
+			.then(function(res){ if (!res.ok) throw new Error('toggle failed'); return res.json(); })
+			.then(function(){
+				var active = btn.classList.toggle('c-manage-table__icon-btn--active');
+				icon.className = 'bi ' + (active ? 'bi-star-fill text-warning' : 'bi-star text-muted');
+				btn.title = active ? 'Remove featured' : 'Mark as featured';
+			})
+			.catch(function(){
+				form.submit();
+			});
+		});
+	});
+})();
+</script>
+</bx:output>
+<bx:include template="../../partials/_foot.bxm">

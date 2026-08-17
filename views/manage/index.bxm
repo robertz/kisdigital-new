@@ -1,0 +1,196 @@
+<bx:include template="../partials/_head.bxm">
+<bx:output>
+<div class="c-manage">
+
+	<!--- Sidebar nav --->
+	<bx:include template="../partials/manageNav.bxm">
+
+	<!--- Main content --->
+	<main class="c-manage-main">
+
+		<div class="c-manage-header">
+			<div>
+				<h1 class="c-manage-header__title">Dashboard</h1>
+				<p class="c-manage-header__sub">
+					Welcome back, #encodeForHTML( data.manageUser.display_name )#.
+				</p>
+			</div>
+		</div>
+
+		<bx:set isAdmin = ( data.manageUser.role ?: "" ) == "admin">
+
+		<div class="c-manage-dashboard__grid">
+
+			<!--- Traffic card --->
+			<section class="c-manage-dashboard__card c-manage-dashboard__card--traffic">
+				<div class="c-manage-dashboard__card-head">
+					<span class="c-manage-dashboard__icon"><i class="bi bi-graph-up"></i></span>
+					<span class="c-manage-dashboard__eyebrow">Traffic &mdash; last #data.traffic.days# days</span>
+				</div>
+				<div class="c-dashboard-sparkline">
+					<svg viewBox="0 0 #data.traffic.width# #data.traffic.height#" class="c-dashboard-sparkline__svg" preserveAspectRatio="none" aria-hidden="true">
+						<polyline points="#data.traffic.points#" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
+					</svg>
+					<div class="c-dashboard-sparkline__stats">
+						<div class="c-dashboard-sparkline__stat">
+							<span class="c-dashboard-sparkline__stat-value">#numberFormat( data.traffic.total )#</span>
+							<span class="c-dashboard-sparkline__stat-label">total views</span>
+						</div>
+						<div class="c-dashboard-sparkline__stat">
+							<span class="c-dashboard-sparkline__stat-value">#numberFormat( data.traffic.maxViews )#</span>
+							<span class="c-dashboard-sparkline__stat-label">peak day</span>
+						</div>
+					</div>
+				</div>
+			</section>
+
+			<!--- Content health card --->
+			<section class="c-manage-dashboard__card c-manage-dashboard__card--health">
+				<div class="c-manage-dashboard__card-head">
+					<span class="c-manage-dashboard__icon"><i class="bi bi-heart-pulse"></i></span>
+					<span class="c-manage-dashboard__eyebrow">Content health</span>
+				</div>
+				<ul class="c-dashboard-health__list">
+					<li class="c-dashboard-health__item">
+						<a href="/manage/posts" class="c-dashboard-health__link">
+							<span class="c-dashboard-health__value">#data.contentHealth.draftCount#</span>
+							<span class="c-dashboard-health__label">#( data.contentHealth.draftCount == 1 ? "draft awaiting publish" : "drafts awaiting publish" )#</span>
+						</a>
+					</li>
+					<li class="c-dashboard-health__item">
+						<a href="/manage/posts" class="c-dashboard-health__link">
+							<span class="c-dashboard-health__value">#data.contentHealth.upcomingCount#</span>
+							<span class="c-dashboard-health__label">scheduled in the next 7 days</span>
+						</a>
+					</li>
+					<li class="c-dashboard-health__item">
+						<a href="/manage/posts" class="c-dashboard-health__link">
+							<span class="c-dashboard-health__value">#data.contentHealth.missingCoverCount#</span>
+							<span class="c-dashboard-health__label">published #( data.contentHealth.missingCoverCount == 1 ? "post" : "posts" )# missing a cover image</span>
+						</a>
+					</li>
+					<li class="c-dashboard-health__item">
+						<a href="/manage/posts" class="c-dashboard-health__link">
+							<span class="c-dashboard-health__value">#data.contentHealth.missingTagsCount#</span>
+							<span class="c-dashboard-health__label">published #( data.contentHealth.missingTagsCount == 1 ? "post" : "posts" )# missing tags</span>
+						</a>
+					</li>
+				</ul>
+			</section>
+
+			<!--- Zero-result searches card --->
+			<section class="c-manage-dashboard__card c-manage-dashboard__card--searches">
+				<div class="c-manage-dashboard__card-head">
+					<span class="c-manage-dashboard__icon"><i class="bi bi-search"></i></span>
+					<span class="c-manage-dashboard__eyebrow">Readers searched, found nothing &mdash; last 30 days</span>
+				</div>
+				<bx:if data.zeroResultSearches.len()>
+					<ul class="c-dashboard-list">
+						<bx:loop array="#data.zeroResultSearches#" item="row">
+							<li class="c-dashboard-list__item">
+								<span class="c-dashboard-list__label">&ldquo;#encodeForHTML( row.query )#&rdquo;</span>
+								<span class="c-dashboard-list__meta">#row.search_count# #( row.search_count == 1 ? "search" : "searches" )#</span>
+							</li>
+						</bx:loop>
+					</ul>
+				<bx:else>
+					<p class="c-manage-dashboard__meta">No searches have come up empty recently.</p>
+				</bx:if>
+			</section>
+
+			<!--- Recent activity card --->
+			<section class="c-manage-dashboard__card c-manage-dashboard__card--activity">
+				<div class="c-manage-dashboard__card-head">
+					<span class="c-manage-dashboard__icon"><i class="bi bi-activity"></i></span>
+					<span class="c-manage-dashboard__eyebrow">Recent activity</span>
+				</div>
+				<bx:if data.recentActivity.len()>
+					<ul class="c-dashboard-list">
+						<bx:loop array="#data.recentActivity#" item="row">
+							<li class="c-dashboard-list__item">
+								<a href="/manage/posts/#encodeForURL( row.id )#/edit" class="c-dashboard-list__label c-dashboard-list__label--link">
+									#encodeForHTML( row.title )#
+								</a>
+								<span class="c-dashboard-list__meta">
+									<span class="c-status-badge c-status-badge--#lCase( row.status )#">#encodeForHTML( row.status )#</span>
+									#dateTimeFormat( row.last_updated, "mmm d" )#
+								</span>
+							</li>
+						</bx:loop>
+					</ul>
+				<bx:else>
+					<p class="c-manage-dashboard__meta">No posts yet.</p>
+				</bx:if>
+			</section>
+
+			<!--- Account card --->
+			<section class="c-manage-dashboard__card c-manage-dashboard__card--account">
+				<div class="c-manage-dashboard__card-head">
+					<span class="c-manage-dashboard__icon"><i class="bi bi-person-circle"></i></span>
+					<span class="c-manage-dashboard__eyebrow">Account</span>
+				</div>
+				<h2 class="c-manage-dashboard__title">#encodeForHTML( data.manageUser.display_name )#</h2>
+				<p class="c-manage-dashboard__meta">#encodeForHTML( data.manageUser.email )#</p>
+				<div class="c-manage-dashboard__card-foot">
+					<span class="c-manage-dashboard__badge #( isAdmin ? 'c-manage-dashboard__badge--admin' : '' )#">
+						#encodeForHTML( data.manageUser.role ?: "author" )#
+					</span>
+					<a href="/manage/logout" class="c-manage-dashboard__link">
+						Sign out <i class="bi bi-box-arrow-right"></i>
+					</a>
+				</div>
+			</section>
+
+			<!--- Posts card --->
+			<a href="/manage/posts" class="c-manage-dashboard__card c-manage-dashboard__card--link">
+				<div class="c-manage-dashboard__card-head">
+					<span class="c-manage-dashboard__icon"><i class="bi bi-file-text"></i></span>
+					<span class="c-manage-dashboard__eyebrow">Content</span>
+				</div>
+				<h2 class="c-manage-dashboard__title">Posts</h2>
+				<p class="c-manage-dashboard__meta">Draft, edit, and publish blog posts.</p>
+				<div class="c-manage-dashboard__card-foot">
+					<span class="c-manage-dashboard__cta">
+						Manage posts <i class="bi bi-arrow-right"></i>
+					</span>
+				</div>
+			</a>
+
+			<bx:if isAdmin>
+				<!--- Authors card (admin) --->
+				<a href="/manage/authors" class="c-manage-dashboard__card c-manage-dashboard__card--link">
+					<div class="c-manage-dashboard__card-head">
+						<span class="c-manage-dashboard__icon"><i class="bi bi-people"></i></span>
+						<span class="c-manage-dashboard__eyebrow">Team</span>
+					</div>
+					<h2 class="c-manage-dashboard__title">Authors</h2>
+					<p class="c-manage-dashboard__meta">Invite and manage contributor accounts.</p>
+					<div class="c-manage-dashboard__card-foot">
+						<span class="c-manage-dashboard__cta">
+							Manage authors <i class="bi bi-arrow-right"></i>
+						</span>
+					</div>
+				</a>
+
+				<!--- Settings card (admin) --->
+				<a href="/manage/settings" class="c-manage-dashboard__card c-manage-dashboard__card--link">
+					<div class="c-manage-dashboard__card-head">
+						<span class="c-manage-dashboard__icon"><i class="bi bi-sliders2"></i></span>
+						<span class="c-manage-dashboard__eyebrow">Configuration</span>
+					</div>
+					<h2 class="c-manage-dashboard__title">Settings</h2>
+					<p class="c-manage-dashboard__meta">Tune site and integration values.</p>
+					<div class="c-manage-dashboard__card-foot">
+						<span class="c-manage-dashboard__cta">
+							Edit settings <i class="bi bi-arrow-right"></i>
+						</span>
+					</div>
+				</a>
+			</bx:if>
+
+		</div>
+
+	</main>
+</div>
+</bx:output>
+<bx:include template="../partials/_foot.bxm">

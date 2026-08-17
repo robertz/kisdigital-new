@@ -1,0 +1,150 @@
+/**
+ * Service for querying and persisting User/Author data.
+ */
+class {
+
+	/**
+	 * Returns all authors with their post counts, ordered by display name.
+	 *
+	 * @return {array} Array of AuthorBeans.
+	 */
+	function getAuthors(){
+		var rows = queryExecute(
+			"SELECT
+				U.id,
+				U.display_name,
+				U.email,
+				U.role,
+				U.about,
+				U.avatar_label,
+				U.created,
+				COUNT(UP.post_id) AS post_count
+			FROM User U
+			LEFT JOIN UserPost UP ON UP.user_id = U.id
+			GROUP BY U.id
+			ORDER BY U.display_name ASC",
+			{},
+			{ returnType: "array" }
+		);
+
+		return rows.map( ( row ) => new models.AuthorBean().populate( row ) );
+	}
+
+	/**
+	 * Returns the first author by creation date, intended for the site About widget.
+	 *
+	 * @return {AuthorBean} Populated bean. Call exists() to check if found.
+	 */
+	function getFirstAuthor(){
+		var rows = queryExecute(
+			"SELECT
+				U.id,
+				U.display_name,
+				U.email,
+				U.role,
+				U.about,
+				U.avatar_label,
+				U.created,
+				COUNT(UP.post_id) AS post_count
+			FROM User U
+			LEFT JOIN UserPost UP ON UP.user_id = U.id
+			GROUP BY U.id
+			ORDER BY U.created ASC
+			LIMIT 1",
+			{},
+			{ returnType: "array" }
+		);
+
+		if ( !rows.len() ) return new models.AuthorBean();
+		return new models.AuthorBean().populate( rows[ 1 ] );
+	}
+
+	/**
+	 * Returns a single author by UUID.
+	 *
+	 * @param {string} authorId - The user UUID.
+	 * @return {AuthorBean} Populated bean. Call exists() to check if found.
+	 */
+	function getAuthorById( required string authorId ){
+		return new models.AuthorBean().loadById( arguments.authorId );
+	}
+
+	/**
+	 * Returns true if the given user is authorised to edit the given author profile.
+	 *
+	 * Admins may edit any author profile. Non-admin users may only edit their
+	 * own profile — identified by matching UUIDs.
+	 *
+	 * SECURITY [C4, C5]: Single authoritative ownership check — called from both
+	 *                    the handler and wire components so the rule cannot diverge.
+	 *
+	 * @param {string} authorId  - The author UUID being edited.
+	 * @param {string} userId    - The current user's UUID.
+	 * @param {string} userRole  - The current user's role ('admin' or 'author').
+	 * @return {boolean}
+	 */
+	function canUserEditAuthor( required string authorId, required string userId, required string userRole ){
+		if ( arguments.userRole == "admin" ) return true;
+		return arguments.authorId == arguments.userId;
+	}
+
+	/**
+	 * Creates or updates an author.
+	 *
+	 * On create: display_name, email, and plainPassword are all required.
+	 * On update: display_name, email, and role are updated; password is only
+	 * changed when plainPassword is non-empty.
+	 *
+	 * @param {AuthorBean} bean          - Bean carrying the author data.
+	 * @param {string}     plainPassword - Plaintext password; blank to leave unchanged on update.
+	 * @return {string} The author id.
+	 */
+	function saveAuthor( required AuthorBean bean, string plainPassword = "" ){
+		var isNew    = !len( trim( bean.getId() ) );
+		var authorId = isNew ? createGUID() : bean.getId();
+
+		if ( isNew ){
+			queryExecute(
+				"INSERT INTO User (id, display_name, email, password, role, about, avatar_label)
+				VALUES (:id, :display_name, :email, :password, :role, :about, :avatar_label)",
+				{
+					"id"           : { value: authorId,                              cfsqltype: "cf_sql_varchar" },
+					"display_name" : { value: bean.getDisplayName(),                 cfsqltype: "cf_sql_varchar" },
+					"email"        : { value: bean.getEmail(),                       cfsqltype: "cf_sql_varchar" },
+					"password"     : { value: BCryptHash( arguments.plainPassword ), cfsqltype: "cf_sql_varchar" },
+					"role"         : { value: bean.getRole(),                        cfsqltype: "cf_sql_varchar" },
+					"about"        : { value: bean.getAbout(),                       cfsqltype: "cf_sql_varchar", null: !len( trim( bean.getAbout() ) ) },
+					"avatar_label" : { value: bean.getAvatarLabel(),                 cfsqltype: "cf_sql_varchar", null: !len( trim( bean.getAvatarLabel() ) ) }
+				}
+			);
+		} else {
+			queryExecute(
+				"UPDATE User
+				SET display_name = :display_name, email = :email, role = :role,
+				    about = :about, avatar_label = :avatar_label
+				WHERE id = :id",
+				{
+					"id"           : { value: authorId,              cfsqltype: "cf_sql_varchar" },
+					"display_name" : { value: bean.getDisplayName(), cfsqltype: "cf_sql_varchar" },
+					"email"        : { value: bean.getEmail(),       cfsqltype: "cf_sql_varchar" },
+					"role"         : { value: bean.getRole(),        cfsqltype: "cf_sql_varchar" },
+					"about"        : { value: bean.getAbout(),       cfsqltype: "cf_sql_varchar", null: !len( trim( bean.getAbout() ) ) },
+					"avatar_label" : { value: bean.getAvatarLabel(), cfsqltype: "cf_sql_varchar", null: !len( trim( bean.getAvatarLabel() ) ) }
+				}
+			);
+
+			if ( len( trim( arguments.plainPassword ) ) ){
+				queryExecute(
+					"UPDATE User SET password = :password WHERE id = :id",
+					{
+						"id"       : { value: authorId,                              cfsqltype: "cf_sql_varchar" },
+						"password" : { value: BCryptHash( arguments.plainPassword ), cfsqltype: "cf_sql_varchar" }
+					}
+				);
+			}
+		}
+
+		return authorId;
+	}
+
+}

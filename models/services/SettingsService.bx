@@ -1,0 +1,114 @@
+/**
+ * SettingsService
+ *
+ * Loads all rows from the Settings table once and holds them in memory for
+ * fast repeat access. Call reload() to discard the cached array and force a
+ * fresh query on the next getAll() call. Instantiate once in app.bxs and
+ * share the instance across routes — it behaves like a singleton because
+ * only one instance ever exists, not because of any framework machinery.
+ */
+class {
+
+	variables.settings = [];
+	variables.loaded   = false;
+
+	/**
+	 * Returns every row from the Settings table as an array of structs.
+	 * Loads from the database on first call; subsequent calls are served
+	 * from the in-memory cache until reload() is invoked.
+	 *
+	 * @return {array} Array of setting structs (category, setting_key,
+	 *                 setting_value, setting_type, description, updated_at).
+	 */
+	function getAll(){
+		if ( !variables.loaded ) {
+			load();
+		}
+		return variables.settings;
+	}
+
+	/**
+	 * Returns a single setting row matching the supplied setting_key.
+	 *
+	 * The Settings table has a composite primary key (category, setting_key),
+	 * so two categories can legitimately share the same setting_key. When the
+	 * optional category argument is supplied the lookup matches on both; when
+	 * it is omitted the first row with the matching setting_key is returned.
+	 * Reads are served from the in-memory cache populated by getAll().
+	 *
+	 * @param {string} setting_key - Key to look up.
+	 * @param {string} category    - Optional category to disambiguate.
+	 * @return {struct} The matched setting row, or an empty struct if none found.
+	 */
+	function getSetting( required string setting_key, string category = "" ){
+		var targetKey = arguments.setting_key;
+		var targetCat = arguments.category;
+
+		var matches = getAll().filter( ( s ) => {
+			if ( s.setting_key != targetKey ) return false;
+			if ( len( targetCat ) && s.category != targetCat ) return false;
+			return true;
+		} );
+
+		return matches.len() ? matches[ 1 ] : {};
+	}
+
+	/**
+	 * Discards the cached settings and reloads them from the database.
+	 *
+	 * @return {SettingsService} this, for chaining.
+	 */
+	function reload(){
+		variables.settings = [];
+		variables.loaded   = false;
+		load();
+		return this;
+	}
+
+	/**
+	 * Persists a single setting_value for the given category/setting_key pair
+	 * and forces the in-memory cache to refresh so subsequent getAll() calls
+	 * return the updated row.
+	 *
+	 * @param {string} category    - Settings category.
+	 * @param {string} setting_key - Settings key within the category.
+	 * @param {string} setting_value - New value to persist.
+	 * @return {SettingsService} this, for chaining.
+	 */
+	function updateSetting( required string category, required string setting_key, required string setting_value ){
+		queryExecute(
+			"UPDATE Settings
+				SET setting_value = :setting_value
+			WHERE category    = :category
+				AND setting_key = :setting_key",
+			{
+				"setting_value" : { value: arguments.setting_value, cfsqltype: "cf_sql_longvarchar" },
+				"category"      : { value: arguments.category,      cfsqltype: "cf_sql_varchar" },
+				"setting_key"   : { value: arguments.setting_key,   cfsqltype: "cf_sql_varchar" }
+			}
+		);
+		reload();
+		return this;
+	}
+
+	/**
+	 * Fetches all Settings rows into the in-memory cache.
+	 */
+	private function load(){
+		variables.settings = queryExecute(
+			"SELECT
+				category,
+				setting_key,
+				setting_value,
+				setting_type,
+				description,
+				updated_at
+			FROM Settings
+			ORDER BY category ASC, setting_key ASC",
+			{},
+			{ returnType: "array" }
+		);
+		variables.loaded = true;
+	}
+
+}

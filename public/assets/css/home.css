@@ -1,0 +1,320 @@
+/* ── Home page / shared post list ── */
+
+.hero {
+	border-bottom: 1px solid var(--ui-border-subtle);
+	padding: 3rem 0 2.75rem;
+}
+
+.hero-eyebrow {
+	font-family: var(--font-mono);
+	font-size: 0.8rem;
+	font-weight: 500;
+	letter-spacing: 0.01em;
+	color: var(--post-link-text);
+}
+
+.hero-title {
+	font-size: clamp(2.25rem, 4.5vw, 3.25rem);
+	font-weight: 800;
+	line-height: 1.08;
+	letter-spacing: -0.03em;
+	color: var(--post-anchor);
+	max-width: 18ch;
+}
+
+.hero-title span {
+	color: var(--post-anchor);
+}
+
+.hero-subtext {
+	max-width: 54ch;
+	line-height: 1.6;
+	color: var(--text-secondary);
+	font-size: 1.05rem;
+}
+
+/* ── Post list (used on home, /posts, /tag, and about) ── */
+
+.post-list {
+	display: flex;
+	flex-direction: column;
+}
+
+.post-row {
+	padding: 1.5rem 0;
+	border-bottom: 1px solid var(--ui-border-subtle);
+}
+
+.post-row:first-child {
+	padding-top: 0;
+}
+
+.post-row:last-child {
+	border-bottom: none;
+}
+
+.post-row__head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 1rem;
+	margin-bottom: 0.4rem;
+}
+
+.post-row__title {
+	font-size: 1.1rem;
+	font-weight: 700;
+	letter-spacing: -0.01em;
+	line-height: 1.35;
+	margin: 0;
+}
+
+.post-row__title a {
+	color: var(--post-anchor);
+	text-decoration: none;
+}
+
+.post-row__title a:hover {
+	color: var(--post-link-text);
+}
+
+.post-row__featured {
+	color: #b45309;
+	font-size: 0.75em;
+	margin-left: 0.4em;
+	vertical-align: 1px;
+}
+
+.post-row__date {
+	font-family: var(--font-mono);
+	font-size: 0.78rem;
+	color: var(--text-muted);
+	white-space: nowrap;
+	flex-shrink: 0;
+}
+
+.post-row__excerpt {
+	color: var(--text-secondary);
+	line-height: 1.55;
+	margin: 0 0 0.6rem;
+	max-width: 62ch;
+}
+
+.post-row__meta {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 0.9rem;
+	font-size: 0.8rem;
+}
+
+.post-row__tags {
+	display: flex;
+	gap: 0.75rem;
+	flex-wrap: wrap;
+}
+
+/* ── Tags (plain, monospace — not filled pills) ── */
+
+.tag-badge {
+	display: inline-flex;
+	align-items: baseline;
+	font-family: var(--font-mono);
+	font-size: 0.78rem;
+	font-weight: 500;
+	color: var(--text-secondary);
+	background: none;
+	border: none;
+	padding: 0;
+	text-decoration: none;
+}
+
+.tag-badge::before {
+	content: "#";
+	opacity: 0.5;
+}
+
+.tag-badge:hover {
+	color: var(--post-link-text);
+}
+
+.tag-badge__count {
+	opacity: 0.6;
+	font-weight: 400;
+	margin-left: 0.3em;
+}
+
+.tag-badge--active {
+	color: var(--post-link-text);
+	font-weight: 700;
+}
+
+/* ── Featured / lead post ── */
+
+.featured-post {
+	padding-bottom: 2.5rem;
+	border-bottom: 1px solid var(--ui-border-subtle);
+}
+
+.featured-cover-img {
+	object-fit: cover;
+	min-height: 220px;
+	border-radius: var(--ui-radius-sm);
+	border: 1px solid var(--ui-border-subtle);
+}
+
+.featured-cover {
+	min-height: 220px;
+	background: var(--ui-surface-2);
+	border: 1px solid var(--ui-border-subtle);
+	border-radius: var(--ui-radius-sm);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 3rem;
+	color: var(--text-muted);
+}
+
+.section-label,
+.c-post-sidebar__label {
+	font-family: var(--font-mono);
+	font-size: 0.72rem;
+	font-weight: 600;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--text-muted);
+	margin-bottom: var(--space-4);
+}
+
+.sidebar-widget,
+.c-post-sidebar__widget {
+	background: none;
+	border: none;
+	border-radius: 0;
+	padding: 0;
+}
+
+.author-avatar {
+	width: 36px;
+	height: 36px;
+	border-radius: 50%;
+	background: var(--ui-surface-2);
+	border: 1px solid var(--ui-border-subtle);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-family: var(--font-mono);
+	font-size: 0.75rem;
+	font-weight: 600;
+	color: var(--post-anchor);
+	flex-shrink: 0;
+}
+
+.read-time {
+	font-family: var(--font-mono);
+	font-size: 0.78rem;
+	color: var(--text-muted);
+}
+
+.divider { border-color: var(--ui-border-subtle); }
+
+.btn-primary-custom {
+	background: var(--post-anchor);
+	border: 1px solid var(--post-anchor);
+	border-radius: var(--ui-radius-sm);
+	font-weight: 600;
+	font-size: 0.9rem;
+	color: var(--site-background-color);
+	padding: 0.6rem 1.4rem;
+	transition: opacity 0.15s ease;
+}
+
+.btn-primary-custom:hover {
+	opacity: 0.85;
+	color: var(--site-background-color);
+}
+
+.btn-outline-custom {
+	border: 1px solid var(--main-border-color);
+	border-radius: var(--ui-radius-sm);
+	font-weight: 600;
+	font-size: 0.9rem;
+	color: var(--text-secondary);
+	padding: 0.6rem 1.4rem;
+	background: transparent;
+	transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.btn-outline-custom:hover {
+	border-color: var(--post-anchor);
+	color: var(--post-anchor);
+}
+
+.trending-num {
+	font-family: var(--font-mono);
+	font-size: 1.05rem;
+	font-weight: 700;
+	color: var(--text-muted);
+	opacity: 0.55;
+	line-height: 1;
+}
+
+.posts-section {
+	background: var(--site-background-color);
+}
+
+.featured-post__title {
+	font-size: clamp(1.4rem, 2.6vw, 1.85rem);
+	font-weight: 700;
+	letter-spacing: -0.01em;
+	line-height: 1.28;
+}
+
+.featured-post__body {
+	line-height: 1.6;
+	color: var(--text-secondary);
+}
+
+.trending-link {
+	color: var(--post-anchor);
+	text-decoration: none;
+	font-size: 0.9rem;
+	font-weight: 600;
+	line-height: 1.4;
+}
+
+.trending-link:hover {
+	color: var(--post-link-text);
+}
+
+.author-avatar--sm {
+	width: 26px;
+	height: 26px;
+	font-size: 0.62rem;
+}
+
+.author-avatar--lg {
+	width: 48px;
+	height: 48px;
+	font-size: 0.95rem;
+}
+
+.about-bio {
+	line-height: 1.6;
+}
+
+.btn-sm-text {
+	font-size: 0.85rem;
+}
+
+/* ── Dark mode ── */
+
+@media (prefers-color-scheme: dark) {
+	html:not([data-theme="light"]) .featured-cover { background: var(--ui-surface-2); border-color: var(--ui-border-subtle); }
+	html:not([data-theme="light"]) .btn-primary-custom { border-color: var(--post-anchor); }
+	html:not([data-theme="light"]) .trending-num { color: var(--text-muted); }
+}
+
+[data-theme="dark"] .featured-cover { background: var(--ui-surface-2); border-color: var(--ui-border-subtle); }
+[data-theme="dark"] .btn-primary-custom { border-color: var(--post-anchor); }
+[data-theme="dark"] .trending-num { color: var(--text-muted); }

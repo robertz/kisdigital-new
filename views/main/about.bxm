@@ -1,0 +1,42 @@
+<bx:include template="../partials/_head.bxm">
+<bx:output>
+<section class="c-about-hero">
+	<div class="container">
+		<div class="row align-items-center g-5">
+			<div class="col-lg-3 text-center text-lg-start">
+				<div class="c-about-hero__avatar">
+					#encodeForHTML( data.author.getAvatarLabel().len() ? data.author.getAvatarLabel() : left( data.author.getDisplayName(), 2 ).uCase() )#
+				</div>
+			</div>
+			<div class="col-lg-9">
+				<p class="c-about-hero__eyebrow">About the Author</p>
+				<h1 class="c-about-hero__name">#encodeForHTML( data.author.getDisplayName() )#</h1>
+				<bx:if len( data.author.getRole() )>
+				<p class="c-about-hero__role">#encodeForHTML( data.author.getRole() )#</p>
+				</bx:if>
+				<bx:if len( data.author.getAbout() )>
+				<p class="c-about-hero__bio">#encodeForHTML( data.author.getAbout() )#</p>
+				</bx:if>
+			</div>
+		</div>
+	</div>
+</section>
+
+<!--- Latest posts by this author --->
+<bx:if data.latestPosts.len()>
+<section class="c-about-posts py-5">
+	<div class="container">
+		<p class="section-label mb-4">Latest Articles</p>
+		<div class="post-list" style="max-width: var(--measure);">
+			<bx:loop array="#data.latestPosts#" item="post" index="cardIndex">
+				<bx:include template="../partials/postCard.bxm">
+			</bx:loop>
+		</div>
+		<div class="text-center mt-5">
+			<a href="/posts" class="btn btn-outline-custom">All Articles</a>
+		</div>
+	</div>
+</section>
+</bx:if>
+</bx:output>
+<bx:include template="../partials/_foot.bxm">

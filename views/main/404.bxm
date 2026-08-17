@@ -1,0 +1,29 @@
+<bx:include template="../partials/_head.bxm">
+<bx:output>
+<section class="py-5 posts-section">
+	<div class="container">
+		<div class="row g-5">
+
+			<!--- Main content --->
+			<div class="col-lg-8">
+				<div class="c-404">
+					<p class="c-404__code">404</p>
+					<h1 class="c-404__title">Page not found</h1>
+					<p class="c-404__message">
+						The page you're looking for doesn't exist or may have been moved.
+					</p>
+					<a href="/" class="btn btn-primary-custom">Back to home</a>
+					<a href="/posts" class="btn btn-outline-custom ms-2">Browse articles</a>
+				</div>
+			</div>
+
+			<!--- Sidebar --->
+			<div class="col-lg-4">
+				<bx:include template="../partials/trendingSidebar.bxm">
+			</div>
+
+		</div>
+	</div>
+</section>
+</bx:output>
+<bx:include template="../partials/_foot.bxm">

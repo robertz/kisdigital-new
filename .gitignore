@@ -1,0 +1,8 @@
+node_modules/
+boxlang_modules/
+.env
+.env.*
+!.env.example
+public/assets/dist/
+uploads/
+.DS_Store

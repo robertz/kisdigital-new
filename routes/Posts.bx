@@ -1,0 +1,142 @@
+/**
+ * Article list and single-post pages.
+ */
+class {
+
+	variables.postService  = "";
+	variables.postRenderer = "";
+	variables.siteDefaults = "";
+
+	// Matches a request's User-Agent against known bot/crawler signatures, so
+	// view counts aren't inflated by crawlers and preview link-unfurlers.
+	variables.botPatterns = [
+		"bot", "crawler", "spider", "slurp", "facebookexternalhit",
+		"twitterbot", "linkedinbot", "whatsapp", "telegrambot",
+		"applebot", "bingpreview", "google-inspectiontool",
+		"googlebot", "yandex", "baidu", "duckduckbot", "sogou",
+		"exabot", "ia_archiver", "semrush", "ahrefs", "mj12bot",
+		"dotbot", "screaming frog", "lighthouse", "headlesschrome",
+		"phantomjs", "prerender", "wget", "curl", "python-requests",
+		"go-http-client", "java/", "okhttp"
+	];
+
+	function init( required postService, required postRenderer, required siteDefaults ){
+		variables.postService  = arguments.postService;
+		variables.postRenderer = arguments.postRenderer;
+		variables.siteDefaults = arguments.siteDefaults;
+
+		this.router = boxExpressRouter();
+
+		this.router.get( "/posts", ( req, res ) => index( req, res ) );
+		this.router.get( "/search", ( req, res ) => search( req, res ) );
+		this.router.get( "/posts/:year/:month/:slug", ( req, res ) => show( req, res ) );
+
+		return this;
+	}
+
+	// route: /posts
+	function index( req, res ){
+		// [H3, L1] Validate page: must be a positive integer, capped at 1000 to prevent
+		// expensive high-OFFSET queries from being triggered by a crafted URL.
+		var rawPage     = req.query.page ?: "";
+		var currentPage = isNumeric( rawPage ) && rawPage > 0 ? int( rawPage ) : 1;
+		currentPage     = min( currentPage, 1000 );
+
+		res.render( "posts/index", {
+			pageTitle     : "Articles",
+			canonicalUrl  : variables.siteDefaults.canonicalUrl( req.path ),
+			meta          : variables.siteDefaults.defaultMeta( req.path ),
+			paging        : variables.postService.getPosts( page = currentPage ),
+			trendingPosts : variables.postService.getTrendingPosts(),
+			allTags       : variables.postService.getAllTags()
+		} );
+	}
+
+	// route: /posts/:year/:month/:slug
+	function show( req, res ){
+		var isAuthenticated = len( req.session.manage_user ?: "" ) > 0;
+		var post            = variables.postService.getPostBySlug( req.params.slug ?: "", !isAuthenticated );
+		var isPreview        = isAuthenticated && post.exists() && ( post.getStatus() != "published" || post.getIsScheduled() );
+
+		if ( !post.exists() ){
+			res.status( 404 ).redirect( "/" );
+			return;
+		}
+
+		// Validate that the year/month in the URL matches the post's publish date.
+		// Redirect to the canonical URL if they don't match, keeping URLs consistent.
+		var pd       = post.getPublishDate();
+		var urlYear  = int( req.params.year  ?: 0 );
+		var urlMonth = int( req.params.month ?: 0 );
+		if ( isDate( pd ) && ( year( pd ) != urlYear || month( pd ) != urlMonth ) ){
+			res.redirect( post.getPostUrl() );
+			return;
+		}
+
+		var canonicalUrl = variables.siteDefaults.canonicalUrl( post.getPostUrl() );
+		var meta         = variables.siteDefaults.defaultMeta( req.path );
+		meta[ "og:type" ]        = "article";
+		meta[ "og:title" ]       = post.getTitle();
+		meta[ "og:description" ] = post.getDescription();
+		meta[ "og:url" ]         = canonicalUrl;
+		meta[ "twitter:card" ]   = len( post.getCoverImage() ) ? "summary_large_image" : "summary";
+		meta[ "twitter:title" ]       = post.getTitle();
+		meta[ "twitter:description" ] = post.getDescription();
+		if ( len( post.getCoverImage() ) ){
+			meta[ "og:image" ]      = post.getCoverImage();
+			meta[ "twitter:image" ] = post.getCoverImage();
+		}
+		if ( len( post.getAuthorName() ) ){
+			meta[ "article:author" ] = post.getAuthorName();
+		}
+		if ( isDate( post.getPublishDate() ) ){
+			meta[ "article:published_time" ] = dateTimeFormat( post.getPublishDate(), "yyyy-mm-dd'T'HH:nn:ssXXX" );
+		}
+
+		// Record a view for human visitors on published posts only.
+		// Authenticated CMS users previewing drafts are excluded to avoid inflating counts.
+		if ( !isAuthenticated && post.getStatus() == "published" && !isBot( req.get( "User-Agent" ) ?: "" ) ){
+			variables.postService.recordView( post.getId() );
+		}
+
+		res.render( "posts/show", {
+			pageTitle     : post.getTitle(),
+			canonicalUrl  : canonicalUrl,
+			meta          : meta,
+			post          : post,
+			isPreview     : isPreview,
+			postBodyHtml  : variables.postRenderer.render( post.getBody() ),
+			trendingPosts : variables.postService.getTrendingPosts(),
+			relatedPosts  : variables.postService.getRelatedPosts( post.getId(), post.getTags() )
+		} );
+	}
+
+	// route: /search
+	function search( req, res ){
+		var q = trim( req.query.q ?: "" );
+
+		// [L1] Same page-number hardening as /posts and /tag/:tag.
+		var rawPage     = req.query.page ?: "";
+		var currentPage = isNumeric( rawPage ) && rawPage > 0 ? int( rawPage ) : 1;
+		currentPage     = min( currentPage, 1000 );
+
+		res.render( "search/index", {
+			pageTitle     : len( q ) ? "Search: " & q : "Search",
+			canonicalUrl  : variables.siteDefaults.canonicalUrl( req.path ),
+			meta          : variables.siteDefaults.defaultMeta( req.path ),
+			q             : q,
+			paging        : variables.postService.searchPosts( q, currentPage ),
+			trendingPosts : variables.postService.getTrendingPosts(),
+			allTags       : variables.postService.getAllTags()
+		} );
+	}
+
+	private boolean function isBot( required string userAgent ){
+		var ua = lCase( arguments.userAgent );
+		for ( var pattern in variables.botPatterns ){
+			if ( find( pattern, ua ) ) return true;
+		}
+		return false;
+	}
+
+}

@@ -1,0 +1,75 @@
+<bx:include template="../../partials/_head.bxm">
+<bx:output>
+<div class="c-manage">
+
+	<!--- Sidebar nav --->
+	<bx:include template="../../partials/manageNav.bxm">
+
+	<!--- Main content --->
+	<main class="c-manage-main">
+
+		<div class="c-manage-header">
+			<div>
+				<h1 class="c-manage-header__title">Authors</h1>
+				<p class="c-manage-header__sub">#data.authors.len()# total</p>
+			</div>
+			<a href="/manage/authors/new" class="c-manage-form__submit c-manage-form__submit--link">
+				<i class="bi bi-plus-lg me-1"></i> New author
+			</a>
+		</div>
+
+		<div class="sidebar-widget c-manage-table-wrap">
+			<table class="c-manage-table">
+				<thead>
+					<tr>
+						<th>Name</th>
+						<th>Email</th>
+						<th>Role</th>
+						<th>Posts</th>
+						<th>Joined</th>
+						<th></th>
+					</tr>
+				</thead>
+				<tbody>
+					<bx:if !data.authors.len()>
+						<tr>
+							<td colspan="6" class="text-center text-muted py-5">No authors yet.</td>
+						</tr>
+					<bx:else>
+						<bx:loop array="#data.authors#" item="author">
+							<tr>
+								<td>
+									<a href="/manage/authors/#encodeForURL( author.getId() )#/edit" class="c-manage-table__title">
+										#encodeForHTML( author.getDisplayName() )#
+									</a>
+								</td>
+								<td class="text-muted">#encodeForHTML( author.getEmail() )#</td>
+								<td>
+									<span class="c-status-badge <bx:if author.getRole() == "admin">c-status-badge--published<bx:else>c-status-badge--draft</bx:if>">
+										#encodeForHTML( author.getRole() )#
+									</span>
+								</td>
+								<td class="text-muted">#author.getPostCount()#</td>
+								<td class="text-muted">
+									<bx:if len( author.getCreated() )>
+										#dateFormat( author.getCreated(), "d mmm yyyy" )#
+									<bx:else>
+										—
+									</bx:if>
+								</td>
+								<td>
+									<a href="/manage/authors/#encodeForURL( author.getId() )#/edit" class="c-manage-form__cancel">
+										Edit <i class="bi bi-pencil"></i>
+									</a>
+								</td>
+							</tr>
+						</bx:loop>
+					</bx:if>
+				</tbody>
+			</table>
+		</div>
+
+	</main>
+</div>
+</bx:output>
+<bx:include template="../../partials/_foot.bxm">

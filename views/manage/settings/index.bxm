@@ -1,0 +1,133 @@
+<bx:include template="../../partials/_head.bxm">
+<bx:output>
+<div class="c-manage">
+
+	<!--- Sidebar nav --->
+	<bx:include template="../../partials/manageNav.bxm">
+
+	<!--- Main content --->
+	<main class="c-manage-main">
+
+		<div class="c-manage-header">
+			<div>
+				<h1 class="c-manage-header__title">Settings</h1>
+				<p class="c-manage-header__sub">Edit application configuration values. Changes are saved per field.</p>
+			</div>
+		</div>
+
+		<div class="c-manage-settings">
+
+			<bx:if len( data.success )>
+				<div class="c-manage-alert c-manage-alert--success">
+					<i class="bi bi-check-circle-fill"></i>
+					#encodeForHTML( data.success )#
+				</div>
+			</bx:if>
+			<bx:if len( data.error )>
+				<div class="c-manage-alert c-manage-alert--error">
+					<i class="bi bi-exclamation-circle-fill"></i>
+					#encodeForHTML( data.error )#
+				</div>
+			</bx:if>
+
+			<bx:if !data.settings.len()>
+				<div class="c-manage-settings__empty">
+					<i class="bi bi-sliders2"></i>
+					<p>No settings defined yet.</p>
+				</div>
+			</bx:if>
+
+			<div class="c-manage-settings__grid">
+				<bx:loop array="#data.settings#" item="setting" index="i">
+
+					<!--- Category header — emitted once at the first row of each category --->
+					<bx:if i == 1 || setting.category != data.settings[ i - 1 ].category>
+						<header class="c-manage-settings__category-header">
+							<h2 class="c-manage-settings__category-title">#encodeForHTML( setting.category )#</h2>
+							<span class="c-manage-settings__category-rule"></span>
+						</header>
+					</bx:if>
+
+					<bx:set inputKind = ( setting.setting_type == "boolean" ) ? "boolean" : ( listFindNoCase( "text,json", setting.setting_type ) ? "textarea" : ( listFindNoCase( "numeric,number,integer", setting.setting_type ) ? "number" : "text" ) )>
+
+					<form class="c-manage-settings__card js-settings-update" method="post" action="/manage/settings/update">
+						<input type="hidden" name="_csrf" value="#encodeForHTMLAttribute( data.csrfToken )#">
+						<input type="hidden" name="category" value="#encodeForHTMLAttribute( setting.category )#">
+						<input type="hidden" name="setting_key" value="#encodeForHTMLAttribute( setting.setting_key )#">
+
+						<div class="c-manage-settings__card-head">
+							<label for="setting-#i#" class="c-manage-settings__key">
+								#encodeForHTML( setting.setting_key )#
+							</label>
+							<span class="c-manage-settings__badge">#encodeForHTML( setting.setting_type )#</span>
+						</div>
+
+						<bx:if len( setting.description ?: "" )>
+							<p class="c-manage-settings__description">#encodeForHTML( setting.description )#</p>
+						</bx:if>
+
+						<div class="c-manage-settings__field">
+							<bx:if inputKind == "boolean">
+								<select id="setting-#i#" name="setting_value" class="c-manage-form__select">
+									<option value="true"  <bx:if setting.setting_value == "true">selected</bx:if>>true</option>
+									<option value="false" <bx:if setting.setting_value == "false">selected</bx:if>>false</option>
+								</select>
+							<bx:elseif inputKind == "textarea">
+								<textarea id="setting-#i#" name="setting_value" class="c-manage-form__textarea" rows="4">#encodeForHTML( setting.setting_value )#</textarea>
+							<bx:else>
+								<input
+									type="#( inputKind == 'number' ? 'number' : 'text' )#"
+									id="setting-#i#"
+									name="setting_value"
+									class="c-manage-form__input"
+									value="#encodeForHTMLAttribute( setting.setting_value )#">
+							</bx:if>
+						</div>
+
+						<div class="c-manage-settings__card-foot">
+							<button type="submit" class="c-manage-settings__update">
+								<i class="bi bi-arrow-up-circle me-1"></i> Update
+							</button>
+						</div>
+
+					</form>
+				</bx:loop>
+			</div>
+
+		</div>
+
+	</main>
+</div>
+
+<script>
+(function(){
+	document.querySelectorAll('.js-settings-update').forEach(function(form){
+		form.addEventListener('submit', function(e){
+			e.preventDefault();
+			var btn         = form.querySelector('.c-manage-settings__update');
+			var originalHtml = btn.innerHTML;
+
+			btn.disabled = true;
+			btn.innerHTML = 'Saving…';
+
+			fetch(form.action, {
+				method: 'POST',
+				headers: { 'X-Requested-With': 'XMLHttpRequest' },
+				body: new URLSearchParams(new FormData(form))
+			})
+			.then(function(res){ if (!res.ok) throw new Error('save failed'); return res.json(); })
+			.then(function(){
+				btn.innerHTML = '<i class="bi bi-check2"></i> Saved';
+				setTimeout(function(){ btn.disabled = false; btn.innerHTML = originalHtml; }, 1500);
+			})
+			.catch(function(){
+				// Network/validation failure — fall back to a real form submit
+				// so the user still sees a definitive result.
+				form.submit();
+			});
+		});
+	});
+})();
+</script>
+</bx:output>
+<bx:include template="../../partials/_foot.bxm">

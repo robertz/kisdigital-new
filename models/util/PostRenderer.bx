@@ -1,0 +1,167 @@
+/**
+ * Renders a post's markdown body to display-ready HTML: markdown() for the
+ * conversion, then two regex passes over the output — enhanceLinks() opens
+ * every link in a new tab and tags it with the site's link style, and
+ * enhanceImages() adds lazy-loading and wraps images in a <figure> with an
+ * optional caption/size hint read from the markdown image's title attribute.
+ */
+class {
+
+	function render( required string body ){
+		return enhanceImages( enhanceLinks( markdown( arguments.body ) ) );
+	}
+
+	/**
+	 * Post-processes rendered HTML to make every <a> tag:
+	 *   - Open in a new tab (target="_blank" rel="noopener noreferrer")
+	 *   - Styled with the site accent color via the c-post-link CSS class
+	 *
+	 * Existing target / rel / class attributes are preserved and extended rather
+	 * than replaced, so hand-authored HTML inside markdown is not broken.
+	 */
+	function enhanceLinks( required string html ) {
+		var Pattern = createObject( "java", "java.util.regex.Pattern" );
+		var JMatcher = createObject( "java", "java.util.regex.Matcher" );
+
+		// char(91)=[ char(93)=] char(34)=" char(39)='  — avoids parser treating [ as array notation
+		var notQuot = char(91) & "^" & char(34) & char(39) & char(93);
+		var quot    = char(91) & char(34) & char(39) & char(93);
+
+		var classRegex = "class\s*=\s*" & quot & "(" & notQuot & "*)" & quot;
+
+		// Match every opening <a ...> tag
+		var tagPattern = Pattern.compile( "(<a\b)([^>]*)(>)", Pattern.CASE_INSENSITIVE );
+		var matcher    = tagPattern.matcher( arguments.html );
+		var sb         = createObject( "java", "java.lang.StringBuffer" ).init();
+
+		while ( matcher.find() ) {
+			var attrs = matcher.group( 2 );
+
+			// ── target ──────────────────────────────────────────────────────
+			if ( !findNoCase( "target=", attrs ) ) {
+				attrs &= ' target="_blank"';
+			}
+
+			// ── class ────────────────────────────────────────────────────────
+			var classMatcher = Pattern.compile( classRegex, Pattern.CASE_INSENSITIVE ).matcher( attrs );
+			if ( classMatcher.find() ) {
+				var existingClass = classMatcher.group( 1 );
+				if ( !findNoCase( "c-post-link", existingClass ) ) {
+					attrs = classMatcher.replaceFirst( JMatcher.quoteReplacement( 'class="' & trim( existingClass ) & ' c-post-link"' ) );
+				}
+			} else {
+				attrs &= ' class="c-post-link"';
+			}
+
+			matcher.appendReplacement( sb, JMatcher.quoteReplacement( "<a" & attrs & ">" ) );
+		}
+
+		matcher.appendTail( sb );
+		return sb.toString();
+	}
+
+	/**
+	 * Post-processes rendered HTML to:
+	 *   - Add loading="lazy" decoding="async" to every <img>
+	 *   - Wrap each image in <figure class="c-post-figure"> with an optional
+	 *     <figcaption> (alt text is used as caption by default)
+	 *   - Apply layout classes from the image title attribute:
+	 *       wide    → .c-post-img--wide   (full column, no height cap)
+	 *       half    → .c-post-img--half   (50% width, centred)
+	 *       inline  → .c-post-img--inline (icon-scale, no figure wrapper)
+	 *       caption: text → override caption text (otherwise alt is used)
+	 *       "wide | My caption" → size + explicit caption combined
+	 */
+	function enhanceImages( required string html ) {
+		var Pattern  = createObject( "java", "java.util.regex.Pattern" );
+		var JMatcher = createObject( "java", "java.util.regex.Matcher" );
+
+		// Extracts a named HTML attribute value from a raw attribute string.
+		// Handles both single- and double-quoted values. Self-contained (looks
+		// up its own Pattern class) rather than closing over the outer function's
+		// local var, which nested function definitions don't reliably capture.
+		var extractAttr = function( required string attrStr, required string name ) {
+			var localPattern = createObject( "java", "java.util.regex.Pattern" );
+			var m = localPattern
+				.compile( "\b" & arguments.name & "\s*=\s*(?:""([^""]*)""|'([^']*)')", localPattern.CASE_INSENSITIVE )
+				.matcher( arguments.attrStr );
+			if ( m.find() ) {
+				var v1 = m.group( 1 );
+				var v2 = m.group( 2 );
+				return ( !isNull( v1 ) ? v1 : ( !isNull( v2 ) ? v2 : "" ) );
+			}
+			return "";
+		};
+
+		var imgPattern = Pattern.compile( "<img(\s[^>]*)?>", Pattern.CASE_INSENSITIVE );
+		var matcher    = imgPattern.matcher( arguments.html );
+		var sb         = createObject( "java", "java.lang.StringBuffer" ).init();
+
+		while ( matcher.find() ) {
+			var attrStr = !isNull( matcher.group( 1 ) ) ? matcher.group( 1 ) : "";
+
+			var src   = extractAttr( attrStr, "src" );
+			var alt   = extractAttr( attrStr, "alt" );
+			var title = extractAttr( attrStr, "title" );
+			var cls   = extractAttr( attrStr, "class" );
+
+			// ── Parse title for size hint and caption ──────────────────────
+			var sizeHint = "";
+			var caption  = "";
+			var work     = title;
+
+			for ( var hint in [ "wide", "half", "inline" ] ) {
+				if ( reFindNoCase( "\b" & hint & "\b", work ) ) {
+					sizeHint = hint;
+					work     = trim( reReplaceNoCase( work, "\b" & hint & "\b", "", "all" ) );
+					break;
+				}
+			}
+
+			if ( reFindNoCase( "caption\s*:", work ) ) {
+				caption = trim( reReplaceNoCase( work, "^.*?caption\s*:\s*", "" ) );
+			} else {
+				caption = trim( reReplace( work, "^[\s|,]+|[\s|,]+$", "", "all" ) );
+			}
+
+			// Fall back to alt text when no explicit caption and not inline
+			if ( !len( caption ) && len( alt ) && sizeHint != "inline" ) {
+				caption = alt;
+			}
+
+			// ── Rebuild img tag ────────────────────────────────────────────
+			var imgClass = trim(
+				( len( cls ) ? cls & " " : "" )
+				& "c-post-img"
+				& ( len( sizeHint ) ? " c-post-img--" & sizeHint : "" )
+			);
+
+			var newImg = '<img'
+				& ' src="'       & src & '"'
+				& ' alt="'       & alt & '"'
+				& ' class="'     & encodeForHTMLAttribute( imgClass ) & '"'
+				& ' loading="lazy"'
+				& ' decoding="async"'
+				& '>';
+
+			// ── Wrap in <figure> unless inline ─────────────────────────────
+			var replacement = "";
+
+			if ( sizeHint == "inline" ) {
+				replacement = newImg;
+			} else {
+				var figClass = "c-post-figure" & ( len( sizeHint ) ? " c-post-figure--" & sizeHint : "" );
+				replacement  = '<figure class="' & figClass & '">'
+					& newImg
+					& ( len( caption ) ? '<figcaption>' & caption & '</figcaption>' : '' )
+					& '</figure>';
+			}
+
+			matcher.appendReplacement( sb, JMatcher.quoteReplacement( replacement ) );
+		}
+
+		matcher.appendTail( sb );
+		return sb.toString();
+	}
+
+}

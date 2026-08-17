@@ -1,0 +1,14 @@
+{
+	"defaultDatasource": "chron",
+	"datasources": {
+		"chron": {
+			"driver": "mysql",
+			"host": "${env.CHRON_DB_HOST:localhost}",
+			"port": "${env.CHRON_DB_PORT:3306}",
+			"database": "${env.CHRON_DB_NAME:chron}",
+			"username": "${env.CHRON_DB_USER:root}",
+			"password": "${env.CHRON_DB_PASSWORD}",
+			"custom": "zeroDateTimeBehavior=CONVERT_TO_NULL"
+		}
+	}
+}
