@@ -70,7 +70,26 @@ app.set( "reloadOnChange", app.getSetting( "env" ) == "development" )
 // DigitalOcean App Platform's readiness/liveness probe. Deliberately touches
 // no datasource and renders no view — a MySQL blip shouldn't fail the whole
 // service's health check when the process itself is fine. See .do/app.yaml.
+// Registered before the host-lockdown middleware below so health checks
+// (which hit the app directly, not through kisdigital.com) are handled here
+// and never reach it.
 app.get( "/health", ( req, res ) => res.send( "ok" ) )
+
+// DO App Platform's own *.ondigitalocean.app URL stays live at the
+// infrastructure level for as long as the app exists — there's no spec
+// setting to turn it off. This is the practical lockdown instead: any
+// request not addressed to the real domain gets redirected there, same
+// path and query string intact. Skipped outside production so local dev
+// (Host: localhost:3005) isn't caught by it.
+if ( app.getSetting( "env" ) == "production" ){
+	app.use( ( req, res, next ) => {
+		var allowedHosts = [ "kisdigital.com", "www.kisdigital.com" ];
+		if ( !allowedHosts.contains( lCase( req.hostname ) ) ){
+			return res.redirect( "https://kisdigital.com" & req.originalUrl, 301 );
+		}
+		next();
+	} );
+}
 
 // ── Routes ───────────────────────────────────────────────────────────────
 app.use( new routes.Main( postService, authorService, siteDefaults ).router )
