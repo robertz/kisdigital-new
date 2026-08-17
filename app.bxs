@@ -46,6 +46,24 @@ app.use(
 	boxExpressHelmet( { referrerPolicy: "strict-origin-when-cross-origin" } )
 )
 
+// Resolves the real visitor IP behind DO App Platform's ingress + Cloudflare
+// (kisdigital.com is Cloudflare-proxied). boxlang-express's own "trust proxy"
+// setting reads X-Forwarded-For, which — confirmed by testing directly against
+// production with a forged header — Cloudflare and DO's ingress both APPEND to
+// rather than replace, so a client can prepend a fake entry and have it survive
+// all the way to the app; turning trust proxy on here would make req.ip
+// attacker-controlled, worse than the current "always the LB's own IP" default.
+// DO-Connecting-IP (falling back to Cloudflare's own CF-Connecting-IP) is set
+// by the edge itself from the actual TCP connection it saw, not from anything
+// the client sent, so those are trustworthy where X-Forwarded-For's leftmost
+// entry is not. Neither header exists in local dev, so req.ip there is left
+// as boxlang-express's own default (the raw connection address, correct for
+// a direct connection).
+app.use( ( req, res, next ) => {
+	req.ip = req.headers[ "Do-connecting-ip" ] ?: req.headers[ "Cf-connecting-ip" ] ?: req.ip
+	next()
+} )
+
 // [M1] Legacy XSS filter hint — a no-op in modern browsers, harmless to send.
 // (Everything else from the old app's security header set is covered by helmet above.)
 app.use( ( req, res, next ) => {
