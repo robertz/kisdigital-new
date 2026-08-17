@@ -75,6 +75,10 @@ app.set( "reloadOnChange", app.getSetting( "env" ) == "development" )
 // and never reach it.
 app.get( "/health", ( req, res ) => res.send( "ok" ) )
 
+// TEMPORARY — diagnosing what DO's ingress actually hands the container for
+// X-Forwarded-For before enabling "trust proxy". Remove after checking.
+app.get( "/debug-headers", ( req, res ) => res.json( { headers: req.headers, ip: req.ip } ) )
+
 // DO App Platform's own *.ondigitalocean.app URL stays live at the
 // infrastructure level for as long as the app exists — there's no spec
 // setting to turn it off. This is the practical lockdown instead: any
