@@ -230,6 +230,12 @@
 }
 
 .btn-primary-custom:hover {
+	/* Bootstrap's own .btn:hover sets background-color to its own
+	   (unset-here) --bs-btn-hover-bg var, which resolves to transparent and
+	   would otherwise win this property since this rule didn't redeclare it —
+	   text (site-background-color) on a see-through button reads as
+	   invisible against the page's own matching background. */
+	background: var(--post-anchor);
 	opacity: 0.85;
 	color: var(--site-background-color);
 }
