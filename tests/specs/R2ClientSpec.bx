@@ -1,0 +1,95 @@
+/**
+ * R2Client's presigning is pure string-building + HMAC — no network call —
+ * so it's fully testable without a live R2 bucket. This is the exact logic
+ * that took a full production-debugging session to get right (see
+ * R2Client.bx's own comments on why it's presigned URLs at all), so it's
+ * worth protecting against regressions.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "R2Client", function(){
+
+			beforeEach( function(){
+				variables.r2 = new models.util.R2Client(
+					"test-account-id",
+					"test-bucket",
+					"test-access-key",
+					"test-secret-key",
+					"https://static.example.com"
+				)
+			} )
+
+			describe( "isConfigured()", function(){
+				it( "is true when every credential is set", function(){
+					expect( variables.r2.isConfigured() ).toBeTrue()
+				} )
+
+				it( "is false when any credential is missing", function(){
+					var incomplete = new models.util.R2Client( "", "test-bucket", "key", "secret", "https://x.com" )
+					expect( incomplete.isConfigured() ).toBeFalse()
+				} )
+			} )
+
+			describe( "publicUrl()", function(){
+				it( "joins the base URL and key with a single slash", function(){
+					expect( variables.r2.publicUrl( "posts/photo.jpg" ) ).toBe( "https://static.example.com/posts/photo.jpg" )
+				} )
+
+				it( "strips a trailing slash from the configured base URL", function(){
+					var trailing = new models.util.R2Client( "a", "b", "c", "d", "https://static.example.com/" )
+					expect( trailing.publicUrl( "posts/photo.jpg" ) ).toBe( "https://static.example.com/posts/photo.jpg" )
+				} )
+			} )
+
+			describe( "presignPutUrl()", function(){
+				it( "targets the correct account/bucket/key path", function(){
+					var result = variables.r2.presignPutUrl( "posts/photo.jpg", "image/jpeg" )
+					expect( result.uploadUrl ).toInclude( "https://test-account-id.r2.cloudflarestorage.com/test-bucket/posts/photo.jpg" )
+				} )
+
+				it( "returns the matching public URL alongside the signed one", function(){
+					var result = variables.r2.presignPutUrl( "posts/photo.jpg", "image/jpeg" )
+					expect( result.publicUrl ).toBe( "https://static.example.com/posts/photo.jpg" )
+				} )
+
+				it( "signs with SigV4 query parameters", function(){
+					var result = variables.r2.presignPutUrl( "posts/photo.jpg", "image/jpeg" )
+					expect( result.uploadUrl ).toInclude( "X-Amz-Algorithm=AWS4-HMAC-SHA256" )
+					expect( result.uploadUrl ).toInclude( "X-Amz-Credential=test-access-key" )
+					expect( result.uploadUrl ).toInclude( "X-Amz-SignedHeaders=host" )
+					expect( result.uploadUrl ).toMatch( "X-Amz-Signature=[0-9a-f]{64}$" )
+				} )
+
+				it( "honors a custom expiry", function(){
+					var result = variables.r2.presignPutUrl( "posts/photo.jpg", "image/jpeg", 60 )
+					expect( result.uploadUrl ).toInclude( "X-Amz-Expires=60" )
+				} )
+
+				it( "produces a different signature for a different key", function(){
+					var a = variables.r2.presignPutUrl( "posts/a.jpg", "image/jpeg" )
+					var b = variables.r2.presignPutUrl( "posts/b.jpg", "image/jpeg" )
+					var sigA = reMatch( "X-Amz-Signature=([0-9a-f]+)", a.uploadUrl )[ 1 ]
+					var sigB = reMatch( "X-Amz-Signature=([0-9a-f]+)", b.uploadUrl )[ 1 ]
+					expect( sigA ).notToBe( sigB )
+				} )
+			} )
+
+			describe( "presignListUrl()", function(){
+				it( "targets the bucket root, not an object key", function(){
+					var url = variables.r2.presignListUrl( "posts/" )
+					expect( url ).toInclude( "https://test-account-id.r2.cloudflarestorage.com/test-bucket?" )
+				} )
+
+				it( "includes the list-type, prefix, and max-keys query params", function(){
+					var url = variables.r2.presignListUrl( "posts/", 50 )
+					expect( url ).toInclude( "list-type=2" )
+					expect( url ).toInclude( "max-keys=50" )
+					expect( url ).toInclude( "prefix=posts%2F" )
+				} )
+			} )
+
+		} )
+	}
+
+}

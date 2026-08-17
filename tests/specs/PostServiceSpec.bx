@@ -1,0 +1,29 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "PostService.slugify()", function(){
+
+			beforeEach( function(){
+				variables.service = new models.services.PostService()
+			} )
+
+			it( "lowercases and hyphenates spaces", function(){
+				expect( variables.service.slugify( "Hello World" ) ).toBe( "hello-world" )
+			} )
+
+			it( "collapses runs of non-alphanumeric characters into a single hyphen", function(){
+				expect( variables.service.slugify( "BoxLang: Modules & Middleware!!" ) ).toBe( "boxlang-modules-middleware" )
+			} )
+
+			it( "trims leading and trailing hyphens", function(){
+				expect( variables.service.slugify( "  --Already Hyphenated--  " ) ).toBe( "already-hyphenated" )
+			} )
+
+			it( "leaves an already-clean slug untouched", function(){
+				expect( variables.service.slugify( "already-a-slug" ) ).toBe( "already-a-slug" )
+			} )
+
+		} )
+	}
+
+}

@@ -1,0 +1,16 @@
+/**
+ * Runs the test suite headlessly and exits non-zero on any failure/error.
+ *   boxlang run-tests.bxs
+ *
+ * Covers the parts of the app that are pure logic — no live database or
+ * network needed: PostBean's computed getters, PostService.slugify(), and
+ * R2Client's presigned-URL signing (the exact code that took a full session
+ * to get right against production — see R2Client.bx's own comments).
+ */
+tb = new "testbox.system.TestBox"( directory = "tests.specs", reporter = "text" )
+println( tb.run() )
+
+result = tb.getResult()
+if ( result.getTotalFail() > 0 || result.getTotalError() > 0 ) {
+	createObject( "java", "java.lang.System" ).exit( 1 )
+}

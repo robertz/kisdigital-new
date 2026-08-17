@@ -1,5 +1,7 @@
 node_modules/
 boxlang_modules/
+testbox/
+tests/results/
 .env
 .env.*
 !.env.example

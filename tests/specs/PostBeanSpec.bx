@@ -1,0 +1,88 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "PostBean", function(){
+
+			describe( "getReadingTime()", function(){
+				it( "rounds up to the nearest whole minute at 200 words/minute", function(){
+					var bean = new models.PostBean()
+					bean.setBody( repeatString( "word ", 250 ) ) // 250 words -> 1.25 -> 2
+					expect( bean.getReadingTime() ).toBe( 2 )
+				} )
+
+				it( "never returns less than 1 minute, even for empty body", function(){
+					var bean = new models.PostBean()
+					bean.setBody( "" )
+					expect( bean.getReadingTime() ).toBe( 1 )
+				} )
+
+				it( "returns exactly 1 for a short post under the per-minute word count", function(){
+					var bean = new models.PostBean()
+					bean.setBody( "just a few words here" )
+					expect( bean.getReadingTime() ).toBe( 1 )
+				} )
+			} )
+
+			describe( "getIsScheduled()", function(){
+				it( "is true for a published post with a future publish date", function(){
+					var bean = new models.PostBean()
+					bean.setStatus( "published" )
+					bean.setPublishDate( dateAdd( "d", 1, now() ) )
+					expect( bean.getIsScheduled() ).toBeTrue()
+				} )
+
+				it( "is false for a published post with a past publish date", function(){
+					var bean = new models.PostBean()
+					bean.setStatus( "published" )
+					bean.setPublishDate( dateAdd( "d", -1, now() ) )
+					expect( bean.getIsScheduled() ).toBeFalse()
+				} )
+
+				it( "is false for a draft, even with a future publish date", function(){
+					var bean = new models.PostBean()
+					bean.setStatus( "draft" )
+					bean.setPublishDate( dateAdd( "d", 1, now() ) )
+					expect( bean.getIsScheduled() ).toBeFalse()
+				} )
+
+				it( "is false when no publish date is set", function(){
+					var bean = new models.PostBean()
+					bean.setStatus( "published" )
+					expect( bean.getIsScheduled() ).toBeFalse()
+				} )
+			} )
+
+			describe( "getAuthorInitials()", function(){
+				it( "uses the explicit avatar label when set", function(){
+					var bean = new models.PostBean()
+					bean.setAuthorAvatarLabel( "RZ" )
+					bean.setAuthorName( "Someone Else" )
+					expect( bean.getAuthorInitials() ).toBe( "RZ" )
+				} )
+
+				it( "falls back to the first two letters of the author name, uppercased", function(){
+					var bean = new models.PostBean()
+					bean.setAuthorName( "robert zehnder" )
+					expect( bean.getAuthorInitials() ).toBe( "RO" )
+				} )
+			} )
+
+			describe( "getPostUrl()", function(){
+				it( "builds a year/month path when a publish date is set", function(){
+					var bean = new models.PostBean()
+					bean.setSlug( "my-post" )
+					bean.setPublishDate( createDate( 2026, 3, 5 ) )
+					expect( bean.getPostUrl() ).toBe( "/posts/2026/03/my-post" )
+				} )
+
+				it( "falls back to a bare slug path when there's no publish date", function(){
+					var bean = new models.PostBean()
+					bean.setSlug( "my-draft" )
+					expect( bean.getPostUrl() ).toBe( "/posts/my-draft" )
+				} )
+			} )
+
+		} )
+	}
+
+}

@@ -155,6 +155,8 @@
 							<span class="c-editor-toolbar__sep"></span>
 							<button type="button" data-md="ul" title="Bulleted list"><i class="bi bi-list-ul"></i></button>
 							<button type="button" data-md="ol" title="Numbered list"><i class="bi bi-list-ol"></i></button>
+							<span class="c-editor-toolbar__sep"></span>
+							<button type="button" id="editor-toolbar-image" title="Insert image"><i class="bi bi-image"></i></button>
 						</div>
 
 						<textarea
@@ -263,11 +265,18 @@
 							<div class="c-image-picker__backdrop" id="editor-cover-browse-backdrop"></div>
 							<div class="c-image-picker__dialog" role="dialog" aria-modal="true" aria-labelledby="editor-cover-browse-title">
 								<header class="c-image-picker__head">
-									<h2 id="editor-cover-browse-title" class="c-image-picker__title">Choose an existing image</h2>
+									<h2 id="editor-cover-browse-title" class="c-image-picker__title">Choose an image</h2>
 									<button type="button" id="editor-cover-browse-close" class="c-post-editor__icon-btn" title="Close">
 										<i class="bi bi-x-lg"></i>
 									</button>
 								</header>
+								<div class="c-image-picker__upload-row">
+									<input type="file" id="editor-picker-file" accept="image/jpeg,image/png,image/webp,image/gif" hidden>
+									<button type="button" id="editor-picker-upload-btn" class="c-manage-form__btn">
+										<i class="bi bi-upload"></i> Upload new
+									</button>
+									<span id="editor-picker-upload-status" class="c-post-editor__cover-upload-status"></span>
+								</div>
 								<div id="editor-cover-browse-body" class="c-image-picker__body">
 									<p class="text-muted">Loading…</p>
 								</div>
@@ -373,44 +382,44 @@
 				flashEl.hidden = false;
 			}
 
-			// ── Cover image: upload + existing-image picker ─────────────────────
-			// Both paths end up calling setCoverImage(), which fills in the URL
-			// field the same way a pasted URL would — that field stays editable
-			// throughout, so manual URLs still work exactly as before.
-			(function(){
-				var fileInput    = document.getElementById('editor-cover-file');
-				var uploadBtn    = document.getElementById('editor-cover-upload-btn');
-				var browseBtn    = document.getElementById('editor-cover-browse-btn');
-				var statusEl     = document.getElementById('editor-cover-upload-status');
-				var urlInput     = document.getElementById('editor-cover-image');
-				var previewWrap  = document.getElementById('editor-cover-preview');
-				var previewImg   = document.getElementById('editor-cover-preview-img');
-				var modal        = document.getElementById('editor-cover-browse-modal');
-				var modalBody    = document.getElementById('editor-cover-browse-body');
-				var modalClose   = document.getElementById('editor-cover-browse-close');
-				var modalBackdrop = document.getElementById('editor-cover-browse-backdrop');
+			// Downscales an image file to maxWidth before upload — cover images
+			// and inline post images alike are capped at 800px wide, since
+			// nothing in the layout renders them any larger and R2 storage/
+			// bandwidth aren't worth spending on pixels no reader ever sees.
+			// GIFs are passed through untouched: drawing one to a canvas
+			// flattens it to its first frame, killing any animation.
+			function resizeImageFile(file, maxWidth){
+				if (file.type === 'image/gif') return Promise.resolve(file);
+				return new Promise(function(resolve, reject){
+					var objectUrl = URL.createObjectURL(file);
+					var img = new Image();
+					img.onload = function(){
+						URL.revokeObjectURL(objectUrl);
+						if (img.width <= maxWidth) return resolve(file);
+						var scale = maxWidth / img.width;
+						var canvas = document.createElement('canvas');
+						canvas.width = maxWidth;
+						canvas.height = Math.round(img.height * scale);
+						canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+						canvas.toBlob(function(blob){
+							if (!blob) return resolve(file); // resize failed — upload the original rather than block entirely
+							resolve(new File([blob], file.name, { type: file.type }));
+						}, file.type, 0.9);
+					};
+					img.onerror = function(){
+						URL.revokeObjectURL(objectUrl);
+						resolve(file); // not a decodable image (or a format canvas can't touch) — let the server-side type check reject it
+					};
+					img.src = objectUrl;
+				});
+			}
 
-				function setCoverImage(url){
-					urlInput.value = url;
-					previewImg.src = url;
-					previewWrap.hidden = false;
-					urlInput.dispatchEvent(new Event('input', { bubbles: true }));
-				}
-
-				// ── Upload ──
-				uploadBtn.addEventListener('click', function(){ fileInput.click(); });
-
-				fileInput.addEventListener('change', function(){
-					var file = fileInput.files[0];
-					if (!file) return;
-
-					statusEl.className = 'c-post-editor__cover-upload-status';
-					statusEl.textContent = 'Uploading…';
-					uploadBtn.disabled = true;
-
-					// Two-step: ask our server to presign a URL (it never sees the
-					// file bytes), then PUT the file to R2 directly from here.
-					fetch('/manage/posts/upload-url', {
+			// Resizes, then presigns + PUTs straight to R2 — the server never
+			// sees the file bytes (see R2Client.presignPutUrl()). Shared by
+			// the cover-image uploader and the insert-image picker below.
+			function uploadImageFile(file){
+				return resizeImageFile(file, 800).then(function(sizedFile){
+					return fetch('/manage/posts/upload-url', {
 						method: 'POST',
 						headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': csrfToken },
 						body: new URLSearchParams({ filename: file.name, contentType: file.type })
@@ -423,14 +432,81 @@
 						return fetch(data.uploadUrl, {
 							method: 'PUT',
 							headers: { 'Content-Type': file.type },
-							body: file
+							body: sizedFile
 						}).then(function(putRes){
 							if (!putRes.ok) {
 								return Promise.reject('Upload to image host failed.');
 							}
 							return data.url;
 						});
-					})
+					});
+				});
+			}
+
+			// ── Cover image + inline post images: upload and existing-image picker ──
+			// Cover-image paths call setCoverImage(); the toolbar's "Insert image"
+			// button opens the same picker in "insert" mode, which writes markdown
+			// into the body at the cursor instead. The URL field for cover images
+			// stays editable throughout, so a pasted URL still works as before.
+			(function(){
+				var fileInput    = document.getElementById('editor-cover-file');
+				var uploadBtn    = document.getElementById('editor-cover-upload-btn');
+				var browseBtn    = document.getElementById('editor-cover-browse-btn');
+				var statusEl     = document.getElementById('editor-cover-upload-status');
+				var urlInput     = document.getElementById('editor-cover-image');
+				var previewWrap  = document.getElementById('editor-cover-preview');
+				var previewImg   = document.getElementById('editor-cover-preview-img');
+				var modal        = document.getElementById('editor-cover-browse-modal');
+				var modalTitle   = document.getElementById('editor-cover-browse-title');
+				var modalBody    = document.getElementById('editor-cover-browse-body');
+				var modalClose   = document.getElementById('editor-cover-browse-close');
+				var modalBackdrop = document.getElementById('editor-cover-browse-backdrop');
+				var pickerFileInput = document.getElementById('editor-picker-file');
+				var pickerUploadBtn = document.getElementById('editor-picker-upload-btn');
+				var pickerStatusEl  = document.getElementById('editor-picker-upload-status');
+				var toolbarImageBtn = document.getElementById('editor-toolbar-image');
+
+				var pickerMode = 'cover'; // 'cover' | 'insert'
+
+				function setCoverImage(url){
+					urlInput.value = url;
+					previewImg.src = url;
+					previewWrap.hidden = false;
+					urlInput.dispatchEvent(new Event('input', { bubbles: true }));
+				}
+
+				function insertImageMarkdown(url, altText){
+					var start = bodyTextarea.selectionStart;
+					var end   = bodyTextarea.selectionEnd;
+					var value = bodyTextarea.value;
+					var markdown = '![' + (altText || '') + '](' + url + ')';
+					bodyTextarea.value = value.slice(0, start) + markdown + value.slice(end);
+					bodyTextarea.focus();
+					var cursor = start + markdown.length;
+					bodyTextarea.setSelectionRange(cursor, cursor);
+					scheduleAutosave();
+				}
+
+				function useImage(url, filename){
+					if (pickerMode === 'insert') {
+						insertImageMarkdown(url, filename ? filename.replace(/\.[^.]+$/, '') : '');
+					} else {
+						setCoverImage(url);
+					}
+				}
+
+				// ── Cover image's own direct "Upload image" button ──
+				uploadBtn.addEventListener('click', function(){ fileInput.click(); });
+
+				fileInput.addEventListener('change', function(){
+					var file = fileInput.files[0];
+					if (!file) return;
+
+					statusEl.className = 'c-post-editor__cover-upload-status';
+					statusEl.textContent = 'Uploading…';
+					uploadBtn.disabled = true;
+
+					uploadImageFile(file)
 					.then(function(url){
 						uploadBtn.disabled = false;
 						fileInput.value = '';
@@ -445,9 +521,11 @@
 					});
 				});
 
-				// ── Existing-image picker ──
+				// ── Modal: existing-image grid + its own "Upload new" ──
 				function closeModal(){ modal.hidden = true; }
-				function openModal(){
+				function openModal(mode){
+					pickerMode = mode;
+					modalTitle.textContent = mode === 'insert' ? 'Insert an image' : 'Choose a cover image';
 					modal.hidden = false;
 					modalBody.innerHTML = '<p class="text-muted">Loading…</p>';
 
@@ -478,7 +556,7 @@
 						}).filter(function(img){ return img.key.slice(-1) !== '/'; });
 
 						if (!images.length) {
-							modalBody.innerHTML = '<p class="text-muted">No uploaded images yet — use "Upload image" to add one.</p>';
+							modalBody.innerHTML = '<p class="text-muted">No uploaded images yet — use "Upload new" above to add one.</p>';
 							return;
 						}
 						var grid = document.createElement('div');
@@ -494,7 +572,7 @@
 							thumb.loading = 'lazy';
 							item.appendChild(thumb);
 							item.addEventListener('click', function(){
-								setCoverImage(img.url);
+								useImage(img.url, img.key.split('/').pop());
 								statusEl.className = 'c-post-editor__cover-upload-status';
 								statusEl.textContent = 'Selected.';
 								closeModal();
@@ -509,7 +587,36 @@
 					});
 				}
 
-				browseBtn.addEventListener('click', openModal);
+				pickerUploadBtn.addEventListener('click', function(){ pickerFileInput.click(); });
+
+				pickerFileInput.addEventListener('change', function(){
+					var file = pickerFileInput.files[0];
+					if (!file) return;
+
+					pickerStatusEl.className = 'c-post-editor__cover-upload-status';
+					pickerStatusEl.textContent = 'Uploading…';
+					pickerUploadBtn.disabled = true;
+
+					uploadImageFile(file)
+					.then(function(url){
+						pickerUploadBtn.disabled = false;
+						pickerFileInput.value = '';
+						pickerStatusEl.textContent = '';
+						useImage(url, file.name);
+						closeModal();
+					})
+					.catch(function(err){
+						pickerUploadBtn.disabled = false;
+						pickerFileInput.value = '';
+						pickerStatusEl.className = 'c-post-editor__cover-upload-status c-post-editor__cover-upload-status--error';
+						pickerStatusEl.textContent = typeof err === 'string' ? err : 'Upload failed — check your connection and try again.';
+					});
+				});
+
+				browseBtn.addEventListener('click', function(){ openModal('cover'); });
+				if (toolbarImageBtn) {
+					toolbarImageBtn.addEventListener('click', function(){ openModal('insert'); });
+				}
 				modalClose.addEventListener('click', closeModal);
 				modalBackdrop.addEventListener('click', closeModal);
 				document.addEventListener('keydown', function(e){

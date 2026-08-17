@@ -1433,6 +1433,15 @@
 	margin: 0;
 }
 
+.c-image-picker__upload-row {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+	padding: var(--space-4) var(--space-5);
+	border-bottom: 1px solid var(--ui-border-subtle);
+	flex-shrink: 0;
+}
+
 .c-image-picker__body {
 	padding: var(--space-5);
 	overflow-y: auto;

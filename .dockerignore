@@ -1,5 +1,7 @@
 node_modules
 boxlang_modules
+testbox
+tests
 public/assets/dist
 .git
 .env

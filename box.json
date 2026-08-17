@@ -1,21 +1,28 @@
 {
-	"name": "kisdigital",
-	"slug": "kisdigital",
-	"version": "0.1.0",
-	"private": true,
-	"shortDescription": "KISDigital — built on BoxLang Express",
-	"type": "boxlang",
-	"dependencies": {},
-	"devDependencies": {},
-	"installPaths": {},
-	"testbox": {
-		"directory": "tests.specs",
-		"recurse": true,
-		"watchPaths": "**.bx"
-	},
-	"ignore": [
-		"**/.*",
-		"/test/",
-		"/tests/"
-	]
+    "name":"kisdigital",
+    "slug":"kisdigital",
+    "version":"0.1.0",
+    "private":true,
+    "shortDescription":"KISDigital — built on BoxLang Express",
+    "type":"boxlang",
+    "dependencies":{},
+    "devDependencies":{
+        "testbox":"^7.0.0+19"
+    },
+    "installPaths":{
+        "testbox":"testbox/"
+    },
+    "testbox":{
+        "directory":"tests.specs",
+        "recurse":true,
+        "watchPaths":"**.bx"
+    },
+    "scripts":{
+        "test":"!boxlang run-tests.bxs"
+    },
+    "ignore":[
+        "**/.*",
+        "/test/",
+        "/tests/"
+    ]
 }
