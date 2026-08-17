@@ -1,11 +1,16 @@
-# WARNING: do not apply this file wholesale with `doctl apps update --spec`.
-# The R2_* values below are EDIT_IN_UI placeholders, while the live app holds
-# real encrypted secrets — applying this file would overwrite them with the
-# literal string "EDIT_IN_UI". To change live configuration, export the
-# current spec (`doctl apps get <id> -o json`), edit only what you mean to
-# change so the EV[...] ciphertext is carried through untouched, and apply
-# that. This file is the record of intent, not the deployment source; git
-# pushes deploy against the live spec.
+# WARNING on secrets: R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, and R2_SECRET_ACCESS_KEY
+# are deliberately NOT declared below. GitHub-triggered deploys (deploy_on_push)
+# re-sync the live spec from this file on every push — a SECRET key declared
+# here with a placeholder value gets individually re-encrypted as that literal
+# placeholder each time, which then shadows the real value if one was also set
+# as an app-level (not service-level) env var in the dashboard. That's exactly
+# what happened once already: the dashboard-set real R2 credentials were
+# silently overridden back to "EDIT_IN_UI" by the next `git push`. Set those
+# three at the APP level (Settings > App-Level Environment Variables, not the
+# service's own env vars) in the DO dashboard instead — app-level env vars are
+# inherited by every service and aren't touched by this file's service.envs
+# list. Everything else here is safe to keep declaring, including the
+# ${amos.*} database bindings, since App Platform populates those itself.
 name: kisdigital
 region: nyc
 
@@ -76,17 +81,10 @@ services:
       - key: CHRON_DB_PASSWORD
         value: ${amos.PASSWORD}
         type: SECRET
-      - key: R2_ACCOUNT_ID
-        value: EDIT_IN_UI
-        type: SECRET
+      # R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY are set at the
+      # APP level in the dashboard, not here — see the file-header comment.
       - key: R2_BUCKET
         value: kisdigital
-      - key: R2_ACCESS_KEY_ID
-        value: EDIT_IN_UI
-        type: SECRET
-      - key: R2_SECRET_ACCESS_KEY
-        value: EDIT_IN_UI
-        type: SECRET
       - key: R2_PUBLIC_BASE_URL
         value: https://static.kisdigital.com
       - key: R2_UPLOAD_PREFIX
