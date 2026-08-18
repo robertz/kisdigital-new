@@ -55,15 +55,14 @@ COPY --from=assets /app/public/assets/dist public/assets/dist
 # masks used across the app (post dates, RSS/sitemap timestamps).
 ENV BOXLANG_MODULES=bx-mysql,bx-markdown,bx-password-encrypt,bx-esapi,bx-compat-cfml
 
-# Pinned to an exact tag and installed straight from GitHub (github:user/repo#ref),
+# Installed straight from GitHub's default branch (github:user/repo, no #ref),
 # not `box install boxlang-express` by bare name. That resolves through ForgeBox's
 # own listing for the package, which points at a location string in
 # boxlang-express's own box.json — after publishing a fix there (bumping box.json's
 # version and location) a build still picked up the previous release, apparently a
-# ForgeBox-side propagation delay on what "latest" resolves to. A direct GitHub tag
-# reference isn't subject to that: it's exactly the ref, not something resolved
-# through a registry that can lag.
-ENV BOXLANG_EXPRESS_REF=v0.1.17
+# ForgeBox-side propagation delay on what "latest" resolves to. A direct GitHub
+# install isn't subject to that: every build gets whatever's on the default branch
+# right now, not something resolved through a registry that can lag.
 
 # Installed at build time, not container start: `box install X --local` only
 # places a "boxlang-modules"-typed package (boxlang-express) into
@@ -75,7 +74,7 @@ ENV BOXLANG_EXPRESS_REF=v0.1.17
 # container boots without depending on ForgeBox being reachable — relevant on
 # a platform like DigitalOcean App Platform, where a slow or unreachable
 # ForgeBox at container start would otherwise stall past the readiness probe.
-RUN box install "robertz/boxlang-express#${BOXLANG_EXPRESS_REF}" --local && \
+RUN box install "robertz/boxlang-express" --local && \
 	installedPath=$(find /usr/local/lib/serverHome -maxdepth 5 -type d -name "boxlang-express" 2>/dev/null | head -1) && \
 	if [ -n "$installedPath" ]; then \
 		mkdir -p "$APP_DIR/boxlang_modules" && \
