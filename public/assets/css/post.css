@@ -98,7 +98,8 @@
 }
 
 .c-post__description {
-	font-size: 1.125rem;
+	font-size: 0.95rem;
+	font-style: italic;
 	line-height: 1.55;
 	color: var(--text-secondary);
 	border: none;
