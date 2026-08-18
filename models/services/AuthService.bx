@@ -3,6 +3,11 @@
  */
 class {
 
+	// Never matches any real password — exists purely so authenticate() has
+	// something to BCryptVerify() against on the "no such email" path. Its
+	// own plaintext is never used or stored anywhere.
+	variables.dummyHash = "$2a$10$0D7vOvjfbI/reBSHcGwog.Wun8Jv3a5JulKhZ2uKeJNzecdKOQ8xa";
+
 	/**
 	 * Attempts to authenticate a user by email and password.
 	 *
@@ -11,6 +16,16 @@ class {
 	 *
 	 * SECURITY [H5]: Also checks the is_active flag — inactive/suspended accounts
 	 *               are rejected even if the password is correct.
+	 *
+	 * SECURITY: BCryptVerify() always runs exactly once, against either the
+	 *           real stored hash or variables.dummyHash — never skipped.
+	 *           bcrypt's cost factor is what makes a real check slow (tens of
+	 *           milliseconds), so returning early for "no such email" or "an
+	 *           inactive account" without it was a timing side channel: an
+	 *           attacker could tell those cases apart from a genuine
+	 *           wrong-password rejection by response time alone, and use
+	 *           that to enumerate valid emails before ever guessing a
+	 *           password.
 	 *
 	 * @param {string} email    - The user's email address.
 	 * @param {string} password - The plaintext password to verify against BCrypt hash.
@@ -28,17 +43,15 @@ class {
 			{ returnType: "array" }
 		);
 
-		if ( !users.len() ) return {};
+		var user = users.len() ? users[ 1 ] : { "password": "", "is_active": false };
+		var hash = len( user.password ?: "" ) ? user.password : variables.dummyHash;
+		var passwordMatches = BCryptVerify( arguments.password, hash );
 
-		var user = users[ 1 ];
-
-		// [H5] Reject suspended / deactivated accounts before checking the password,
-		// to avoid leaking account existence through timing differences.
-		if ( !user.is_active ){
+		if ( !users.len() || !user.is_active || !passwordMatches ){
 			return {};
 		}
 
-		return BCryptVerify( arguments.password, user.password ?: "" ) ? user : {};
+		return user;
 	}
 
 }
