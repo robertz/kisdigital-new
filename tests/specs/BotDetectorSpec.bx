@@ -1,0 +1,60 @@
+/**
+ * BotDetector backs two things that both need to agree on what counts as a
+ * bot: Posts.bx's view-count filtering and InsightsService's traffic
+ * filtering (see BotDetector.bx's own docblock for why it's shared instead
+ * of two copies of the pattern list).
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "BotDetector", function(){
+
+			beforeEach( function(){
+				variables.detector = new models.util.BotDetector()
+			} )
+
+			describe( "isBot()", function(){
+				it( "is true for a User-Agent containing a named pattern, case-insensitively", function(){
+					expect( variables.detector.isBot( "Mozilla/5.0 (compatible; Googlebot/2.1)" ) ).toBeTrue()
+					expect( variables.detector.isBot( "SOME-CRAWLER/1.0" ) ).toBeTrue()
+				} )
+
+				it( "is true for a blank User-Agent", function(){
+					expect( variables.detector.isBot( "" ) ).toBeTrue()
+					expect( variables.detector.isBot( "   " ) ).toBeTrue()
+				} )
+
+				it( "is true for common HTTP-library and scripting User-Agents", function(){
+					expect( variables.detector.isBot( "curl/8.7.1" ) ).toBeTrue()
+					expect( variables.detector.isBot( "python-requests/2.31.0" ) ).toBeTrue()
+					expect( variables.detector.isBot( "node-fetch" ) ).toBeTrue()
+				} )
+
+				it( "is false for an ordinary browser User-Agent", function(){
+					var ua = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+					expect( variables.detector.isBot( ua ) ).toBeFalse()
+				} )
+
+				it( "matches regardless of case", function(){
+					expect( variables.detector.isBot( "MOZILLA/5.0 GOOGLEBOT/2.1" ) ).toBeTrue()
+				} )
+			} )
+
+			describe( "sqlPattern()", function(){
+				it( "returns a non-empty '|'-joined alternation", function(){
+					var pattern = variables.detector.sqlPattern()
+					expect( pattern ).toInclude( "bot" )
+					expect( pattern ).toInclude( "|" )
+				} )
+
+				it( "is usable as a REGEXP alternation matching the same names isBot() does", function(){
+					var pattern = variables.detector.sqlPattern()
+					expect( reFindNoCase( pattern, "curl/8.7.1" ) ).toBeGT( 0 )
+					expect( reFindNoCase( pattern, "Mozilla/5.0 Chrome/120" ) ).toBe( 0 )
+				} )
+			} )
+
+		} )
+	}
+
+}

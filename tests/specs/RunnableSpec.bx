@@ -1,0 +1,31 @@
+/**
+ * Runnable is a one-method adapter (closure -> java.lang.Runnable) used to
+ * hand RequestLogger.bx's flush loop to a ScheduledExecutorService — trivial,
+ * but cheap to pin down since a typo here would silently break a background
+ * thread rather than fail loudly.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "Runnable", function(){
+
+			it( "invokes the wrapped closure when run() is called", function(){
+				var called = false
+				var runnable = new models.util.Runnable( function(){ called = true } )
+				runnable.run()
+				expect( called ).toBeTrue()
+			} )
+
+			it( "invokes the closure again on each run() call", function(){
+				var count = 0
+				var runnable = new models.util.Runnable( function(){ count++ } )
+				runnable.run()
+				runnable.run()
+				runnable.run()
+				expect( count ).toBe( 3 )
+			} )
+
+		} )
+	}
+
+}

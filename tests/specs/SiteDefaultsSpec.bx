@@ -1,0 +1,43 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "SiteDefaults", function(){
+
+			beforeEach( function(){
+				variables.site = new models.util.SiteDefaults( "https://kisdigital.com" )
+			} )
+
+			describe( "canonicalUrl()", function(){
+				it( "joins the configured site URL and the given path", function(){
+					expect( variables.site.canonicalUrl( "/posts/hello-world" ) ).toBe( "https://kisdigital.com/posts/hello-world" )
+				} )
+
+				it( "handles the root path", function(){
+					expect( variables.site.canonicalUrl( "/" ) ).toBe( "https://kisdigital.com/" )
+				} )
+			} )
+
+			describe( "defaultMeta()", function(){
+				it( "sets og:url to the canonical URL for the given path", function(){
+					var meta = variables.site.defaultMeta( "/about" )
+					expect( meta[ "og:url" ] ).toBe( "https://kisdigital.com/about" )
+				} )
+
+				it( "points og:image and twitter:image at the site's default fallback image", function(){
+					var meta = variables.site.defaultMeta( "/about" )
+					expect( meta[ "og:image" ] ).toBe( "https://kisdigital.com/assets/images/kisdigital-default.jpg" )
+					expect( meta[ "twitter:image" ] ).toBe( meta[ "og:image" ] )
+				} )
+
+				it( "always includes the required OpenGraph and Twitter card keys", function(){
+					var meta = variables.site.defaultMeta( "/about" )
+					for ( var key in [ "og:type", "og:site_name", "og:title", "og:description", "twitter:card", "twitter:title", "twitter:description" ] ) {
+						expect( meta ).toHaveKey( key )
+					}
+				} )
+			} )
+
+		} )
+	}
+
+}

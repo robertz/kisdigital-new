@@ -3,9 +3,19 @@
  *   boxlang run-tests.bxs
  *
  * Covers the parts of the app that are pure logic — no live database or
- * network needed: PostBean's computed getters, PostService.slugify(), and
- * R2Client's presigned-URL signing (the exact code that took a full session
- * to get right against production — see R2Client.bx's own comments).
+ * network needed: PostBean's and AuthorBean's computed getters/populate(),
+ * PostService.slugify(), AuthorService.canUserEditAuthor(), R2Client's
+ * presigned-URL signing (the exact code that took a full session to get
+ * right against production — see R2Client.bx's own comments), BotDetector's
+ * pattern matching, SiteDefaults' URL/meta building, PostRenderer's
+ * markdown-to-HTML link/image enhancement, and Runnable's closure adapter.
+ *
+ * Deliberately NOT covered: anything that only does something interesting
+ * once a database, background thread, or live HTTP call is involved —
+ * AuthService.authenticate(), InsightsService, SitemapService, SettingsService,
+ * RequestLogger, and every route handler. Same trade-off this suite already
+ * made for PostService and AuthorService before this comment existed: their
+ * DB-backed methods aren't exercised here either.
  */
 tb = new "testbox.system.TestBox"( directory = "tests.specs", reporter = "text" )
 println( tb.run() )

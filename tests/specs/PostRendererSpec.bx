@@ -1,0 +1,114 @@
+/**
+ * PostRenderer's two regex passes (enhanceLinks/enhanceImages) are the
+ * fiddliest part of this app's rendering pipeline — hand-rolled attribute
+ * parsing over arbitrary markdown-generated HTML, not a templating engine
+ * doing the work for it. Worth protecting against regressions the same way
+ * R2Client's signing logic is.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "PostRenderer", function(){
+
+			beforeEach( function(){
+				variables.renderer = new models.util.PostRenderer()
+			} )
+
+			describe( "enhanceLinks()", function(){
+				it( "adds target=_blank and the post-link class to a bare link", function(){
+					var html = variables.renderer.enhanceLinks( '<a href="https://example.com">hi</a>' )
+					expect( html ).toInclude( 'target="_blank"' )
+					expect( html ).toInclude( 'class="c-post-link"' )
+				} )
+
+				it( "leaves an existing target attribute alone", function(){
+					var html = variables.renderer.enhanceLinks( '<a href="https://example.com" target="_self">hi</a>' )
+					expect( html ).toInclude( 'target="_self"' )
+					expect( html ).notToInclude( "_blank" )
+				} )
+
+				it( "appends c-post-link to an existing class instead of replacing it", function(){
+					var html = variables.renderer.enhanceLinks( '<a href="https://example.com" class="external">hi</a>' )
+					expect( html ).toInclude( 'class="external c-post-link"' )
+				} )
+
+				it( "doesn't duplicate the class if it's already present", function(){
+					var html = variables.renderer.enhanceLinks( '<a href="https://example.com" class="c-post-link">hi</a>' )
+					expect( reMatchNoCase( "c-post-link", html ).len() ).toBe( 1 )
+				} )
+
+				it( "enhances every link when there are several", function(){
+					var html = variables.renderer.enhanceLinks( '<a href="/a">a</a> and <a href="/b">b</a>' )
+					expect( reMatch( 'target="_blank"', html ).len() ).toBe( 2 )
+				} )
+
+				it( "leaves plain text with no links untouched", function(){
+					expect( variables.renderer.enhanceLinks( "<p>no links here</p>" ) ).toBe( "<p>no links here</p>" )
+				} )
+			} )
+
+			describe( "enhanceImages()", function(){
+				it( "wraps a plain image in a figure with lazy loading", function(){
+					var html = variables.renderer.enhanceImages( '<img src="/a.jpg" alt="A photo">' )
+					expect( html ).toInclude( "<figure" )
+					expect( html ).toInclude( 'loading="lazy"' )
+					expect( html ).toInclude( 'decoding="async"' )
+					expect( html ).toInclude( 'src="/a.jpg"' )
+				} )
+
+				it( "uses the alt text as the caption when no title is given", function(){
+					var html = variables.renderer.enhanceImages( '<img src="/a.jpg" alt="A photo">' )
+					expect( html ).toInclude( "<figcaption>A photo</figcaption>" )
+				} )
+
+				it( "reads a size hint (wide/half/inline) out of the title attribute", function(){
+					var wide = variables.renderer.enhanceImages( '<img src="/a.jpg" alt="x" title="wide">' )
+					expect( wide ).toInclude( "c-post-img--wide" )
+					expect( wide ).toInclude( "c-post-figure--wide" )
+
+					var half = variables.renderer.enhanceImages( '<img src="/a.jpg" alt="x" title="half">' )
+					expect( half ).toInclude( "c-post-img--half" )
+				} )
+
+				it( "renders inline images without a figure wrapper", function(){
+					var html = variables.renderer.enhanceImages( '<img src="/a.jpg" alt="x" title="inline">' )
+					expect( html ).notToInclude( "<figure" )
+					expect( html ).toInclude( "c-post-img--inline" )
+				} )
+
+				it( "reads an explicit 'caption: ...' hint, combined with a size hint", function(){
+					var html = variables.renderer.enhanceImages( '<img src="/a.jpg" alt="x" title="wide | caption: A custom caption">' )
+					expect( html ).toInclude( "c-post-img--wide" )
+					expect( html ).toInclude( "<figcaption>A custom caption</figcaption>" )
+				} )
+
+				it( "omits figcaption entirely when there's no caption and no alt text", function(){
+					var html = variables.renderer.enhanceImages( '<img src="/a.jpg">' )
+					expect( html ).notToInclude( "<figcaption>" )
+				} )
+
+				it( "enhances every image when there are several", function(){
+					var html = variables.renderer.enhanceImages( '<img src="/a.jpg" alt="a"> <img src="/b.jpg" alt="b">' )
+					expect( reMatch( "<figure", html ).len() ).toBe( 2 )
+				} )
+			} )
+
+			describe( "render()", function(){
+				it( "converts markdown to HTML and applies both enhancement passes", function(){
+					var html = variables.renderer.render( "Check out [this link](https://example.com)." )
+					expect( html ).toInclude( "<a" )
+					expect( html ).toInclude( 'target="_blank"' )
+					expect( html ).toInclude( 'class="c-post-link"' )
+				} )
+
+				it( "enhances an image produced by markdown image syntax", function(){
+					var html = variables.renderer.render( "![A caption](https://example.com/a.jpg)" )
+					expect( html ).toInclude( "<figure" )
+					expect( html ).toInclude( 'loading="lazy"' )
+				} )
+			} )
+
+		} )
+	}
+
+}

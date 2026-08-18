@@ -82,6 +82,89 @@ class extends="testbox.system.BaseSpec" {
 				} )
 			} )
 
+			describe( "init()", function(){
+				it( "resets every property to its default, including tags back to an empty array", function(){
+					var bean = new models.PostBean()
+					bean.populate( { "id": "abc", "title": "Hi", "status": "published", "featured": true, "tags": [ "a", "b" ] } )
+					bean.init()
+					expect( bean.getId() ).toBe( "" )
+					expect( bean.getTitle() ).toBe( "" )
+					expect( bean.getStatus() ).toBe( "draft" )
+					expect( bean.getFeatured() ).toBeFalse()
+					expect( bean.getTags() ).toBeArray()
+					expect( bean.getTags().len() ).toBe( 0 )
+					expect( bean.exists() ).toBeFalse()
+				} )
+			} )
+
+			describe( "populate()", function(){
+				it( "maps snake_case query-result keys (cover_image, publish_date, ...) onto the right properties", function(){
+					var bean = new models.PostBean().populate( {
+						"id": "abc123", "title": "Hello", "slug": "hello", "description": "desc",
+						"cover_image": "/cover.jpg", "body": "**hi**", "status": "published",
+						"featured": true, "publish_date": "2026-03-05", "tags": [ "cfml" ],
+						"author_name": "Jane", "author_avatar_label": "JD", "author_about": "bio",
+						"views": 42
+					} )
+					expect( bean.getId() ).toBe( "abc123" )
+					expect( bean.getCoverImage() ).toBe( "/cover.jpg" )
+					expect( bean.getStatus() ).toBe( "published" )
+					expect( bean.getFeatured() ).toBeTrue()
+					expect( bean.getTags() ).toBe( [ "cfml" ] )
+					expect( bean.getAuthorName() ).toBe( "Jane" )
+					expect( bean.getViews() ).toBe( 42 )
+				} )
+
+				it( "defaults status to 'draft' and featured to false when the keys are missing", function(){
+					var bean = new models.PostBean().populate( { "id": "abc" } )
+					expect( bean.getStatus() ).toBe( "draft" )
+					expect( bean.getFeatured() ).toBeFalse()
+				} )
+			} )
+
+			describe( "exists()", function(){
+				it( "is false for a freshly constructed bean", function(){
+					expect( new models.PostBean().exists() ).toBeFalse()
+				} )
+
+				it( "is true once a non-empty id is populated", function(){
+					expect( new models.PostBean().populate( { "id": "abc123" } ).exists() ).toBeTrue()
+				} )
+			} )
+
+			describe( "toStruct()", function(){
+				it( "produces a snake_case struct matching what PostService.savePost() expects", function(){
+					var bean = new models.PostBean()
+					bean.setId( "abc" )
+					bean.setTitle( "Hello" )
+					bean.setSlug( "hello" )
+					bean.setDescription( "desc" )
+					bean.setCoverImage( "/cover.jpg" )
+					bean.setBody( "**hi**" )
+					bean.setStatus( "published" )
+					bean.setFeatured( true )
+					bean.setPublishDate( "2026-03-05" )
+
+					var s = bean.toStruct()
+					expect( s[ "id" ] ).toBe( "abc" )
+					expect( s[ "cover_image" ] ).toBe( "/cover.jpg" )
+					expect( s[ "publish_date" ] ).toBe( "2026-03-05" )
+					expect( s[ "featured" ] ).toBeTrue()
+				} )
+
+				it( "round-trips through populate() and back to the same struct shape", function(){
+					var original = {
+						"id": "abc", "title": "Hi", "slug": "hi", "description": "d",
+						"cover_image": "/c.jpg", "body": "b", "status": "draft", "featured": false,
+						"publish_date": "2026-01-01"
+					}
+					var s = new models.PostBean().populate( original ).toStruct()
+					for ( var key in original ) {
+						expect( s[ key ] ).toBe( original[ key ] )
+					}
+				} )
+			} )
+
 		} )
 	}
 

@@ -1,0 +1,31 @@
+/**
+ * AuthorService is mostly a thin layer over the User table — everything
+ * except canUserEditAuthor() needs a live database, consistent with how
+ * this suite treats PostService (see PostServiceSpec.bx, which likewise
+ * only covers PostService's one DB-free method, slugify()).
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "AuthorService.canUserEditAuthor()", function(){
+
+			beforeEach( function(){
+				variables.service = new models.services.AuthorService()
+			} )
+
+			it( "lets an admin edit any author profile", function(){
+				expect( variables.service.canUserEditAuthor( "someone-elses-id", "my-id", "admin" ) ).toBeTrue()
+			} )
+
+			it( "lets an author edit their own profile", function(){
+				expect( variables.service.canUserEditAuthor( "my-id", "my-id", "author" ) ).toBeTrue()
+			} )
+
+			it( "doesn't let an author edit someone else's profile", function(){
+				expect( variables.service.canUserEditAuthor( "someone-elses-id", "my-id", "author" ) ).toBeFalse()
+			} )
+
+		} )
+	}
+
+}

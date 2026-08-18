@@ -1,0 +1,69 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "AuthorBean", function(){
+
+			describe( "init()", function(){
+				it( "resets every property to its default", function(){
+					var bean = new models.AuthorBean()
+					bean.populate( {
+						"id": "abc", "display_name": "Jane", "email": "jane@example.com",
+						"role": "admin", "about": "bio", "avatar_label": "JD",
+						"post_count": 4, "created": now()
+					} )
+					bean.init()
+					expect( bean.getId() ).toBe( "" )
+					expect( bean.getDisplayName() ).toBe( "" )
+					expect( bean.getRole() ).toBe( "author" )
+					expect( bean.getPostCount() ).toBe( 0 )
+					expect( bean.exists() ).toBeFalse()
+				} )
+			} )
+
+			describe( "populate()", function(){
+				it( "maps every snake_case query-result key onto the right property", function(){
+					var bean = new models.AuthorBean().populate( {
+						"id": "abc123", "display_name": "Jane Doe", "email": "jane@example.com",
+						"role": "admin", "about": "Writes things.", "avatar_label": "JD",
+						"post_count": 7, "created": "2026-01-01"
+					} )
+					expect( bean.getId() ).toBe( "abc123" )
+					expect( bean.getDisplayName() ).toBe( "Jane Doe" )
+					expect( bean.getEmail() ).toBe( "jane@example.com" )
+					expect( bean.getRole() ).toBe( "admin" )
+					expect( bean.getAbout() ).toBe( "Writes things." )
+					expect( bean.getAvatarLabel() ).toBe( "JD" )
+					expect( bean.getPostCount() ).toBe( 7 )
+				} )
+
+				it( "defaults role to 'author' when the key is missing", function(){
+					var bean = new models.AuthorBean().populate( { "id": "abc" } )
+					expect( bean.getRole() ).toBe( "author" )
+				} )
+
+				it( "defaults post_count to 0 when the key is missing", function(){
+					var bean = new models.AuthorBean().populate( { "id": "abc" } )
+					expect( bean.getPostCount() ).toBe( 0 )
+				} )
+
+				it( "returns itself for chaining", function(){
+					var bean = new models.AuthorBean()
+					expect( bean.populate( { "id": "abc" } ) ).toBe( bean )
+				} )
+			} )
+
+			describe( "exists()", function(){
+				it( "is false for a freshly constructed bean", function(){
+					expect( new models.AuthorBean().exists() ).toBeFalse()
+				} )
+
+				it( "is true once a non-empty id is populated", function(){
+					var bean = new models.AuthorBean().populate( { "id": "abc123" } )
+					expect( bean.exists() ).toBeTrue()
+				} )
+			} )
+
+		} )
+	}
+
+}
