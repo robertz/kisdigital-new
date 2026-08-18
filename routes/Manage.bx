@@ -193,6 +193,8 @@ class {
 
 	// GET /manage
 	function dashboard( req, res ){
+		var insightsConfigured = variables.goatCounterClient.isConfigured();
+
 		res.render( "manage/index", {
 			pageTitle       : "Dashboard",
 			manageSection   : "dashboard",
@@ -200,7 +202,9 @@ class {
 			traffic         : buildTrafficChartData( variables.postService.getDailyViewTotals( 30 ) ),
 			zeroResultSearches : variables.postService.getZeroResultSearches( 30 ),
 			recentActivity     : variables.postService.getRecentActivity( 8 ),
-			contentHealth      : variables.postService.getContentHealth()
+			contentHealth      : variables.postService.getContentHealth(),
+			insightsConfigured : insightsConfigured,
+			insightsTotal      : insightsConfigured ? insightsFetch( () => variables.goatCounterClient.getTotal( 30 ) ) : javacast( "null", "" )
 		} );
 	}
 

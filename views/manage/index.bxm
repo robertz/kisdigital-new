@@ -192,6 +192,29 @@
 			</a>
 
 			<bx:if isAdmin>
+				<!--- Insights card (admin) --->
+				<a href="/manage/insights" class="c-manage-dashboard__card c-manage-dashboard__card--link">
+					<div class="c-manage-dashboard__card-head">
+						<span class="c-manage-dashboard__icon"><i class="bi bi-bar-chart"></i></span>
+						<span class="c-manage-dashboard__eyebrow">Analytics</span>
+					</div>
+					<bx:if !data.insightsConfigured>
+						<h2 class="c-manage-dashboard__title">Insights</h2>
+						<p class="c-manage-dashboard__meta">Not configured yet.</p>
+					<bx:elseif isNull( data.insightsTotal )>
+						<h2 class="c-manage-dashboard__title">Insights</h2>
+						<p class="c-manage-dashboard__meta">Couldn't load from GoatCounter.</p>
+					<bx:else>
+						<h2 class="c-manage-dashboard__title">#numberFormat( data.insightsTotal.total )#</h2>
+						<p class="c-manage-dashboard__meta">visitors in the last 30 days</p>
+					</bx:if>
+					<div class="c-manage-dashboard__card-foot">
+						<span class="c-manage-dashboard__cta">
+							View insights <i class="bi bi-arrow-right"></i>
+						</span>
+					</div>
+				</a>
+
 				<!--- Authors card (admin) --->
 				<a href="/manage/authors" class="c-manage-dashboard__card c-manage-dashboard__card--link">
 					<div class="c-manage-dashboard__card-head">
