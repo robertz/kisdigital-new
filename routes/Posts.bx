@@ -96,6 +96,15 @@ class {
 		if ( len( post.getCoverImage() ) ){
 			meta[ "og:image" ]      = post.getCoverImage();
 			meta[ "twitter:image" ] = post.getCoverImage();
+			// og:image:width/height came from defaultMeta() sized for the
+			// sitewide fallback image (1200x630) — stale and wrong for a
+			// post's own cover image, which is a different, arbitrary size.
+			// Crawlers (LinkedIn's in particular) are known to validate the
+			// declared dimensions against what they actually fetch and can
+			// silently drop the image on a mismatch, so these need to go
+			// rather than carry the fallback image's dimensions forward.
+			structDelete( meta, "og:image:width" );
+			structDelete( meta, "og:image:height" );
 		}
 		if ( len( post.getAuthorName() ) ){
 			meta[ "article:author" ] = post.getAuthorName();

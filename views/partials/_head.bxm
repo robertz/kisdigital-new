@@ -16,7 +16,7 @@
 <bx:if structKeyExists( data, "meta" )>
 	<bx:loop collection="#data.meta#" item="metaName">
 		<bx:if len( trim( data.meta[ metaName ] ) )>
-		<meta name="#encodeForHTMLAttribute( lCase( metaName ) )#" property="#encodeForHTMLAttribute( lCase( metaName ) )#" content="#encodeForHTMLAttribute( data.meta[ metaName ] )#">
+		<meta name="#lCase( metaName )#" property="#lCase( metaName )#" content="#encodeForHTMLAttribute( data.meta[ metaName ] )#">
 		</bx:if>
 	</bx:loop>
 </bx:if>
