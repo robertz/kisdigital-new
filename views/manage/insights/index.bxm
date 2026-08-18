@@ -11,104 +11,95 @@
 		<div class="c-manage-header">
 			<div>
 				<h1 class="c-manage-header__title">Insights</h1>
-				<p class="c-manage-header__sub">Visitor stats from GoatCounter, last #data.daysBack# days.</p>
+				<p class="c-manage-header__sub">Traffic from this site's own access log, last #data.daysBack# days.</p>
 			</div>
 		</div>
 
-		<bx:if !data.configured>
-			<div class="c-manage-alert c-manage-alert--error">
-				<i class="bi bi-exclamation-circle-fill"></i>
-				Insights aren't configured (missing GOATCOUNTER_SITE / GOATCOUNTER_API_KEY env vars).
-			</div>
-		<bx:else>
+		<div class="c-manage-dashboard__grid">
 
-			<div class="c-manage-dashboard__grid">
+			<!--- Total visitors card --->
+			<section class="c-manage-dashboard__card c-manage-dashboard__card--total">
+				<div class="c-manage-dashboard__card-head">
+					<span class="c-manage-dashboard__icon"><i class="bi bi-people"></i></span>
+					<span class="c-manage-dashboard__eyebrow">Unique visitors &mdash; last #data.daysBack# days</span>
+				</div>
+				<bx:if isNull( data.total )>
+					<p class="c-manage-dashboard__meta">Couldn't load this &mdash; see server logs.</p>
+				<bx:else>
+					<h2 class="c-manage-dashboard__title">#numberFormat( data.total.total )#</h2>
+					<p class="c-manage-dashboard__meta">distinct IPs across the site</p>
+				</bx:if>
+			</section>
 
-				<!--- Total visitors card --->
-				<section class="c-manage-dashboard__card c-manage-dashboard__card--total">
-					<div class="c-manage-dashboard__card-head">
-						<span class="c-manage-dashboard__icon"><i class="bi bi-people"></i></span>
-						<span class="c-manage-dashboard__eyebrow">Total visitors &mdash; last #data.daysBack# days</span>
-					</div>
-					<bx:if isNull( data.total )>
-						<p class="c-manage-dashboard__meta">Couldn't load this from GoatCounter &mdash; see server logs.</p>
-					<bx:else>
-						<h2 class="c-manage-dashboard__title">#numberFormat( data.total.total )#</h2>
-						<p class="c-manage-dashboard__meta">visitors across the site</p>
-					</bx:if>
-				</section>
+			<!--- Top pages card --->
+			<section class="c-manage-dashboard__card c-manage-dashboard__card--pages">
+				<div class="c-manage-dashboard__card-head">
+					<span class="c-manage-dashboard__icon"><i class="bi bi-file-earmark-text"></i></span>
+					<span class="c-manage-dashboard__eyebrow">Top pages</span>
+				</div>
+				<bx:if isNull( data.topPaths )>
+					<p class="c-manage-dashboard__meta">Couldn't load this &mdash; see server logs.</p>
+				<bx:elseif !data.topPaths.len()>
+					<p class="c-manage-dashboard__meta">No visits recorded yet.</p>
+				<bx:else>
+					<ul class="c-dashboard-list">
+						<bx:loop array="#data.topPaths#" item="row">
+							<li class="c-dashboard-list__item">
+								<a href="#encodeForHTMLAttribute( row.path )#" class="c-dashboard-list__label c-dashboard-list__label--link" target="_blank" rel="noopener">
+									#encodeForHTML( row.path )#
+								</a>
+								<span class="c-dashboard-list__meta">#numberFormat( row.count )#</span>
+							</li>
+						</bx:loop>
+					</ul>
+				</bx:if>
+			</section>
 
-				<!--- Top pages card --->
-				<section class="c-manage-dashboard__card c-manage-dashboard__card--pages">
-					<div class="c-manage-dashboard__card-head">
-						<span class="c-manage-dashboard__icon"><i class="bi bi-file-earmark-text"></i></span>
-						<span class="c-manage-dashboard__eyebrow">Top pages</span>
-					</div>
-					<bx:if isNull( data.topPaths )>
-						<p class="c-manage-dashboard__meta">Couldn't load this from GoatCounter &mdash; see server logs.</p>
-					<bx:elseif !data.topPaths.len()>
-						<p class="c-manage-dashboard__meta">No visits recorded yet.</p>
-					<bx:else>
-						<ul class="c-dashboard-list">
-							<bx:loop array="#data.topPaths#" item="row">
-								<li class="c-dashboard-list__item">
-									<a href="#encodeForHTMLAttribute( row.path )#" class="c-dashboard-list__label c-dashboard-list__label--link" target="_blank" rel="noopener">
-										#encodeForHTML( len( row.title ) ? row.title : row.path )#
-									</a>
-									<span class="c-dashboard-list__meta">#numberFormat( row.count )#</span>
-								</li>
-							</bx:loop>
-						</ul>
-					</bx:if>
-				</section>
+			<!--- Top referrers card --->
+			<section class="c-manage-dashboard__card c-manage-dashboard__card--referrers">
+				<div class="c-manage-dashboard__card-head">
+					<span class="c-manage-dashboard__icon"><i class="bi bi-signpost-split"></i></span>
+					<span class="c-manage-dashboard__eyebrow">Top referrers</span>
+				</div>
+				<bx:if isNull( data.topReferrers )>
+					<p class="c-manage-dashboard__meta">Couldn't load this &mdash; see server logs.</p>
+				<bx:elseif !data.topReferrers.len()>
+					<p class="c-manage-dashboard__meta">No referrer data yet.</p>
+				<bx:else>
+					<ul class="c-dashboard-list">
+						<bx:loop array="#data.topReferrers#" item="row">
+							<li class="c-dashboard-list__item">
+								<span class="c-dashboard-list__label">#encodeForHTML( row.name )#</span>
+								<span class="c-dashboard-list__meta">#numberFormat( row.count )#</span>
+							</li>
+						</bx:loop>
+					</ul>
+				</bx:if>
+			</section>
 
-				<!--- Top referrers card --->
-				<section class="c-manage-dashboard__card c-manage-dashboard__card--referrers">
-					<div class="c-manage-dashboard__card-head">
-						<span class="c-manage-dashboard__icon"><i class="bi bi-signpost-split"></i></span>
-						<span class="c-manage-dashboard__eyebrow">Top referrers</span>
-					</div>
-					<bx:if isNull( data.topReferrers )>
-						<p class="c-manage-dashboard__meta">Couldn't load this from GoatCounter &mdash; see server logs.</p>
-					<bx:elseif !data.topReferrers.len()>
-						<p class="c-manage-dashboard__meta">No referrer data yet.</p>
-					<bx:else>
-						<ul class="c-dashboard-list">
-							<bx:loop array="#data.topReferrers#" item="row">
-								<li class="c-dashboard-list__item">
-									<span class="c-dashboard-list__label">#encodeForHTML( row.name )#</span>
-									<span class="c-dashboard-list__meta">#numberFormat( row.count )#</span>
-								</li>
-							</bx:loop>
-						</ul>
-					</bx:if>
-				</section>
+			<!--- Slowest pages card --->
+			<section class="c-manage-dashboard__card c-manage-dashboard__card--locations">
+				<div class="c-manage-dashboard__card-head">
+					<span class="c-manage-dashboard__icon"><i class="bi bi-hourglass-split"></i></span>
+					<span class="c-manage-dashboard__eyebrow">Slowest pages</span>
+				</div>
+				<bx:if isNull( data.slowestPaths )>
+					<p class="c-manage-dashboard__meta">Couldn't load this &mdash; see server logs.</p>
+				<bx:elseif !data.slowestPaths.len()>
+					<p class="c-manage-dashboard__meta">Not enough traffic yet to measure.</p>
+				<bx:else>
+					<ul class="c-dashboard-list">
+						<bx:loop array="#data.slowestPaths#" item="row">
+							<li class="c-dashboard-list__item">
+								<span class="c-dashboard-list__label">#encodeForHTML( row.path )#</span>
+								<span class="c-dashboard-list__meta">#numberFormat( row.avgDurationMs )# ms</span>
+							</li>
+						</bx:loop>
+					</ul>
+				</bx:if>
+			</section>
 
-				<!--- Locations card --->
-				<section class="c-manage-dashboard__card c-manage-dashboard__card--locations">
-					<div class="c-manage-dashboard__card-head">
-						<span class="c-manage-dashboard__icon"><i class="bi bi-globe"></i></span>
-						<span class="c-manage-dashboard__eyebrow">Visitor locations</span>
-					</div>
-					<bx:if isNull( data.locations )>
-						<p class="c-manage-dashboard__meta">Couldn't load this from GoatCounter &mdash; see server logs.</p>
-					<bx:elseif !data.locations.len()>
-						<p class="c-manage-dashboard__meta">No location data yet.</p>
-					<bx:else>
-						<ul class="c-dashboard-list">
-							<bx:loop array="#data.locations#" item="row">
-								<li class="c-dashboard-list__item">
-									<span class="c-dashboard-list__label">#encodeForHTML( row.name )#</span>
-									<span class="c-dashboard-list__meta">#numberFormat( row.count )#</span>
-								</li>
-							</bx:loop>
-						</ul>
-					</bx:if>
-				</section>
-
-			</div>
-
-		</bx:if>
+		</div>
 
 	</main>
 </div>

@@ -26,9 +26,9 @@ class {
 	variables.postRenderer    = "";
 	variables.r2Client        = "";
 	variables.r2UploadPrefix  = "posts";
-	variables.goatCounterClient = "";
+	variables.insightsService = "";
 
-	function init( required authService, required postService, required authorService, required settingsService, required postRenderer, required r2Client, r2UploadPrefix = "posts", goatCounterClient = "" ){
+	function init( required authService, required postService, required authorService, required settingsService, required postRenderer, required r2Client, r2UploadPrefix = "posts", required insightsService ){
 		variables.authService     = arguments.authService;
 		variables.postService     = arguments.postService;
 		variables.authorService   = arguments.authorService;
@@ -36,7 +36,7 @@ class {
 		variables.postRenderer    = arguments.postRenderer;
 		variables.r2UploadPrefix  = len( trim( arguments.r2UploadPrefix ) ) ? trim( arguments.r2UploadPrefix ).reReplace( "^/+|/+$", "", "all" ) : "posts";
 		variables.r2Client        = arguments.r2Client;
-		variables.goatCounterClient = arguments.goatCounterClient;
+		variables.insightsService = arguments.insightsService;
 
 		// Bare method references passed as route handlers lose their binding to
 		// this instance (BoxLang's Router ends up calling them unbound), so every
@@ -193,8 +193,6 @@ class {
 
 	// GET /manage
 	function dashboard( req, res ){
-		var insightsConfigured = variables.goatCounterClient.isConfigured();
-
 		res.render( "manage/index", {
 			pageTitle       : "Dashboard",
 			manageSection   : "dashboard",
@@ -203,8 +201,7 @@ class {
 			zeroResultSearches : variables.postService.getZeroResultSearches( 30 ),
 			recentActivity     : variables.postService.getRecentActivity( 8 ),
 			contentHealth      : variables.postService.getContentHealth(),
-			insightsConfigured : insightsConfigured,
-			insightsTotal      : insightsConfigured ? insightsFetch( () => variables.goatCounterClient.getTotal( 30 ) ) : javacast( "null", "" )
+			insightsTotal      : insightsFetch( () => variables.insightsService.getTotal( 30 ) )
 		} );
 	}
 
@@ -679,38 +676,35 @@ class {
 		return cleanSegments.len() ? cleanSegments.toList( "/" ) & "/" : "";
 	}
 
-	// ── Visitor insights (GoatCounter) ──────────────────────────────────────
+	// ── Visitor insights (RequestLog) ───────────────────────────────────────
 
-	// GET /manage/insights — each card's own GoatCounter call is caught
-	// independently so one failing request (rate limit, a transient network
-	// blip, GoatCounter itself being down) degrades that one card instead of
-	// blanking the whole dashboard behind a 500.
+	// GET /manage/insights — each card's own query is caught independently
+	// so one failing query (a DB blip) degrades that one card instead of
+	// blanking the whole page behind a 500.
 	function insightsIndex( req, res ){
-		var configured = variables.goatCounterClient.isConfigured();
 		var daysBack = 30;
 
 		res.render( "manage/insights/index", {
 			pageTitle      : "Insights",
 			manageSection  : "insights",
-			configured     : configured,
 			daysBack       : daysBack,
-			total          : configured ? insightsFetch( () => variables.goatCounterClient.getTotal( daysBack ) ) : javacast( "null", "" ),
-			topPaths       : configured ? insightsFetch( () => variables.goatCounterClient.getTopPaths( daysBack, 10 ) ) : javacast( "null", "" ),
-			topReferrers   : configured ? insightsFetch( () => variables.goatCounterClient.getTopReferrers( daysBack, 10 ) ) : javacast( "null", "" ),
-			locations      : configured ? insightsFetch( () => variables.goatCounterClient.getLocations( daysBack, 8 ) ) : javacast( "null", "" )
+			total          : insightsFetch( () => variables.insightsService.getTotal( daysBack ) ),
+			topPaths       : insightsFetch( () => variables.insightsService.getTopPaths( daysBack, 10 ) ),
+			topReferrers   : insightsFetch( () => variables.insightsService.getTopReferrers( daysBack, 10 ) ),
+			slowestPaths   : insightsFetch( () => variables.insightsService.getSlowestPaths( daysBack, 8 ) )
 		} );
 	}
 
 	/**
-	 * Runs a single GoatCounter call, logging and swallowing any failure so
-	 * the caller gets a safe fallback (null by default, or the given one)
+	 * Runs a single InsightsService call, logging and swallowing any failure
+	 * so the caller gets a safe fallback (null by default, or the given one)
 	 * instead of an exception — see insightsIndex()'s per-card isolation.
 	 */
 	private function insightsFetch( required fetchFn, fallback = javacast( "null", "" ) ){
 		try {
 			return arguments.fetchFn();
 		} catch ( any e ) {
-			println( "[error] GoatCounter insights fetch failed: " & e.message );
+			println( "[error] Insights fetch failed: " & e.message );
 			return arguments.fallback;
 		}
 	}

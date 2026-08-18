@@ -1,0 +1,145 @@
+/**
+ * Reads /manage/insights and the dashboard's insights summary card from the
+ * RequestLog table (see db/migrations/0004_add_request_log.sql) — replaces
+ * GoatCounterClient, whose synchronous, rate-limited API calls could lock up
+ * request handling. Everything here is a plain read against a table our own
+ * RequestLogger.bx middleware already fills in asynchronously, so there's no
+ * external dependency left to be slow, rate-limited, or down.
+ *
+ * Every query shares the same traffic filter (_where()): GET requests only,
+ * excluding /manage/* (CMS admin, not visitor traffic), /assets/* (static
+ * files, not pages), /health (infra probe), and known bots/crawlers (see
+ * BotDetector.bx) — the same shape of filtering GoatCounter's client-side
+ * pageview beacon gave for free by construction (it only ever fired from a
+ * real browser rendering a real public page).
+ *
+ * "Total visitors" counts distinct IP addresses, not deduplicated visitor
+ * fingerprints the way GoatCounter's own number worked — the closest
+ * equivalent available from a plain access log, not a precise match.
+ */
+class {
+
+	variables.siteHost    = "";
+	variables.botDetector = "";
+
+	function init( required string siteHost ){
+		variables.siteHost    = arguments.siteHost;
+		variables.botDetector = new models.util.BotDetector();
+		return this;
+	}
+
+	/**
+	 * @return {struct} { total } — distinct visitor IPs in the window.
+	 */
+	function getTotal( numeric daysBack = 30 ){
+		var days = arguments.daysBack;
+		var row  = queryExecute(
+			"SELECT COUNT(DISTINCT ip_address) AS total
+			FROM RequestLog
+			WHERE " & _where(),
+			_params( days ),
+			{ returnType: "array" }
+		)[ 1 ];
+		return { "total": row.total };
+	}
+
+	/**
+	 * @return {array} of { path, count }, highest first.
+	 */
+	function getTopPaths( numeric daysBack = 30, numeric limit = 10 ){
+		var days = arguments.daysBack;
+		var params = _params( days );
+		params[ "lim" ] = { value: arguments.limit, cfsqltype: "cf_sql_integer" };
+
+		return queryExecute(
+			"SELECT path, COUNT(*) AS count
+			FROM RequestLog
+			WHERE " & _where() & "
+			GROUP BY path
+			ORDER BY count DESC
+			LIMIT :lim",
+			params,
+			{ returnType: "array" }
+		);
+	}
+
+	/**
+	 * Referrers are grouped by host, not the full URL — a raw Referer header
+	 * carries the referring page's whole path and query string, which would
+	 * otherwise fragment one real source (e.g. Google search) into dozens of
+	 * near-duplicate rows. Referrals from this site's own domain are dropped
+	 * (internal navigation isn't a "referrer" in any useful sense); an empty
+	 * Referer header is labeled "(direct)".
+	 *
+	 * @return {array} of { name, count }, highest first.
+	 */
+	function getTopReferrers( numeric daysBack = 30, numeric limit = 10 ){
+		var days = arguments.daysBack;
+		var params = _params( days );
+		params[ "lim" ]     = { value: arguments.limit, cfsqltype: "cf_sql_integer" };
+		params[ "selfHost" ] = { value: "%" & variables.siteHost & "%", cfsqltype: "cf_sql_varchar" };
+
+		return queryExecute(
+			"SELECT
+				CASE
+					WHEN referrer = '' THEN '(direct)'
+					ELSE SUBSTRING_INDEX(SUBSTRING_INDEX(SUBSTRING_INDEX(referrer, '://', -1), '/', 1), '?', 1)
+				END AS name,
+				COUNT(*) AS count
+			FROM RequestLog
+			WHERE " & _where() & "
+				AND referrer NOT LIKE :selfHost
+			GROUP BY name
+			ORDER BY count DESC
+			LIMIT :lim",
+			params,
+			{ returnType: "array" }
+		);
+	}
+
+	/**
+	 * Something GoatCounter never offered: real server-side response times.
+	 * Requires at least 3 hits for a path in the window, so one slow one-off
+	 * (a cold cache, a background job sharing the box) can't make a
+	 * barely-visited path look like the slowest thing on the site.
+	 *
+	 * @return {array} of { path, avgDurationMs, count }, slowest first.
+	 */
+	function getSlowestPaths( numeric daysBack = 30, numeric limit = 10 ){
+		var days = arguments.daysBack;
+		var params = _params( days );
+		params[ "lim" ] = { value: arguments.limit, cfsqltype: "cf_sql_integer" };
+
+		return queryExecute(
+			"SELECT path, ROUND(AVG(duration_ms)) AS avgDurationMs, COUNT(*) AS count
+			FROM RequestLog
+			WHERE " & _where() & "
+			GROUP BY path
+			HAVING COUNT(*) >= 3
+			ORDER BY avgDurationMs DESC
+			LIMIT :lim",
+			params,
+			{ returnType: "array" }
+		);
+	}
+
+	private function _where(){
+		return "
+			requested_at >= DATE_SUB(NOW(), INTERVAL :days DAY)
+			AND method = 'GET'
+			AND path NOT LIKE '/manage%'
+			AND path NOT LIKE '/assets/%'
+			AND path <> '/health'
+			AND user_agent <> ''
+			AND user_agent NOT REGEXP :botPattern
+		";
+	}
+
+	private function _params( required numeric days ){
+		return {
+			"days"      : { value: arguments.days, cfsqltype: "cf_sql_integer" },
+			"botPattern": { value: variables.botDetector.sqlPattern(), cfsqltype: "cf_sql_varchar" }
+		};
+	}
+
+}

@@ -1,0 +1,59 @@
+/**
+ * Matches a User-Agent string against known bot/crawler signatures. Shared
+ * by Posts.bx (so view counts aren't inflated by crawlers and preview
+ * link-unfurlers) and InsightsService.bx (so the same crawler traffic
+ * doesn't skew /manage/insights) — one pattern list instead of two copies
+ * that could quietly drift apart.
+ *
+ * "bot"/"crawler"/"spider" alone already catch most named ones (Googlebot,
+ * AhrefsBot, PerplexityBot, GPTBot, ClaudeBot, UptimeRobot, etc.) — the rest
+ * of this list is specifically the crawlers/tools whose UA string *doesn't*
+ * contain any of those three words.
+ */
+class {
+
+	variables.patterns = [
+		"bot", "crawler", "spider", "slurp", "facebookexternalhit",
+		"twitterbot", "linkedinbot", "whatsapp", "telegrambot",
+		"applebot", "bingpreview", "google-inspectiontool",
+		"googlebot", "yandex", "baidu", "duckduckbot", "sogou",
+		"exabot", "ia_archiver", "semrush", "ahrefs", "mj12bot",
+		"dotbot", "screaming frog", "lighthouse", "headlesschrome",
+		"phantomjs", "prerender", "wget", "curl", "python-requests",
+		"go-http-client", "java/", "okhttp",
+		// AI/LLM crawlers without "bot" in the name
+		"bytespider", "google-extended", "anthropic-ai", "cohere-ai",
+		"meta-externalagent",
+		// Uptime/synthetic monitoring services
+		"pingdom", "site24x7", "statuscake", "gtmetrix", "newrelicpinger",
+		// Other scripting/HTTP-library UAs, same idea as curl/wget above
+		"node-fetch", "axios", "libwww-perl", "scrapy"
+	];
+
+	function isBot( required string userAgent ){
+		var ua = lCase( trim( arguments.userAgent ) );
+
+		// A real browser always sends a User-Agent — its absence is itself a
+		// strong signal of a script or tool rather than a person, and better
+		// excluded than counted.
+		if ( !len( ua ) ) return true;
+
+		for ( var pattern in variables.patterns ){
+			if ( find( pattern, ua ) ) return true;
+		}
+		return false;
+	}
+
+	/**
+	 * The same pattern list as a single "|"-joined regex alternation, for a
+	 * SQL `NOT REGEXP` filter (always bound as a query parameter, never
+	 * concatenated into the SQL string) — lets InsightsService exclude bot
+	 * traffic in the database instead of pulling a month of raw rows into
+	 * the app to filter with isBot(). None of the patterns above contain
+	 * regex metacharacters, so no escaping is needed to use them this way.
+	 */
+	function sqlPattern(){
+		return variables.patterns.toList( "|" );
+	}
+
+}

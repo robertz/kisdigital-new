@@ -198,12 +198,9 @@
 						<span class="c-manage-dashboard__icon"><i class="bi bi-bar-chart"></i></span>
 						<span class="c-manage-dashboard__eyebrow">Analytics</span>
 					</div>
-					<bx:if !data.insightsConfigured>
+					<bx:if isNull( data.insightsTotal )>
 						<h2 class="c-manage-dashboard__title">Insights</h2>
-						<p class="c-manage-dashboard__meta">Not configured yet.</p>
-					<bx:elseif isNull( data.insightsTotal )>
-						<h2 class="c-manage-dashboard__title">Insights</h2>
-						<p class="c-manage-dashboard__meta">Couldn't load from GoatCounter.</p>
+						<p class="c-manage-dashboard__meta">Couldn't load this &mdash; see server logs.</p>
 					<bx:else>
 						<h2 class="c-manage-dashboard__title">#numberFormat( data.insightsTotal.total )#</h2>
 						<p class="c-manage-dashboard__meta">visitors in the last 30 days</p>

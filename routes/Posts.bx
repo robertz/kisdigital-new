@@ -6,35 +6,13 @@ class {
 	variables.postService  = "";
 	variables.postRenderer = "";
 	variables.siteDefaults = "";
-
-	// Matches a request's User-Agent against known bot/crawler signatures, so
-	// view counts aren't inflated by crawlers and preview link-unfurlers.
-	// "bot"/"crawler"/"spider" alone already catch most named ones (Googlebot,
-	// AhrefsBot, PerplexityBot, GPTBot, ClaudeBot, UptimeRobot, etc.) — the
-	// rest of this list is specifically the crawlers/tools whose UA string
-	// *doesn't* contain any of those three words.
-	variables.botPatterns = [
-		"bot", "crawler", "spider", "slurp", "facebookexternalhit",
-		"twitterbot", "linkedinbot", "whatsapp", "telegrambot",
-		"applebot", "bingpreview", "google-inspectiontool",
-		"googlebot", "yandex", "baidu", "duckduckbot", "sogou",
-		"exabot", "ia_archiver", "semrush", "ahrefs", "mj12bot",
-		"dotbot", "screaming frog", "lighthouse", "headlesschrome",
-		"phantomjs", "prerender", "wget", "curl", "python-requests",
-		"go-http-client", "java/", "okhttp",
-		// AI/LLM crawlers without "bot" in the name
-		"bytespider", "google-extended", "anthropic-ai", "cohere-ai",
-		"meta-externalagent",
-		// Uptime/synthetic monitoring services
-		"pingdom", "site24x7", "statuscake", "gtmetrix", "newrelicpinger",
-		// Other scripting/HTTP-library UAs, same idea as curl/wget above
-		"node-fetch", "axios", "libwww-perl", "scrapy"
-	];
+	variables.botDetector  = "";
 
 	function init( required postService, required postRenderer, required siteDefaults ){
 		variables.postService  = arguments.postService;
 		variables.postRenderer = arguments.postRenderer;
 		variables.siteDefaults = arguments.siteDefaults;
+		variables.botDetector  = new models.util.BotDetector();
 
 		this.router = boxExpressRouter();
 
@@ -115,7 +93,7 @@ class {
 
 		// Record a view for human visitors on published posts only.
 		// Authenticated CMS users previewing drafts are excluded to avoid inflating counts.
-		if ( !isAuthenticated && post.getStatus() == "published" && !isBot( req.get( "User-Agent" ) ?: "" ) ){
+		if ( !isAuthenticated && post.getStatus() == "published" && !variables.botDetector.isBot( req.get( "User-Agent" ) ?: "" ) ){
 			variables.postService.recordView( post.getId() );
 		}
 
@@ -149,20 +127,6 @@ class {
 			trendingPosts : variables.postService.getTrendingPosts(),
 			allTags       : variables.postService.getAllTags()
 		} );
-	}
-
-	private boolean function isBot( required string userAgent ){
-		var ua = lCase( trim( arguments.userAgent ) );
-
-		// A real browser always sends a User-Agent — its absence is itself
-		// a strong signal of a script or tool rather than a person reading
-		// the post, and better excluded than counted.
-		if ( !len( ua ) ) return true;
-
-		for ( var pattern in variables.botPatterns ){
-			if ( find( pattern, ua ) ) return true;
-		}
-		return false;
 	}
 
 }
