@@ -2002,6 +2002,86 @@
 	color: var(--post-anchor);
 }
 
+/* Client-side filter/sort toolbar (Alpine — requestLogTable() at the
+   bottom of views/manage/logs/index.bxm), separate from .c-log-search
+   above, which is the server-side, all-pages path search. */
+
+.c-log-toolbar {
+	display: flex;
+	align-items: flex-end;
+	flex-wrap: wrap;
+	gap: var(--space-4);
+	padding: var(--space-4) var(--space-4) 0;
+}
+
+.c-log-toolbar__filter {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.c-log-toolbar__filter--grow {
+	flex: 1;
+	min-width: 200px;
+}
+
+.c-log-toolbar__filter label {
+	font-size: 0.6875rem;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--text-secondary);
+}
+
+.c-log-toolbar__filter select,
+.c-log-toolbar__filter input {
+	padding: 7px var(--space-3);
+	background: var(--ui-surface-2);
+	border: 1px solid var(--ui-border-subtle);
+	border-radius: var(--ui-radius-sm);
+	color: var(--post-anchor);
+	font-size: 0.8125rem;
+	width: 100%;
+}
+
+.c-log-toolbar__filter select:focus,
+.c-log-toolbar__filter input:focus {
+	outline: none;
+	border-color: var(--post-link-text);
+}
+
+.c-log-toolbar__reset {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 7px var(--space-3);
+	background: none;
+	border: 1px solid var(--ui-border-subtle);
+	border-radius: var(--ui-radius-sm);
+	color: var(--text-secondary);
+	font-size: 0.8125rem;
+	cursor: pointer;
+	transition: border-color 120ms ease, color 120ms ease;
+}
+
+.c-log-toolbar__reset:hover {
+	border-color: var(--post-link-text);
+	color: var(--post-link-text);
+}
+
+.c-log-toolbar__count {
+	margin-left: auto;
+	align-self: center;
+	font-size: 0.75rem;
+	color: var(--text-secondary);
+	white-space: nowrap;
+}
+
+.c-manage-panel__empty--inline {
+	border: none;
+	padding: var(--space-6) var(--space-5);
+}
+
 .c-log-table {
 	table-layout: fixed;
 }
@@ -2028,6 +2108,24 @@
 
 .c-log-table__nowrap {
 	white-space: nowrap;
+}
+
+.c-log-table__sortable {
+	cursor: pointer;
+	-webkit-user-select: none;
+	user-select: none;
+}
+
+.c-log-table__sortable:hover {
+	color: var(--post-anchor);
+}
+
+.c-log-table__sort-icon {
+	font-size: 0.6875rem;
+}
+
+.c-log-table__sort-icon--idle {
+	opacity: 0.35;
 }
 
 .c-log-table__time {
@@ -2107,6 +2205,15 @@
 
 	.c-log-search {
 		width: 100%;
+	}
+
+	.c-log-toolbar {
+		flex-direction: column;
+		align-items: stretch;
+	}
+
+	.c-log-toolbar__count {
+		margin-left: 0;
 	}
 }
 

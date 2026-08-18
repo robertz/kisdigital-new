@@ -1,5 +1,10 @@
 <bx:include template="../../partials/_head.bxm">
 <bx:output>
+<!--- Alpine powers this page's table only (client-side sort + quick filter
+over whatever's already on the current server-rendered page) — not loaded
+site-wide, just here where it's actually used. --->
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.16.2/dist/cdn.min.js" integrity="sha384-hTDKg8MgHALzleab34+W1b6UpW6tektVmHXleL5Ztz8x2WFIJeaJp6ixjNBjbrDY" crossorigin="anonymous"></script>
+
 <div class="c-manage">
 
 	<!--- Sidebar nav --->
@@ -19,13 +24,13 @@
 					</h1>
 					<p class="c-manage-header__sub">Every request this server has handled, newest first.</p>
 				</div>
-				<form method="get" action="/manage/logs" class="c-log-search">
+				<form method="get" action="/manage/logs" class="c-log-search" title="Searches every page, not just the one shown below">
 					<i class="bi bi-search c-log-search__icon"></i>
 					<input
 						type="text"
 						name="q"
 						value="#encodeForHTMLAttribute( data.paging.pathFilter )#"
-						placeholder="Filter by path…"
+						placeholder="Filter by path (all pages)…"
 						class="c-log-search__input">
 					<bx:if len( data.paging.pathFilter )>
 						<a href="/manage/logs" class="c-log-search__clear" title="Clear filter">
@@ -50,62 +55,109 @@
 
 			<bx:else>
 
-				<div class="c-manage-panel">
+				<script id="log-rows-data" type="application/json">#data.rowsJson#</script>
+
+				<div class="c-manage-panel" x-data="requestLogTable()">
+
+					<div class="c-log-toolbar">
+						<div class="c-log-toolbar__filter">
+							<label for="log-filter-method">Method</label>
+							<select id="log-filter-method" x-model="methodFilter">
+								<option value="">All</option>
+								<template x-for="m in methods" :key="m">
+									<option :value="m" x-text="m"></option>
+								</template>
+							</select>
+						</div>
+						<div class="c-log-toolbar__filter">
+							<label for="log-filter-status">Status</label>
+							<select id="log-filter-status" x-model="statusFilter">
+								<option value="">All</option>
+								<option value="2xx">2xx</option>
+								<option value="3xx">3xx</option>
+								<option value="4xx">4xx</option>
+								<option value="5xx">5xx</option>
+								<option value="unknown">Unknown</option>
+							</select>
+						</div>
+						<div class="c-log-toolbar__filter c-log-toolbar__filter--grow">
+							<label for="log-filter-quick">This page</label>
+							<input
+								id="log-filter-quick"
+								type="text"
+								x-model="quickFilter"
+								placeholder="Quick filter path, IP, referrer, user agent…">
+						</div>
+						<button type="button" class="c-log-toolbar__reset" @click="reset()" x-show="hasActiveFilters()">
+							<i class="bi bi-x-circle"></i> Reset
+						</button>
+						<span class="c-log-toolbar__count" x-text="filteredRows.length + ' of #data.paging.rows.len()# shown'"></span>
+					</div>
+
 					<div class="c-manage-table-wrap">
 						<table class="c-manage-table c-log-table">
 							<thead>
 								<tr>
-									<th>Time</th>
-									<th>Method</th>
-									<th>Path</th>
-									<th>Status</th>
-									<th>Duration</th>
-									<th>IP</th>
+									<th class="c-log-table__sortable" @click="sortBy('timeSort')">
+										Time <i class="bi" :class="sortIcon('timeSort')"></i>
+									</th>
+									<th class="c-log-table__sortable" @click="sortBy('method')">
+										Method <i class="bi" :class="sortIcon('method')"></i>
+									</th>
+									<th class="c-log-table__sortable" @click="sortBy('path')">
+										Path <i class="bi" :class="sortIcon('path')"></i>
+									</th>
+									<th class="c-log-table__sortable" @click="sortBy('statusSort')">
+										Status <i class="bi" :class="sortIcon('statusSort')"></i>
+									</th>
+									<th class="c-log-table__sortable" @click="sortBy('durationMs')">
+										Duration <i class="bi" :class="sortIcon('durationMs')"></i>
+									</th>
+									<th class="c-log-table__sortable" @click="sortBy('ip')">
+										IP <i class="bi" :class="sortIcon('ip')"></i>
+									</th>
 									<th>Referrer</th>
 									<th>User agent</th>
 								</tr>
 							</thead>
 							<tbody>
-								<bx:loop array="#data.paging.rows#" item="row">
+								<template x-for="row in filteredRows" :key="row.id">
 									<tr>
 										<td class="c-manage-table__cell-muted c-log-table__nowrap">
-											#dateFormat( row.requested_at, "mmm d" )#
-											<span class="c-log-table__time">#dateTimeFormat( row.requested_at, "h:nn:ss tt" )#</span>
+											<span x-text="row.timeLabel"></span>
 										</td>
 										<td>
-											<span class="c-log-method c-log-method--#lCase( row.method )#">#encodeForHTML( row.method )#</span>
+											<span class="c-log-method" :class="'c-log-method--' + row.method.toLowerCase()" x-text="row.method"></span>
 										</td>
-										<td class="c-log-table__path" title="#encodeForHTMLAttribute( row.path & ( len( row.query_string ) ? '?' & row.query_string : '' ) )#">
-											#encodeForHTML( row.path )#
-											<bx:if len( row.query_string )>
-												<span class="c-manage-table__cell-muted">?#encodeForHTML( left( row.query_string, 40 ) )##( len( row.query_string ) > 40 ? '…' : '' )#</span>
-											</bx:if>
+										<td class="c-log-table__path" :title="row.path + (row.queryString ? '?' + row.queryString : '')">
+											<span x-text="row.path"></span>
+											<span class="c-manage-table__cell-muted" x-show="row.queryString" x-text="'?' + row.queryString.slice(0, 40) + (row.queryString.length > 40 ? '…' : '')"></span>
 										</td>
 										<td>
-											<bx:if isNull( row.status_code )>
-												<span class="c-status-badge c-status-badge--unknown">—</span>
-											<bx:elseif row.status_code < 300>
-												<span class="c-status-badge c-status-badge--2xx">#row.status_code#</span>
-											<bx:elseif row.status_code < 400>
-												<span class="c-status-badge c-status-badge--3xx">#row.status_code#</span>
-											<bx:elseif row.status_code < 500>
-												<span class="c-status-badge c-status-badge--4xx">#row.status_code#</span>
-											<bx:else>
-												<span class="c-status-badge c-status-badge--5xx">#row.status_code#</span>
-											</bx:if>
+											<span class="c-status-badge" :class="'c-status-badge--' + statusClass(row.statusCode)" x-text="row.statusCode || '—'"></span>
 										</td>
-										<td class="c-manage-table__cell-muted c-log-table__nowrap">#numberFormat( row.duration_ms )# ms</td>
-										<td class="c-manage-table__cell-muted c-log-table__nowrap">#encodeForHTML( row.ip_address )#</td>
-										<td class="c-manage-table__cell-muted c-log-table__truncate" title="#encodeForHTMLAttribute( row.referrer )#">
-											#encodeForHTML( len( row.referrer ) ? row.referrer : '—' )#
+										<td class="c-manage-table__cell-muted c-log-table__nowrap">
+											<span x-text="row.durationMs + ' ms'"></span>
 										</td>
-										<td class="c-manage-table__cell-muted c-log-table__truncate" title="#encodeForHTMLAttribute( row.user_agent )#">
-											#encodeForHTML( len( row.user_agent ) ? row.user_agent : '—' )#
+										<td class="c-manage-table__cell-muted c-log-table__nowrap">
+											<span x-text="row.ip"></span>
+										</td>
+										<td class="c-manage-table__cell-muted c-log-table__truncate" :title="row.referrer">
+											<span x-text="row.referrer || '—'"></span>
+										</td>
+										<td class="c-manage-table__cell-muted c-log-table__truncate" :title="row.userAgent">
+											<span x-text="row.userAgent || '—'"></span>
 										</td>
 									</tr>
-								</bx:loop>
+								</template>
 							</tbody>
 						</table>
+
+						<div class="c-manage-panel__empty c-manage-panel__empty--inline" x-show="!filteredRows.length">
+							<i class="bi bi-funnel"></i>
+							<h2>No rows on this page match those filters</h2>
+							<p>Try Reset, or use the search box above to look across every page.</p>
+						</div>
 					</div>
 
 					<bx:if data.paging.totalPages gt 1>
@@ -161,5 +213,87 @@
 
 	</main>
 </div>
+
+<script>
+function requestLogTable(){
+	return {
+		rows: JSON.parse(document.getElementById('log-rows-data').textContent),
+		methodFilter: '',
+		statusFilter: '',
+		quickFilter: '',
+		sortKey: 'timeSort',
+		sortDir: 'desc',
+
+		get methods(){
+			return [...new Set(this.rows.map(function(r){ return r.method; }))].sort();
+		},
+
+		get filteredRows(){
+			var methodFilter = this.methodFilter;
+			var statusFilter = this.statusFilter;
+			var quick = this.quickFilter.trim().toLowerCase();
+
+			var rows = this.rows.filter(function(row){
+				if (methodFilter && row.method !== methodFilter) return false;
+				if (statusFilter && statusClass(row.statusCode) !== statusFilter) return false;
+				if (quick) {
+					var haystack = (row.path + ' ' + row.ip + ' ' + row.referrer + ' ' + row.userAgent).toLowerCase();
+					if (haystack.indexOf(quick) === -1) return false;
+				}
+				return true;
+			});
+
+			// statusSort: unknown (empty string) sorts as -1, same idea as the
+			// "—" badge always reading as the least-specific status.
+			var key = this.sortKey;
+			var dir = this.sortDir === 'asc' ? 1 : -1;
+			rows.sort(function(a, b){
+				var av = key === 'statusSort' ? (a.statusCode === '' ? -1 : a.statusCode) : a[key];
+				var bv = key === 'statusSort' ? (b.statusCode === '' ? -1 : b.statusCode) : b[key];
+				if (av < bv) return -1 * dir;
+				if (av > bv) return 1 * dir;
+				return 0;
+			});
+
+			return rows;
+		},
+
+		sortBy: function(key){
+			if (this.sortKey === key) {
+				this.sortDir = this.sortDir === 'asc' ? 'desc' : 'asc';
+			} else {
+				this.sortKey = key;
+				this.sortDir = 'asc';
+			}
+		},
+
+		sortIcon: function(key){
+			if (this.sortKey !== key) return 'bi-chevron-expand c-log-table__sort-icon c-log-table__sort-icon--idle';
+			return this.sortDir === 'asc' ? 'bi-chevron-up c-log-table__sort-icon' : 'bi-chevron-down c-log-table__sort-icon';
+		},
+
+		hasActiveFilters: function(){
+			return !!(this.methodFilter || this.statusFilter || this.quickFilter);
+		},
+
+		reset: function(){
+			this.methodFilter = '';
+			this.statusFilter = '';
+			this.quickFilter = '';
+		}
+	};
+}
+
+// Shared with filteredRows' statusFilter comparison above — kept as a
+// standalone function (not a method) so it's the exact same classification
+// the status badge itself renders with, not a second copy that could drift.
+function statusClass(code){
+	if (code === '') return 'unknown';
+	if (code < 300) return '2xx';
+	if (code < 400) return '3xx';
+	if (code < 500) return '4xx';
+	return '5xx';
+}
+</script>
 </bx:output>
 <bx:include template="../../partials/_foot.bxm">

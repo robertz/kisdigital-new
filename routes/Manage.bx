@@ -718,10 +718,38 @@ class {
 		var currentPage = isNumeric( rawPage ) && rawPage > 0 ? int( rawPage ) : 1;
 		var pathFilter  = trim( req.query.q ?: "" );
 
+		var paging = variables.insightsService.getRecentRequests( currentPage, 50, pathFilter );
+
 		res.render( "manage/logs/index", {
 			pageTitle     : "Request Log",
 			manageSection : "logs",
-			paging        : variables.insightsService.getRecentRequests( currentPage, 50, pathFilter )
+			paging        : paging,
+			// The Alpine table on this page sorts/filters client-side, but only
+			// within whatever's already on the current server-rendered page —
+			// pagination and the path search box above stay server-side (this
+			// log can run to hundreds of pages; shipping the whole thing to the
+			// client isn't on the table). </script> is escaped so a referrer or
+			// user-agent value containing that literal string can't break out
+			// of the embedding <script type="application/json"> tag below.
+			rowsJson: replace( JSONSerialize( _rowsForClient( paging.rows ) ), "</", "<\/", "all" )
+		} );
+	}
+
+	private function _rowsForClient( required array rows ){
+		return arguments.rows.map( ( row ) => {
+			return {
+				"id"         : row.id,
+				"timeLabel"  : dateFormat( row.requested_at, "mmm d" ) & " " & dateTimeFormat( row.requested_at, "h:nn:ss tt" ),
+				"timeSort"   : dateTimeFormat( row.requested_at, "yyyy-mm-dd'T'HH:nn:ss" ),
+				"method"     : row.method,
+				"path"       : row.path,
+				"queryString": row.query_string,
+				"statusCode" : isNull( row.status_code ) ? "" : row.status_code,
+				"durationMs" : row.duration_ms,
+				"ip"         : row.ip_address,
+				"referrer"   : row.referrer,
+				"userAgent"  : row.user_agent
+			};
 		} );
 	}
 
