@@ -213,14 +213,17 @@ pre {
 /* ── Mobile menu toggle (hamburger) ── */
 /* Hidden on desktop — .header-search/.header-actions have room to show inline
    there; below 768px neither fits (see the collapses above), so this opens
-   .mobile-menu instead, which carries the same search + links stacked. */
+   .mobile-menu instead, which carries the same search + links stacked.
+   Selector is doubled up (not just .header-menu-toggle) to out-specificity
+   the later .header-icon-button rule, which also sets display and would
+   otherwise win the cascade by source order and show this on desktop too. */
 
-.header-menu-toggle {
+.header-icon-button.header-menu-toggle {
 	display: none;
 }
 
 @media (max-width: 767.98px) {
-	.header-menu-toggle {
+	.header-icon-button.header-menu-toggle {
 		display: inline-flex;
 	}
 }
