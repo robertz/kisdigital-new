@@ -1,0 +1,6 @@
+User-agent: *
+Disallow: /manage/
+Disallow: /search
+Disallow: /health
+
+Sitemap: https://kisdigital.com/sitemap.xml
