@@ -15,15 +15,36 @@
  * environment (see R2Client's own notes) — if the same turns out to be true
  * here, every method below fails closed (caught by the route handler, shown
  * as an empty/error state) rather than 500ing the whole dashboard.
+ *
+ * Every public method's result is cached in BoxLang's own "default" cache
+ * (a BoxCacheProvider, already registered for the app in boxlang.json —
+ * see SettingsService for the other consumer of it). GoatCounter's API is
+ * rate-limited to 4 req/sec, and a single /manage/insights or /manage load
+ * fires several of these calls back to back — without caching, a couple of
+ * page reloads in quick succession (an admin bouncing between tabs, or just
+ * refreshing) is enough to trip 429s, which was observed directly during
+ * testing. Cached by the request's own semantics (method + daysBack/limit),
+ * not by the exact start/end timestamps _rangeParams() computes from now()
+ * — those change every second, which would defeat caching entirely if used
+ * as part of the key.
  */
 class {
 
-	variables.site   = "";
-	variables.apiKey = "";
+	variables.site            = "";
+	variables.apiKey          = "";
+	variables.cacheTtlSeconds = 300;
 
-	function init( required string site, required string apiKey ){
-		variables.site   = trim( arguments.site );
-		variables.apiKey = trim( arguments.apiKey );
+	/**
+	 * @param {numeric} cacheTtlSeconds - How long a result stays cached before
+	 *        the next call re-fetches from GoatCounter. 5 minutes by default:
+	 *        long enough that a burst of dashboard loads/refreshes only ever
+	 *        costs one real API call, short enough that "last 30 days" numbers
+	 *        don't feel stale to an admin actually watching them.
+	 */
+	function init( required string site, required string apiKey, numeric cacheTtlSeconds = 300 ){
+		variables.site            = trim( arguments.site );
+		variables.apiKey          = trim( arguments.apiKey );
+		variables.cacheTtlSeconds = arguments.cacheTtlSeconds;
 		return this;
 	}
 
@@ -36,8 +57,13 @@ class {
 	 * @return {struct} { total, totalEvents }
 	 */
 	function getTotal( numeric daysBack = 30 ){
-		var json = _get( "/stats/total", _rangeParams( arguments.daysBack ) );
-		return { "total": json.total ?: 0, "totalEvents": json.total_events ?: 0 };
+		// Captured into a local first — the closure below doesn't inherit
+		// this function's own ARGUMENTS scope, only lexically-scoped locals.
+		var days = arguments.daysBack;
+		return _cached( "total:" & days, () => {
+			var json = _get( "/stats/total", _rangeParams( days ) );
+			return { "total": json.total ?: 0, "totalEvents": json.total_events ?: 0 };
+		} );
 	}
 
 	/**
@@ -46,14 +72,18 @@ class {
 	 * @return {array} of { path, title, count }
 	 */
 	function getTopPaths( numeric daysBack = 30, numeric limit = 10 ){
-		var params = _rangeParams( arguments.daysBack );
-		params[ "limit" ] = arguments.limit;
-		var json = _get( "/stats/hits", params );
-		var rows = [];
-		for ( var hit in ( json.hits ?: [] ) ){
-			rows.append( { "path": hit.path ?: "", "title": hit.title ?: "", "count": hit.count ?: 0 } );
-		}
-		return rows;
+		var days = arguments.daysBack;
+		var lim  = arguments.limit;
+		return _cached( "hits:" & days & ":" & lim, () => {
+			var params = _rangeParams( days );
+			params[ "limit" ] = lim;
+			var json = _get( "/stats/hits", params );
+			var rows = [];
+			for ( var hit in ( json.hits ?: [] ) ){
+				rows.append( { "path": hit.path ?: "", "title": hit.title ?: "", "count": hit.count ?: 0 } );
+			}
+			return rows;
+		} );
 	}
 
 	/**
@@ -73,17 +103,39 @@ class {
 	}
 
 	private function _getStatsPage( required string page, required numeric daysBack, required numeric limit ){
-		var params = _rangeParams( arguments.daysBack );
-		params[ "limit" ] = arguments.limit;
-		var json = _get( "/stats/" & arguments.page, params );
-		var rows = [];
-		for ( var row in ( json.stats ?: [] ) ){
-			// An empty referrer name means "direct" (no Referer header sent) —
-			// GoatCounter itself leaves this blank rather than labeling it.
-			var name = len( trim( row.name ?: "" ) ) ? row.name : "(direct)";
-			rows.append( { "name": name, "count": row.count ?: 0 } );
+		var pageName = arguments.page;
+		var days     = arguments.daysBack;
+		var lim      = arguments.limit;
+		return _cached( pageName & ":" & days & ":" & lim, () => {
+			var params = _rangeParams( days );
+			params[ "limit" ] = lim;
+			var json = _get( "/stats/" & pageName, params );
+			var rows = [];
+			for ( var row in ( json.stats ?: [] ) ){
+				// An empty referrer name means "direct" (no Referer header sent) —
+				// GoatCounter itself leaves this blank rather than labeling it.
+				var name = len( trim( row.name ?: "" ) ) ? row.name : "(direct)";
+				rows.append( { "name": name, "count": row.count ?: 0 } );
+			}
+			return rows;
+		} );
+	}
+
+	/**
+	 * Runs fetchFn() and caches its result under a key scoped to this
+	 * client's site, returning the cached value on a hit instead of calling
+	 * fetchFn() (and hitting GoatCounter's API) again.
+	 */
+	private function _cached( required string key, required fetchFn ){
+		var cacheKey = "goatcounter:" & variables.site & ":" & arguments.key;
+		var cached = cache( "default" ).get( cacheKey );
+		if ( cached.isPresent() ){
+			return cached.get();
 		}
-		return rows;
+
+		var result = arguments.fetchFn();
+		cache( "default" ).set( cacheKey, result, variables.cacheTtlSeconds );
+		return result;
 	}
 
 	private function _rangeParams( required numeric daysBack ){
