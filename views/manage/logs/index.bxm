@@ -56,6 +56,7 @@ site-wide, just here where it's actually used. --->
 			<bx:else>
 
 				<script id="log-rows-data" type="application/json">#data.rowsJson#</script>
+				<script id="log-initial-filters" type="application/json">#data.clientFiltersJson#</script>
 
 				<div class="c-manage-panel" x-data="requestLogTable()">
 
@@ -161,7 +162,15 @@ site-wide, just here where it's actually used. --->
 					</div>
 
 					<bx:if data.paging.totalPages gt 1>
-						<bx:set qs = len( data.paging.pathFilter ) ? "q=" & encodeForURL( data.paging.pathFilter ) & "&" : "">
+						<!--- Carries the server-side path search AND the client-side
+						method/status/quick filters forward into every pagination
+						link, so paginating doesn't reset filters a user just set. --->
+						<bx:set qsParts = []>
+						<bx:if len( data.paging.pathFilter )><bx:set qsParts.append( "q=" & encodeForURL( data.paging.pathFilter ) )></bx:if>
+						<bx:if len( data.clientFilters.method )><bx:set qsParts.append( "method=" & encodeForURL( data.clientFilters.method ) )></bx:if>
+						<bx:if len( data.clientFilters.status )><bx:set qsParts.append( "status=" & encodeForURL( data.clientFilters.status ) )></bx:if>
+						<bx:if len( data.clientFilters.quick )><bx:set qsParts.append( "quick=" & encodeForURL( data.clientFilters.quick ) )></bx:if>
+						<bx:set qs = qsParts.len() ? qsParts.toList( "&" ) & "&" : "">
 						<!--- Windowed, not a link per page like the (small, bounded) Posts
 						list — a log this size can run to hundreds of pages. --->
 						<bx:set winStart = max( 1, data.paging.page - 2 )>
@@ -170,7 +179,15 @@ site-wide, just here where it's actually used. --->
 							<span class="c-manage-panel__page-info">
 								Page <strong>#data.paging.page#</strong> of <strong>#data.paging.totalPages#</strong>
 							</span>
-							<div class="c-pagination">
+							<!--- The href on every link below is a server-rendered snapshot
+							of the filters as of this page load — correct as a fallback
+							(no-JS, open-in-new-tab), but a filter changed since then only
+							lives in Alpine state. This capture-phase handler rewrites the
+							destination to match *live* filter state before the browser
+							navigates, so paginating after changing a filter carries the
+							filter you actually have selected right now, not the stale one
+							from when the page first loaded. --->
+							<div class="c-pagination" @click.capture="onPaginate($event)">
 								<bx:if data.paging.page gt 1>
 									<a class="c-pagination__btn" href="/manage/logs?#qs#page=#data.paging.page - 1#" aria-label="Previous page">
 										<i class="bi bi-chevron-left"></i>
@@ -216,13 +233,63 @@ site-wide, just here where it's actually used. --->
 
 <script>
 function requestLogTable(){
+	var initialFilters = JSON.parse(document.getElementById('log-initial-filters').textContent);
+
 	return {
 		rows: JSON.parse(document.getElementById('log-rows-data').textContent),
-		methodFilter: '',
-		statusFilter: '',
-		quickFilter: '',
+		methodFilter: initialFilters.method,
+		statusFilter: initialFilters.status,
+		quickFilter: initialFilters.quick,
 		sortKey: 'timeSort',
 		sortDir: 'desc',
+
+		// Alpine calls this automatically (it's a reserved method name) once
+		// the component's reactive state exists — mirrors every filter
+		// change into the URL via replaceState (no reload, no new history
+		// entry) so a plain browser refresh restores the same filters
+		// instead of resetting to "All".
+		init: function(){
+			var self = this;
+			[ 'methodFilter', 'statusFilter', 'quickFilter' ].forEach( function( prop ){
+				self.$watch( prop, function(){ self._syncUrl(); } );
+			} );
+		},
+
+		// { method, status, quick } → the query param names the server side
+		// (Manage.bx's logsIndex(), and this same file's pagination links)
+		// uses for these same three filters.
+		_filterParams: function(){
+			return { method: this.methodFilter, status: this.statusFilter, quick: this.quickFilter };
+		},
+
+		_syncUrl: function(){
+			var url = new URL( window.location.href );
+			var params = this._filterParams();
+			Object.keys( params ).forEach( function( key ){
+				if ( params[ key ] ) url.searchParams.set( key, params[ key ] );
+				else url.searchParams.delete( key );
+			} );
+			window.history.replaceState( {}, '', url );
+		},
+
+		// Rewrites a pagination link's destination to carry *live* filter
+		// state (see the capture-handler comment above the .c-pagination
+		// element) — a modified click (⌘/ctrl/middle-click, "open in new
+		// tab") is left alone so it still opens the plain server-rendered
+		// href rather than hijacking a new-tab open.
+		onPaginate: function( event ){
+			var link = event.target.closest( 'a.c-pagination__btn' );
+			if ( !link || event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.button === 1 ) return;
+
+			event.preventDefault();
+			var url = new URL( link.href, window.location.origin );
+			var params = this._filterParams();
+			Object.keys( params ).forEach( function( key ){
+				if ( params[ key ] ) url.searchParams.set( key, params[ key ] );
+				else url.searchParams.delete( key );
+			} );
+			window.location.href = url.toString();
+		},
 
 		get methods(){
 			return [...new Set(this.rows.map(function(r){ return r.method; }))].sort();

@@ -761,12 +761,31 @@ class {
 		var currentPage = isNumeric( rawPage ) && rawPage > 0 ? int( rawPage ) : 1;
 		var pathFilter  = trim( req.query.q ?: "" );
 
+		// method/status/quick are the Alpine table's client-side filters —
+		// the server never applies them (they only ever act on whatever
+		// page's rows are already loaded), but round-tripping the current
+		// values through the URL is what makes them survive a pagination
+		// click or a plain reload instead of resetting every time. The view
+		// both seeds Alpine's initial state from these and folds them into
+		// every pagination link it renders, same as it already does for q.
+		var clientFilters = {
+			"method": trim( req.query.method ?: "" ),
+			"status": trim( req.query.status ?: "" ),
+			"quick" : trim( req.query.quick  ?: "" )
+		};
+
 		var paging = variables.insightsService.getRecentRequests( currentPage, 50, pathFilter );
 
 		res.render( "manage/logs/index", {
 			pageTitle     : "Request Log",
 			manageSection : "logs",
 			paging        : paging,
+			clientFilters : clientFilters,
+			// Same </script>-escaping as rowsJson below, applied on principle —
+			// these three values are never attacker-controlled in any way that
+			// matters here, but there's no reason to treat this embed
+			// differently from the one right next to it.
+			clientFiltersJson: replace( JSONSerialize( clientFilters ), "</", "<\/", "all" ),
 			// The Alpine table on this page sorts/filters client-side, but only
 			// within whatever's already on the current server-rendered page —
 			// pagination and the path search box above stay server-side (this
