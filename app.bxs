@@ -37,6 +37,15 @@ r2Client = new models.util.R2Client(
 	getSystemSetting( "R2_PUBLIC_BASE_URL", "https://static.kisdigital.com" )
 )
 
+// Visitor-insights dashboard (/manage/insights) reads aggregated stats from
+// the same GoatCounter site the public pages already send pageviews to (see
+// the count script in views/partials/_foot.bxm). Optional, same pattern as
+// r2Client above: isConfigured() is false until both env vars are set.
+goatCounterClient = new models.util.GoatCounterClient(
+	getSystemSetting( "GOATCOUNTER_SITE", "" ),
+	getSystemSetting( "GOATCOUNTER_API_KEY", "" )
+)
+
 // ── Middleware ───────────────────────────────────────────────────────────
 app.use(
 	boxExpressJSON(),
@@ -112,7 +121,7 @@ app.use( new routes.Main( postService, authorService, siteDefaults ).router )
 app.use( new routes.Posts( postService, postRenderer, siteDefaults ).router )
 app.use( new routes.Tags( postService, siteDefaults ).router )
 app.use( new routes.Feeds( sitemapService ).router )
-app.use( new routes.Manage( authService, postService, authorService, settingsService, postRenderer, r2Client, getSystemSetting( "R2_UPLOAD_PREFIX", "posts" ) ).router )
+app.use( new routes.Manage( authService, postService, authorService, settingsService, postRenderer, r2Client, getSystemSetting( "R2_UPLOAD_PREFIX", "posts" ), goatCounterClient ).router )
 
 // ── 404 / 500 (themed, matching the site's own look) ────────────────────
 app.use( ( req, res ) => {

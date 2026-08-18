@@ -1,0 +1,171 @@
+<bx:include template="../../partials/_head.bxm">
+<bx:output>
+<div class="c-manage">
+
+	<!--- Sidebar nav --->
+	<bx:include template="../../partials/manageNav.bxm">
+
+	<!--- Main content --->
+	<main class="c-manage-main">
+
+		<div class="c-manage-header">
+			<div>
+				<h1 class="c-manage-header__title">Insights</h1>
+				<p class="c-manage-header__sub">Visitor stats from GoatCounter, last #data.daysBack# days.</p>
+			</div>
+		</div>
+
+		<bx:if !data.configured>
+			<div class="c-manage-alert c-manage-alert--error">
+				<i class="bi bi-exclamation-circle-fill"></i>
+				Insights aren't configured (missing GOATCOUNTER_SITE / GOATCOUNTER_API_KEY env vars).
+			</div>
+		<bx:else>
+
+			<div class="c-manage-dashboard__grid">
+
+				<!--- Hourly hits card --->
+				<section class="c-manage-dashboard__card c-manage-dashboard__card--hourly">
+					<div class="c-manage-dashboard__card-head">
+						<span class="c-manage-dashboard__icon"><i class="bi bi-bar-chart-line"></i></span>
+						<span class="c-manage-dashboard__eyebrow">Page hits &mdash; last 24 hours</span>
+					</div>
+					<bx:if isNull( data.hourlyHits )>
+						<p class="c-manage-dashboard__meta">Couldn't load this from GoatCounter &mdash; see server logs.</p>
+					<bx:elseif !data.hourlyHits.len()>
+						<p class="c-manage-dashboard__meta">No hourly data yet.</p>
+					<bx:else>
+						<div class="c-hourly-chart">
+							<canvas id="hourly-hits-chart" aria-label="Page hits over the last 24 hours" role="img"></canvas>
+						</div>
+						<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.0/chart.umd.min.js" integrity="sha512-Y51n9mtKTVBh3Jbx5pZSJNDDMyY+yGe77DGtBPzRlgsf/YLCh13kSZ3JmfHGzYFCmOndraf0sQgfM654b7dJ3w==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+						<script>
+						(function(){
+							var hourlyHits = #jsonSerialize( data.hourlyHits )#;
+							var labels = hourlyHits.map(function(row){
+								return new Date(row.hour).toLocaleTimeString([], { hour: 'numeric' });
+							});
+							var counts = hourlyHits.map(function(row){ return row.count; });
+
+							var styles = getComputedStyle(document.documentElement);
+							var lineColor = styles.getPropertyValue('--post-link-text').trim() || '##7c83fd';
+
+							new Chart(document.getElementById('hourly-hits-chart'), {
+								type: 'line',
+								data: {
+									labels: labels,
+									datasets: [{
+										data: counts,
+										borderColor: lineColor,
+										backgroundColor: lineColor + '33',
+										fill: true,
+										tension: 0.3,
+										pointRadius: 0,
+										borderWidth: 2
+									}]
+								},
+								options: {
+									responsive: true,
+									maintainAspectRatio: false,
+									plugins: { legend: { display: false } },
+									scales: {
+										x: { ticks: { maxTicksLimit: 8 }, grid: { display: false } },
+										y: { beginAtZero: true, ticks: { precision: 0 } }
+									}
+								}
+							});
+						})();
+						</script>
+					</bx:if>
+				</section>
+
+				<!--- Total visitors card --->
+				<section class="c-manage-dashboard__card c-manage-dashboard__card--total">
+					<div class="c-manage-dashboard__card-head">
+						<span class="c-manage-dashboard__icon"><i class="bi bi-people"></i></span>
+						<span class="c-manage-dashboard__eyebrow">Total visitors &mdash; last #data.daysBack# days</span>
+					</div>
+					<bx:if isNull( data.total )>
+						<p class="c-manage-dashboard__meta">Couldn't load this from GoatCounter &mdash; see server logs.</p>
+					<bx:else>
+						<h2 class="c-manage-dashboard__title">#numberFormat( data.total.total )#</h2>
+						<p class="c-manage-dashboard__meta">visitors across the site</p>
+					</bx:if>
+				</section>
+
+				<!--- Top pages card --->
+				<section class="c-manage-dashboard__card c-manage-dashboard__card--pages">
+					<div class="c-manage-dashboard__card-head">
+						<span class="c-manage-dashboard__icon"><i class="bi bi-file-earmark-text"></i></span>
+						<span class="c-manage-dashboard__eyebrow">Top pages</span>
+					</div>
+					<bx:if isNull( data.topPaths )>
+						<p class="c-manage-dashboard__meta">Couldn't load this from GoatCounter &mdash; see server logs.</p>
+					<bx:elseif !data.topPaths.len()>
+						<p class="c-manage-dashboard__meta">No visits recorded yet.</p>
+					<bx:else>
+						<ul class="c-dashboard-list">
+							<bx:loop array="#data.topPaths#" item="row">
+								<li class="c-dashboard-list__item">
+									<a href="#encodeForHTMLAttribute( row.path )#" class="c-dashboard-list__label c-dashboard-list__label--link" target="_blank" rel="noopener">
+										#encodeForHTML( len( row.title ) ? row.title : row.path )#
+									</a>
+									<span class="c-dashboard-list__meta">#numberFormat( row.count )#</span>
+								</li>
+							</bx:loop>
+						</ul>
+					</bx:if>
+				</section>
+
+				<!--- Top referrers card --->
+				<section class="c-manage-dashboard__card c-manage-dashboard__card--referrers">
+					<div class="c-manage-dashboard__card-head">
+						<span class="c-manage-dashboard__icon"><i class="bi bi-signpost-split"></i></span>
+						<span class="c-manage-dashboard__eyebrow">Top referrers</span>
+					</div>
+					<bx:if isNull( data.topReferrers )>
+						<p class="c-manage-dashboard__meta">Couldn't load this from GoatCounter &mdash; see server logs.</p>
+					<bx:elseif !data.topReferrers.len()>
+						<p class="c-manage-dashboard__meta">No referrer data yet.</p>
+					<bx:else>
+						<ul class="c-dashboard-list">
+							<bx:loop array="#data.topReferrers#" item="row">
+								<li class="c-dashboard-list__item">
+									<span class="c-dashboard-list__label">#encodeForHTML( row.name )#</span>
+									<span class="c-dashboard-list__meta">#numberFormat( row.count )#</span>
+								</li>
+							</bx:loop>
+						</ul>
+					</bx:if>
+				</section>
+
+				<!--- Locations card --->
+				<section class="c-manage-dashboard__card c-manage-dashboard__card--locations">
+					<div class="c-manage-dashboard__card-head">
+						<span class="c-manage-dashboard__icon"><i class="bi bi-globe"></i></span>
+						<span class="c-manage-dashboard__eyebrow">Visitor locations</span>
+					</div>
+					<bx:if isNull( data.locations )>
+						<p class="c-manage-dashboard__meta">Couldn't load this from GoatCounter &mdash; see server logs.</p>
+					<bx:elseif !data.locations.len()>
+						<p class="c-manage-dashboard__meta">No location data yet.</p>
+					<bx:else>
+						<ul class="c-dashboard-list">
+							<bx:loop array="#data.locations#" item="row">
+								<li class="c-dashboard-list__item">
+									<span class="c-dashboard-list__label">#encodeForHTML( row.name )#</span>
+									<span class="c-dashboard-list__meta">#numberFormat( row.count )#</span>
+								</li>
+							</bx:loop>
+						</ul>
+					</bx:if>
+				</section>
+
+			</div>
+
+		</bx:if>
+
+	</main>
+</div>
+</bx:output>
+<bx:include template="../../partials/_foot.bxm">

@@ -26,8 +26,9 @@ class {
 	variables.postRenderer    = "";
 	variables.r2Client        = "";
 	variables.r2UploadPrefix  = "posts";
+	variables.goatCounterClient = "";
 
-	function init( required authService, required postService, required authorService, required settingsService, required postRenderer, required r2Client, r2UploadPrefix = "posts" ){
+	function init( required authService, required postService, required authorService, required settingsService, required postRenderer, required r2Client, r2UploadPrefix = "posts", goatCounterClient = "" ){
 		variables.authService     = arguments.authService;
 		variables.postService     = arguments.postService;
 		variables.authorService   = arguments.authorService;
@@ -35,6 +36,7 @@ class {
 		variables.postRenderer    = arguments.postRenderer;
 		variables.r2UploadPrefix  = len( trim( arguments.r2UploadPrefix ) ) ? trim( arguments.r2UploadPrefix ).reReplace( "^/+|/+$", "", "all" ) : "posts";
 		variables.r2Client        = arguments.r2Client;
+		variables.goatCounterClient = arguments.goatCounterClient;
 
 		// Bare method references passed as route handlers lose their binding to
 		// this instance (BoxLang's Router ends up calling them unbound), so every
@@ -76,6 +78,8 @@ class {
 		this.router.get( "/manage/media", admin, ( req, res ) => mediaIndex( req, res ) );
 		this.router.get( "/manage/media/list-url", admin, ( req, res ) => mediaListUrl( req, res ) );
 		this.router.post( "/manage/media/upload-url", admin, ( req, res ) => mediaUploadUrl( req, res ) );
+
+		this.router.get( "/manage/insights", admin, ( req, res ) => insightsIndex( req, res ) );
 
 		return this;
 	}
@@ -678,6 +682,43 @@ class {
 			cleanSegments.append( s );
 		}
 		return cleanSegments.len() ? cleanSegments.toList( "/" ) & "/" : "";
+	}
+
+	// ── Visitor insights (GoatCounter) ──────────────────────────────────────
+
+	// GET /manage/insights — each card's own GoatCounter call is caught
+	// independently so one failing request (rate limit, a transient network
+	// blip, GoatCounter itself being down) degrades that one card instead of
+	// blanking the whole dashboard behind a 500.
+	function insightsIndex( req, res ){
+		var configured = variables.goatCounterClient.isConfigured();
+		var daysBack = 30;
+
+		res.render( "manage/insights/index", {
+			pageTitle      : "Insights",
+			manageSection  : "insights",
+			configured     : configured,
+			daysBack       : daysBack,
+			total          : configured ? insightsFetch( () => variables.goatCounterClient.getTotal( daysBack ) ) : javacast( "null", "" ),
+			topPaths       : configured ? insightsFetch( () => variables.goatCounterClient.getTopPaths( daysBack, 10 ) ) : javacast( "null", "" ),
+			topReferrers   : configured ? insightsFetch( () => variables.goatCounterClient.getTopReferrers( daysBack, 10 ) ) : javacast( "null", "" ),
+			locations      : configured ? insightsFetch( () => variables.goatCounterClient.getLocations( daysBack, 8 ) ) : javacast( "null", "" ),
+			hourlyHits     : configured ? insightsFetch( () => variables.goatCounterClient.getLast24HoursHits() ) : javacast( "null", "" )
+		} );
+	}
+
+	/**
+	 * Runs a single GoatCounter call, logging and swallowing any failure so
+	 * the caller gets a safe fallback (null by default, or the given one)
+	 * instead of an exception — see insightsIndex()'s per-card isolation.
+	 */
+	private function insightsFetch( required fetchFn, fallback = javacast( "null", "" ) ){
+		try {
+			return arguments.fetchFn();
+		} catch ( any e ) {
+			println( "[error] GoatCounter insights fetch failed: " & e.message );
+			return arguments.fallback;
+		}
 	}
 
 }

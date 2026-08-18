@@ -1,0 +1,163 @@
+/**
+ * Reads aggregated visitor stats from the GoatCounter API for the
+ * /manage/insights dashboard — the same GoatCounter site the public pages
+ * already send pageviews to (see views/partials/_foot.bxm's count script).
+ *
+ * Unlike R2Client, this does make the HTTP call itself rather than handing
+ * back a presigned URL: GoatCounter's API is authenticated with a static
+ * bearer token that would otherwise have to be embedded in browser-side JS
+ * to call it directly, exposing it to anyone who opens dev tools. R2's
+ * presigned-URL approach exists because AWS SigV4 lets a *short-lived,
+ * scoped* signature be handed to the browser without exposing the long-lived
+ * secret key — GoatCounter's API has no equivalent, so the request has to
+ * happen server-side. bx:http worked reliably against R2 in local dev but
+ * failed unpredictably in DigitalOcean App Platform's x86_64 production
+ * environment (see R2Client's own notes) — if the same turns out to be true
+ * here, every method below fails closed (caught by the route handler, shown
+ * as an empty/error state) rather than 500ing the whole dashboard.
+ */
+class {
+
+	variables.site   = "";
+	variables.apiKey = "";
+
+	function init( required string site, required string apiKey ){
+		variables.site   = trim( arguments.site );
+		variables.apiKey = trim( arguments.apiKey );
+		return this;
+	}
+
+	function isConfigured(){
+		return len( variables.site ) > 0 && len( variables.apiKey ) > 0;
+	}
+
+	/**
+	 * Total visitor count over the last N days.
+	 * @return {struct} { total, totalEvents }
+	 */
+	function getTotal( numeric daysBack = 30 ){
+		var json = _get( "/stats/total", _rangeParams( arguments.daysBack ) );
+		return { "total": json.total ?: 0, "totalEvents": json.total_events ?: 0 };
+	}
+
+	/**
+	 * Per-path visitor counts over the last N days, highest first (GoatCounter
+	 * already returns them sorted that way).
+	 * @return {array} of { path, title, count }
+	 */
+	function getTopPaths( numeric daysBack = 30, numeric limit = 10 ){
+		var params = _rangeParams( arguments.daysBack );
+		params[ "limit" ] = arguments.limit;
+		var json = _get( "/stats/hits", params );
+		var rows = [];
+		for ( var hit in ( json.hits ?: [] ) ){
+			rows.append( { "path": hit.path ?: "", "title": hit.title ?: "", "count": hit.count ?: 0 } );
+		}
+		return rows;
+	}
+
+	/**
+	 * Top referrers over the last N days.
+	 * @return {array} of { name, count }
+	 */
+	function getTopReferrers( numeric daysBack = 30, numeric limit = 10 ){
+		return _getStatsPage( "toprefs", arguments.daysBack, arguments.limit );
+	}
+
+	/**
+	 * Visitor counts by country over the last N days.
+	 * @return {array} of { name, count }
+	 */
+	function getLocations( numeric daysBack = 30, numeric limit = 10 ){
+		return _getStatsPage( "locations", arguments.daysBack, arguments.limit );
+	}
+
+	/**
+	 * Hit counts for each of the last 24 hours, oldest first — GoatCounter's
+	 * API has no rolling-window endpoint of its own, only calendar-day
+	 * buckets (UTC) that each carry a 24-entry hourly breakdown (see the
+	 * /stats/total response shape). This fetches 2 days back — always at
+	 * least 48 hourly buckets, so there's a full 24 to take regardless of
+	 * what the current UTC hour is — flattens them into one chronological
+	 * list, and keeps just the trailing 24.
+	 * @return {array} of { hour: ISO-8601 UTC timestamp, count }
+	 */
+	function getLast24HoursHits(){
+		var json = _get( "/stats/total", _rangeParams( 2 ) );
+		var flatHours = [];
+		for ( var dayEntry in ( json.stats ?: [] ) ){
+			var hourly = dayEntry.hourly ?: [];
+			for ( var h = 1; h <= hourly.len(); h++ ){
+				flatHours.append( { "hour": dayEntry.day & "T" & right( "0" & ( h - 1 ), 2 ) & ":00:00Z", "count": hourly[ h ] } );
+			}
+		}
+
+		// GoatCounter always pads its response out to whole UTC calendar
+		// days, so today's bucket includes hours that haven't happened yet
+		// (legitimately 0, but not part of "the last 24 hours" — they're in
+		// the future). Drop anything past the current UTC hour before
+		// taking the trailing 24, or a request made at, say, 08:00 UTC
+		// would return today's first 8 real hours padded out with 16 hours
+		// of not-yet-happened zeros instead of yesterday's remaining hours.
+		var currentHourBoundary = dateTimeFormat( dateConvert( "local2utc", now() ), "yyyy-mm-dd'T'HH:00:00'Z'" );
+		var pastHours = [];
+		for ( var entry in flatHours ){
+			if ( entry.hour <= currentHourBoundary ){
+				pastHours.append( entry );
+			}
+		}
+
+		var startIdx = max( 1, pastHours.len() - 24 + 1 );
+		var last24 = [];
+		for ( var i = startIdx; i <= pastHours.len(); i++ ){
+			last24.append( pastHours[ i ] );
+		}
+		return last24;
+	}
+
+	private function _getStatsPage( required string page, required numeric daysBack, required numeric limit ){
+		var params = _rangeParams( arguments.daysBack );
+		params[ "limit" ] = arguments.limit;
+		var json = _get( "/stats/" & arguments.page, params );
+		var rows = [];
+		for ( var row in ( json.stats ?: [] ) ){
+			// An empty referrer name means "direct" (no Referer header sent) —
+			// GoatCounter itself leaves this blank rather than labeling it.
+			var name = len( trim( row.name ?: "" ) ) ? row.name : "(direct)";
+			rows.append( { "name": name, "count": row.count ?: 0 } );
+		}
+		return rows;
+	}
+
+	private function _rangeParams( required numeric daysBack ){
+		var nowUtc = dateConvert( "local2utc", now() );
+		return {
+			"start": dateTimeFormat( dateAdd( "d", -arguments.daysBack, nowUtc ), "yyyy-mm-dd'T'HH:nn:ss'Z'" ),
+			"end"  : dateTimeFormat( nowUtc, "yyyy-mm-dd'T'HH:nn:ss'Z'" )
+		};
+	}
+
+	private function _get( required string path, struct queryParams = {} ){
+		var url = "https://" & variables.site & ".goatcounter.com/api/v0" & arguments.path;
+		if ( !arguments.queryParams.isEmpty() ){
+			var parts = [];
+			for ( var key in arguments.queryParams ){
+				parts.append( urlEncodedFormat( key ) & "=" & urlEncodedFormat( toString( arguments.queryParams[ key ] ) ) );
+			}
+			url &= "?" & parts.toList( "&" );
+		}
+
+		var httpResult = "";
+		bx:http url="#url#" method="GET" result="httpResult" timeout=10 {
+			bx:httpparam type="header" name="Authorization" value="Bearer #variables.apiKey#";
+			bx:httpparam type="header" name="Content-Type" value="application/json";
+		}
+
+		if ( httpResult.status_code != 200 ){
+			throw( type: "GoatCounterClient.RequestFailed", message: "GoatCounter API returned " & httpResult.statusCode & " for " & arguments.path );
+		}
+
+		return jsonDeserialize( httpResult.fileContent );
+	}
+
+}

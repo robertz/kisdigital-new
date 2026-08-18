@@ -1923,6 +1923,17 @@
 	grid-column: 1 / -1;
 }
 
+/* ── Hourly hits chart card ── */
+
+.c-manage-dashboard__card--hourly {
+	grid-column: 1 / -1;
+}
+
+.c-hourly-chart {
+	position: relative;
+	height: 220px;
+}
+
 .c-dashboard-sparkline {
 	display: flex;
 	align-items: center;
