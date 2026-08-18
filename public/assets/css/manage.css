@@ -344,6 +344,33 @@
 	color: #1d4ed8;
 }
 
+/* HTTP status classes, request log table (views/manage/logs/index.bxm) */
+
+.c-status-badge--2xx {
+	background: rgba(34, 197, 94, 0.12);
+	color: #15803d;
+}
+
+.c-status-badge--3xx {
+	background: rgba(59, 130, 246, 0.12);
+	color: #1d4ed8;
+}
+
+.c-status-badge--4xx {
+	background: rgba(245, 158, 11, 0.14);
+	color: #b45309;
+}
+
+.c-status-badge--5xx {
+	background: rgba(239, 68, 68, 0.14);
+	color: #b91c1c;
+}
+
+.c-status-badge--unknown {
+	background: var(--ui-surface-2);
+	color: var(--text-secondary);
+}
+
 /* ── Admin form ── */
 
 .c-manage-form {
@@ -1823,7 +1850,7 @@
 	color: var(--site-background-color);
 }
 
-.c-manage-posts__panel {
+.c-manage-panel {
 	background: var(--ui-surface-1);
 	border: 1px solid var(--ui-border-subtle);
 	border-radius: var(--ui-radius-md);
@@ -1832,12 +1859,12 @@
 	transition: opacity 160ms ease;
 }
 
-.c-manage-posts__panel.is-loading {
+.c-manage-panel.is-loading {
 	opacity: 0.55;
 	pointer-events: none;
 }
 
-.c-manage-posts__cell-muted {
+.c-manage-table__cell-muted {
 	color: var(--text-secondary);
 	font-family: var(--font-mono);
 	font-size: 0.8125rem;
@@ -1864,7 +1891,7 @@
 	background: color-mix(in srgb, var(--post-link-text) 8%, var(--ui-surface-2));
 }
 
-.c-manage-posts__footer {
+.c-manage-panel__footer {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
@@ -1874,17 +1901,17 @@
 	background: var(--ui-surface-2);
 }
 
-.c-manage-posts__page-info {
+.c-manage-panel__page-info {
 	font-size: 0.8125rem;
 	color: var(--text-secondary);
 }
 
-.c-manage-posts__page-info strong {
+.c-manage-panel__page-info strong {
 	color: var(--post-anchor);
 	font-weight: 700;
 }
 
-.c-manage-posts__empty {
+.c-manage-panel__empty {
 	display: flex;
 	flex-direction: column;
 	align-items: center;
@@ -1896,32 +1923,192 @@
 	text-align: center;
 }
 
-.c-manage-posts__empty i {
+.c-manage-panel__empty i {
 	font-size: 2.25rem;
 	color: var(--post-link-text);
 	opacity: 0.85;
 }
 
-.c-manage-posts__empty h2 {
+.c-manage-panel__empty h2 {
 	font-size: 1.1rem;
 	font-weight: 700;
 	color: var(--post-anchor);
 	margin: 0;
 }
 
-.c-manage-posts__empty p {
+.c-manage-panel__empty p {
 	font-size: 0.875rem;
 	color: var(--text-secondary);
 	margin: 0 0 var(--space-2);
 }
 
 @media (prefers-color-scheme: dark) {
-	html:not([data-theme="light"]) .c-manage-posts__panel { background: var(--ui-surface-1); }
-	html:not([data-theme="light"]) .c-manage-posts__footer { background: var(--ui-surface-2); }
+	html:not([data-theme="light"]) .c-manage-panel { background: var(--ui-surface-1); }
+	html:not([data-theme="light"]) .c-manage-panel__footer { background: var(--ui-surface-2); }
 }
 
-[data-theme="dark"] .c-manage-posts__panel { background: var(--ui-surface-1); }
-[data-theme="dark"] .c-manage-posts__footer { background: var(--ui-surface-2); }
+[data-theme="dark"] .c-manage-panel { background: var(--ui-surface-1); }
+[data-theme="dark"] .c-manage-panel__footer { background: var(--ui-surface-2); }
+
+/* ── Request log (views/manage/logs/index.bxm) ── */
+
+.c-log-search {
+	position: relative;
+	display: flex;
+	align-items: center;
+	flex-shrink: 0;
+}
+
+.c-log-search__icon {
+	position: absolute;
+	left: var(--space-3);
+	color: var(--text-secondary);
+	font-size: 0.8125rem;
+	pointer-events: none;
+}
+
+.c-log-search__input {
+	width: 240px;
+	padding: 9px var(--space-3) 9px calc(var(--space-3) + 20px);
+	background: var(--ui-surface-1);
+	border: 1px solid var(--ui-border-subtle);
+	border-radius: var(--ui-radius-sm);
+	color: var(--post-anchor);
+	font-size: 0.8125rem;
+	transition: border-color 120ms ease;
+}
+
+.c-log-search__input:focus {
+	outline: none;
+	border-color: var(--post-link-text);
+}
+
+.c-log-search__clear {
+	position: absolute;
+	right: var(--space-2);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 22px;
+	height: 22px;
+	border-radius: 50%;
+	color: var(--text-secondary);
+	font-size: 0.6875rem;
+	text-decoration: none;
+}
+
+.c-log-search__clear:hover {
+	background: var(--ui-surface-2);
+	color: var(--post-anchor);
+}
+
+.c-log-table {
+	table-layout: fixed;
+}
+
+/* Two classes for specificity — needs to beat the mobile media query's
+   .c-manage-table { min-width: 540px } a few hundred lines down, not just
+   lose to it on source order. Below this, the fixed columns' widths outgrow
+   the viewport and the "auto" Path column has nothing left to size itself
+   with — min-width forces the wrapper to scroll horizontally (see
+   .c-manage-table-wrap's own mobile rule) instead of every column
+   collapsing into overlapping text. */
+.c-manage-table.c-log-table {
+	min-width: 900px;
+}
+
+.c-log-table th:nth-child(1) { width: 130px; }
+.c-log-table th:nth-child(2) { width: 70px; }
+.c-log-table th:nth-child(3) { width: auto; }
+.c-log-table th:nth-child(4) { width: 70px; }
+.c-log-table th:nth-child(5) { width: 80px; }
+.c-log-table th:nth-child(6) { width: 110px; }
+.c-log-table th:nth-child(7) { width: 15%; }
+.c-log-table th:nth-child(8) { width: 18%; }
+
+.c-log-table__nowrap {
+	white-space: nowrap;
+}
+
+.c-log-table__time {
+	display: block;
+	font-size: 0.75rem;
+	opacity: 0.75;
+}
+
+.c-log-table__path {
+	font-family: var(--font-mono);
+	font-size: 0.8125rem;
+	color: var(--post-anchor);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	max-width: 0; /* forces the table-layout:fixed column to actually clip */
+}
+
+.c-log-table__truncate {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	max-width: 0;
+}
+
+.c-log-method {
+	display: inline-block;
+	padding: 2px 8px;
+	border-radius: var(--ui-radius-sm);
+	background: var(--ui-surface-2);
+	color: var(--text-secondary);
+	font-family: var(--font-mono);
+	font-size: 0.6875rem;
+	font-weight: 700;
+	letter-spacing: 0.02em;
+}
+
+.c-log-method--get {
+	background: rgba(59, 130, 246, 0.12);
+	color: #1d4ed8;
+}
+
+.c-log-method--post {
+	background: rgba(34, 197, 94, 0.12);
+	color: #15803d;
+}
+
+.c-log-method--put,
+.c-log-method--patch {
+	background: rgba(245, 158, 11, 0.14);
+	color: #b45309;
+}
+
+.c-log-method--delete {
+	background: rgba(239, 68, 68, 0.14);
+	color: #b91c1c;
+}
+
+@media (prefers-color-scheme: dark) {
+	html:not([data-theme="light"]) .c-log-method--get { color: #93c5fd; }
+	html:not([data-theme="light"]) .c-log-method--post { color: #86efac; }
+	html:not([data-theme="light"]) .c-log-method--put,
+	html:not([data-theme="light"]) .c-log-method--patch { color: #fcd34d; }
+	html:not([data-theme="light"]) .c-log-method--delete { color: #fca5a5; }
+}
+
+[data-theme="dark"] .c-log-method--get { color: #93c5fd; }
+[data-theme="dark"] .c-log-method--post { color: #86efac; }
+[data-theme="dark"] .c-log-method--put,
+[data-theme="dark"] .c-log-method--patch { color: #fcd34d; }
+[data-theme="dark"] .c-log-method--delete { color: #fca5a5; }
+
+@media (max-width: 1023.98px) {
+	.c-log-search__input {
+		width: 100%;
+	}
+
+	.c-log-search {
+		width: 100%;
+	}
+}
 
 /* ── Dashboard home ── */
 
@@ -2301,14 +2488,14 @@
 		padding: var(--space-4);
 	}
 
-	.c-manage-posts__footer {
+	.c-manage-panel__footer {
 		flex-direction: column;
 		align-items: stretch;
 		gap: var(--space-3);
 		padding: var(--space-4);
 	}
 
-	.c-manage-posts__page-info {
+	.c-manage-panel__page-info {
 		text-align: center;
 	}
 }
@@ -2325,6 +2512,10 @@
 	html:not([data-theme="light"]) .c-manage-alert--draft { color: #93c5fd; }
 	html:not([data-theme="light"]) .c-status-badge--published { color: #86efac; }
 	html:not([data-theme="light"]) .c-status-badge--scheduled { color: #93c5fd; }
+	html:not([data-theme="light"]) .c-status-badge--2xx { color: #86efac; }
+	html:not([data-theme="light"]) .c-status-badge--3xx { color: #93c5fd; }
+	html:not([data-theme="light"]) .c-status-badge--4xx { color: #fcd34d; }
+	html:not([data-theme="light"]) .c-status-badge--5xx { color: #fca5a5; }
 	html:not([data-theme="light"]) .c-post-editor__cover-upload-status--error { color: #fca5a5; }
 }
 
@@ -2337,4 +2528,8 @@
 [data-theme="dark"] .c-manage-alert--draft { color: #93c5fd; }
 [data-theme="dark"] .c-status-badge--published { color: #86efac; }
 [data-theme="dark"] .c-status-badge--scheduled { color: #93c5fd; }
+[data-theme="dark"] .c-status-badge--2xx { color: #86efac; }
+[data-theme="dark"] .c-status-badge--3xx { color: #93c5fd; }
+[data-theme="dark"] .c-status-badge--4xx { color: #fcd34d; }
+[data-theme="dark"] .c-status-badge--5xx { color: #fca5a5; }
 [data-theme="dark"] .c-post-editor__cover-upload-status--error { color: #fca5a5; }

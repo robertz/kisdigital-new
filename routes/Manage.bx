@@ -80,6 +80,7 @@ class {
 		this.router.post( "/manage/media/upload-url", admin, ( req, res ) => mediaUploadUrl( req, res ) );
 
 		this.router.get( "/manage/insights", admin, ( req, res ) => insightsIndex( req, res ) );
+		this.router.get( "/manage/logs", admin, ( req, res ) => logsIndex( req, res ) );
 
 		return this;
 	}
@@ -707,6 +708,21 @@ class {
 			println( "[error] Insights fetch failed: " & e.message );
 			return arguments.fallback;
 		}
+	}
+
+	// GET /manage/logs — raw RequestLog browser, newest first. Separate from
+	// /manage/insights: insights is filtered/aggregated visitor analytics,
+	// this is an unfiltered access-log viewer for debugging and auditing.
+	function logsIndex( req, res ){
+		var rawPage     = req.query.page ?: "";
+		var currentPage = isNumeric( rawPage ) && rawPage > 0 ? int( rawPage ) : 1;
+		var pathFilter  = trim( req.query.q ?: "" );
+
+		res.render( "manage/logs/index", {
+			pageTitle     : "Request Log",
+			manageSection : "logs",
+			paging        : variables.insightsService.getRecentRequests( currentPage, 50, pathFilter )
+		} );
 	}
 
 }

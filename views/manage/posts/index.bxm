@@ -33,7 +33,7 @@
 
 			<bx:if !data.paging.posts.len()>
 
-				<div class="c-manage-posts__empty">
+				<div class="c-manage-panel__empty">
 					<i class="bi bi-journal-text"></i>
 					<h2>No posts yet</h2>
 					<p>Your first post is a button click away.</p>
@@ -44,7 +44,7 @@
 
 			<bx:else>
 
-				<div class="c-manage-posts__panel">
+				<div class="c-manage-panel">
 					<div class="c-manage-table-wrap">
 						<table class="c-manage-table">
 							<thead>
@@ -104,15 +104,15 @@
 												<i class="bi #( post.getFeatured() ? 'bi-star-fill text-warning' : 'bi-star text-muted' )#"></i>
 											</bx:if>
 										</td>
-										<td class="c-manage-posts__cell-muted">
+										<td class="c-manage-table__cell-muted">
 											<bx:if len( post.getPublishDate() ) && isDate( post.getPublishDate() )>
 												#dateFormat( post.getPublishDate(), "d mmm yyyy" )#
 											<bx:else>
 												—
 											</bx:if>
 										</td>
-										<td class="c-manage-posts__cell-muted">#encodeForHTML( post.getAuthorName() )#</td>
-										<td class="c-manage-posts__cell-muted">#numberFormat( post.getViews() )#</td>
+										<td class="c-manage-table__cell-muted">#encodeForHTML( post.getAuthorName() )#</td>
+										<td class="c-manage-table__cell-muted">#numberFormat( post.getViews() )#</td>
 										<td>
 											<a href="/manage/posts/#encodeForURL( post.getId() )#/edit" class="c-manage-posts__edit">
 												<i class="bi bi-pencil"></i> Edit
@@ -125,8 +125,8 @@
 					</div>
 
 					<bx:if data.paging.totalPages gt 1>
-						<footer class="c-manage-posts__footer">
-							<span class="c-manage-posts__page-info">
+						<footer class="c-manage-panel__footer">
+							<span class="c-manage-panel__page-info">
 								Page <strong>#data.paging.page#</strong> of <strong>#data.paging.totalPages#</strong>
 							</span>
 							<div class="c-pagination">

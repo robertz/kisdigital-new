@@ -123,6 +123,58 @@ class {
 		);
 	}
 
+	/**
+	 * Paginated, unfiltered raw log rows for the /manage/logs browser —
+	 * every request this server handled, newest first, none of the
+	 * bot/asset/admin filtering the aggregate methods above apply. That
+	 * filtering exists to keep visitor-traffic stats honest; a raw log
+	 * browser's entire purpose is to show what actually happened,
+	 * unfiltered, so it deliberately skips _where()/_params() and queries
+	 * RequestLog directly.
+	 *
+	 * @param {string} pathFilter - Optional substring match against path,
+	 *        case-insensitive per this table's collation. Empty = no filter.
+	 * @return {struct} { rows, total, page, pageSize, totalPages }
+	 */
+	function getRecentRequests( numeric page = 1, numeric pageSize = 50, string pathFilter = "" ){
+		var safePageSize = arguments.pageSize;
+		var offset        = ( arguments.page - 1 ) * safePageSize;
+		var hasFilter      = len( trim( arguments.pathFilter ) ) > 0;
+		var likeParam      = { value: "%" & trim( arguments.pathFilter ) & "%", cfsqltype: "cf_sql_varchar" };
+
+		var total = queryExecute(
+			"SELECT COUNT(*) AS cnt FROM RequestLog" & ( hasFilter ? " WHERE path LIKE :path" : "" ),
+			hasFilter ? { "path": likeParam } : {},
+			{ returnType: "array" }
+		)[ 1 ].cnt;
+
+		var params = {
+			"lim"   : { value: safePageSize, cfsqltype: "cf_sql_integer" },
+			"offset": { value: offset,       cfsqltype: "cf_sql_integer" }
+		};
+		if ( hasFilter ) {
+			params[ "path" ] = likeParam;
+		}
+
+		var rows = queryExecute(
+			"SELECT id, requested_at, method, path, query_string, status_code, duration_ms, ip_address, referrer, user_agent
+			FROM RequestLog" & ( hasFilter ? " WHERE path LIKE :path" : "" ) & "
+			ORDER BY requested_at DESC, id DESC
+			LIMIT :lim OFFSET :offset",
+			params,
+			{ returnType: "array" }
+		);
+
+		return {
+			"rows"      : rows,
+			"total"     : total,
+			"page"      : arguments.page,
+			"pageSize"  : safePageSize,
+			"totalPages": ceiling( max( total, 1 ) / safePageSize ),
+			"pathFilter": arguments.pathFilter
+		};
+	}
+
 	private function _where(){
 		return "
 			requested_at >= DATE_SUB(NOW(), INTERVAL :days DAY)

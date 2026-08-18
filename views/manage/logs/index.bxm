@@ -1,0 +1,165 @@
+<bx:include template="../../partials/_head.bxm">
+<bx:output>
+<div class="c-manage">
+
+	<!--- Sidebar nav --->
+	<bx:include template="../../partials/manageNav.bxm">
+
+	<!--- Main content --->
+	<main class="c-manage-main">
+
+		<div class="c-manage-posts">
+
+			<div class="c-manage-header">
+				<div class="c-manage-header__lead">
+					<span class="c-manage-header__eyebrow">Operations</span>
+					<h1 class="c-manage-header__title">
+						Request Log
+						<span class="c-manage-header__count">#numberFormat( data.paging.total )#</span>
+					</h1>
+					<p class="c-manage-header__sub">Every request this server has handled, newest first.</p>
+				</div>
+				<form method="get" action="/manage/logs" class="c-log-search">
+					<i class="bi bi-search c-log-search__icon"></i>
+					<input
+						type="text"
+						name="q"
+						value="#encodeForHTMLAttribute( data.paging.pathFilter )#"
+						placeholder="Filter by path…"
+						class="c-log-search__input">
+					<bx:if len( data.paging.pathFilter )>
+						<a href="/manage/logs" class="c-log-search__clear" title="Clear filter">
+							<i class="bi bi-x-lg"></i>
+						</a>
+					</bx:if>
+				</form>
+			</div>
+
+			<bx:if !data.paging.rows.len()>
+
+				<div class="c-manage-panel__empty">
+					<i class="bi bi-clipboard-data"></i>
+					<bx:if len( data.paging.pathFilter )>
+						<h2>No matching requests</h2>
+						<p>Nothing logged for paths containing "#encodeForHTML( data.paging.pathFilter )#".</p>
+					<bx:else>
+						<h2>No requests logged yet</h2>
+						<p>Traffic will start showing up here as soon as this server handles a request.</p>
+					</bx:if>
+				</div>
+
+			<bx:else>
+
+				<div class="c-manage-panel">
+					<div class="c-manage-table-wrap">
+						<table class="c-manage-table c-log-table">
+							<thead>
+								<tr>
+									<th>Time</th>
+									<th>Method</th>
+									<th>Path</th>
+									<th>Status</th>
+									<th>Duration</th>
+									<th>IP</th>
+									<th>Referrer</th>
+									<th>User agent</th>
+								</tr>
+							</thead>
+							<tbody>
+								<bx:loop array="#data.paging.rows#" item="row">
+									<tr>
+										<td class="c-manage-table__cell-muted c-log-table__nowrap">
+											#dateFormat( row.requested_at, "mmm d" )#
+											<span class="c-log-table__time">#dateTimeFormat( row.requested_at, "h:nn:ss tt" )#</span>
+										</td>
+										<td>
+											<span class="c-log-method c-log-method--#lCase( row.method )#">#encodeForHTML( row.method )#</span>
+										</td>
+										<td class="c-log-table__path" title="#encodeForHTMLAttribute( row.path & ( len( row.query_string ) ? '?' & row.query_string : '' ) )#">
+											#encodeForHTML( row.path )#
+											<bx:if len( row.query_string )>
+												<span class="c-manage-table__cell-muted">?#encodeForHTML( left( row.query_string, 40 ) )##( len( row.query_string ) > 40 ? '…' : '' )#</span>
+											</bx:if>
+										</td>
+										<td>
+											<bx:if isNull( row.status_code )>
+												<span class="c-status-badge c-status-badge--unknown">—</span>
+											<bx:elseif row.status_code < 300>
+												<span class="c-status-badge c-status-badge--2xx">#row.status_code#</span>
+											<bx:elseif row.status_code < 400>
+												<span class="c-status-badge c-status-badge--3xx">#row.status_code#</span>
+											<bx:elseif row.status_code < 500>
+												<span class="c-status-badge c-status-badge--4xx">#row.status_code#</span>
+											<bx:else>
+												<span class="c-status-badge c-status-badge--5xx">#row.status_code#</span>
+											</bx:if>
+										</td>
+										<td class="c-manage-table__cell-muted c-log-table__nowrap">#numberFormat( row.duration_ms )# ms</td>
+										<td class="c-manage-table__cell-muted c-log-table__nowrap">#encodeForHTML( row.ip_address )#</td>
+										<td class="c-manage-table__cell-muted c-log-table__truncate" title="#encodeForHTMLAttribute( row.referrer )#">
+											#encodeForHTML( len( row.referrer ) ? row.referrer : '—' )#
+										</td>
+										<td class="c-manage-table__cell-muted c-log-table__truncate" title="#encodeForHTMLAttribute( row.user_agent )#">
+											#encodeForHTML( len( row.user_agent ) ? row.user_agent : '—' )#
+										</td>
+									</tr>
+								</bx:loop>
+							</tbody>
+						</table>
+					</div>
+
+					<bx:if data.paging.totalPages gt 1>
+						<bx:set qs = len( data.paging.pathFilter ) ? "q=" & encodeForURL( data.paging.pathFilter ) & "&" : "">
+						<!--- Windowed, not a link per page like the (small, bounded) Posts
+						list — a log this size can run to hundreds of pages. --->
+						<bx:set winStart = max( 1, data.paging.page - 2 )>
+						<bx:set winEnd   = min( data.paging.totalPages, data.paging.page + 2 )>
+						<footer class="c-manage-panel__footer">
+							<span class="c-manage-panel__page-info">
+								Page <strong>#data.paging.page#</strong> of <strong>#data.paging.totalPages#</strong>
+							</span>
+							<div class="c-pagination">
+								<bx:if data.paging.page gt 1>
+									<a class="c-pagination__btn" href="/manage/logs?#qs#page=#data.paging.page - 1#" aria-label="Previous page">
+										<i class="bi bi-chevron-left"></i>
+									</a>
+								<bx:else>
+									<span class="c-pagination__btn c-pagination__btn--disabled"><i class="bi bi-chevron-left"></i></span>
+								</bx:if>
+
+								<bx:if winStart gt 1>
+									<a class="c-pagination__btn" href="/manage/logs?#qs#page=1">1</a>
+									<bx:if winStart gt 2><span class="c-pagination__ellipsis">…</span></bx:if>
+								</bx:if>
+
+								<bx:loop from="#winStart#" to="#winEnd#" index="pg">
+									<a class="c-pagination__btn #pg == data.paging.page ? 'c-pagination__btn--active' : ''#" href="/manage/logs?#qs#page=#pg#">
+										#pg#
+									</a>
+								</bx:loop>
+
+								<bx:if winEnd lt data.paging.totalPages>
+									<bx:if winEnd lt data.paging.totalPages - 1><span class="c-pagination__ellipsis">…</span></bx:if>
+									<a class="c-pagination__btn" href="/manage/logs?#qs#page=#data.paging.totalPages#">#data.paging.totalPages#</a>
+								</bx:if>
+
+								<bx:if data.paging.page lt data.paging.totalPages>
+									<a class="c-pagination__btn" href="/manage/logs?#qs#page=#data.paging.page + 1#" aria-label="Next page">
+										<i class="bi bi-chevron-right"></i>
+									</a>
+								<bx:else>
+									<span class="c-pagination__btn c-pagination__btn--disabled"><i class="bi bi-chevron-right"></i></span>
+								</bx:if>
+							</div>
+						</footer>
+					</bx:if>
+				</div>
+
+			</bx:if>
+
+		</div>
+
+	</main>
+</div>
+</bx:output>
+<bx:include template="../../partials/_foot.bxm">

@@ -456,6 +456,15 @@
 	pointer-events: none;
 }
 
+.c-pagination__ellipsis {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 24px;
+	height: 36px;
+	color: var(--text-secondary);
+}
+
 /* ── Responsive ── */
 
 @media (max-width: 575.98px) {
