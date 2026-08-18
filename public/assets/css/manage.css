@@ -1594,6 +1594,147 @@
 	color: var(--text-secondary);
 }
 
+/* ── Media carousel (lightbox) ──
+   Deliberately theme-independent (always dark): this is a spotlight over
+   the image, not a themed surface, so it stays consistent in light mode too. */
+
+.c-media-carousel {
+	position: fixed;
+	inset: 0;
+	z-index: 1100;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	animation: c-media-carousel-fade-in 180ms ease;
+}
+
+@keyframes c-media-carousel-fade-in {
+	from { opacity: 0; }
+	to { opacity: 1; }
+}
+
+.c-media-carousel__backdrop {
+	position: absolute;
+	inset: 0;
+	background: radial-gradient(ellipse at center, rgba(12, 12, 16, 0.88) 0%, rgba(4, 4, 6, 0.97) 75%);
+	-webkit-backdrop-filter: blur(8px);
+	backdrop-filter: blur(8px);
+}
+
+.c-media-carousel__chrome {
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	z-index: 2;
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: var(--space-3);
+	padding: var(--space-4) var(--space-4) 0 0;
+}
+
+.c-media-carousel__counter {
+	font-family: var(--font-mono);
+	font-size: 0.75rem;
+	letter-spacing: 0.04em;
+	color: rgba(255, 255, 255, 0.45);
+}
+
+.c-media-carousel__figure {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: var(--space-4);
+	max-width: min(94vw, 1400px);
+	max-height: 94vh;
+	margin: 0;
+	padding: var(--space-6) var(--space-6) var(--space-5);
+}
+
+.c-media-carousel__img {
+	display: block;
+	max-width: 100%;
+	max-height: 82vh;
+	object-fit: contain;
+	border-radius: var(--ui-radius-md);
+	box-shadow: 0 40px 100px -24px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.06);
+	transition: opacity 150ms ease, transform 150ms ease;
+}
+
+.c-media-carousel__img--loading {
+	opacity: 0;
+	transform: scale(0.985);
+}
+
+.c-media-carousel__caption {
+	max-width: 100%;
+	padding: var(--space-1) var(--space-3);
+	background: rgba(255, 255, 255, 0.06);
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	border-radius: 999px;
+	color: rgba(255, 255, 255, 0.55);
+	font-family: var(--font-mono);
+	font-size: 0.75rem;
+	word-break: break-all;
+	text-align: center;
+}
+
+.c-media-carousel__close,
+.c-media-carousel__nav {
+	position: relative;
+	z-index: 2;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 40px;
+	height: 40px;
+	border: 1px solid rgba(255, 255, 255, 0.12);
+	border-radius: 50%;
+	background: rgba(255, 255, 255, 0.06);
+	color: rgba(255, 255, 255, 0.7);
+	font-size: 1rem;
+	cursor: pointer;
+	transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.c-media-carousel__close:hover,
+.c-media-carousel__nav:hover {
+	background: rgba(255, 255, 255, 0.14);
+	border-color: rgba(255, 255, 255, 0.22);
+	color: #fff;
+}
+
+.c-media-carousel__close:focus-visible,
+.c-media-carousel__nav:focus-visible {
+	outline: 2px solid rgba(255, 255, 255, 0.6);
+	outline-offset: 2px;
+}
+
+.c-media-carousel__nav {
+	position: absolute;
+	top: 50%;
+	transform: translateY(-50%);
+}
+
+.c-media-carousel__nav--prev {
+	left: var(--space-4);
+}
+
+.c-media-carousel__nav--next {
+	right: var(--space-4);
+}
+
+@media (max-width: 640px) {
+	.c-media-carousel__figure {
+		padding: var(--space-5) var(--space-4) var(--space-4);
+	}
+
+	.c-media-carousel__nav--prev { left: var(--space-2); }
+	.c-media-carousel__nav--next { right: var(--space-2); }
+}
+
 @media (max-width: 1023.98px) {
 	.c-post-editor__grid {
 		grid-template-columns: 1fr;

@@ -172,20 +172,30 @@
 				gridEl.appendChild(tile);
 			});
 
+			var images = files.filter(function(f){ return IMAGE_EXT.indexOf(extOf(f.name)) !== -1; });
+
 			files.forEach(function(file){
-				var tile = document.createElement('a');
-				tile.href = file.url;
-				tile.target = '_blank';
-				tile.rel = 'noopener';
+				var isImage = IMAGE_EXT.indexOf(extOf(file.name)) !== -1;
+				var tile = document.createElement(isImage ? 'button' : 'a');
+				if (isImage) {
+					tile.type = 'button';
+				} else {
+					tile.href = file.url;
+					tile.target = '_blank';
+					tile.rel = 'noopener';
+				}
 				tile.className = 'c-media-manager__tile c-media-manager__tile--file';
 				tile.title = file.name;
 
-				if (IMAGE_EXT.indexOf(extOf(file.name)) !== -1) {
+				if (isImage) {
 					var img = document.createElement('img');
 					img.src = file.url;
 					img.alt = file.name;
 					img.loading = 'lazy';
 					tile.appendChild(img);
+					tile.addEventListener('click', function(){
+						openCarousel(images, images.indexOf(file));
+					});
 				} else {
 					var icon = document.createElement('i');
 					icon.className = 'bi bi-file-earmark';
@@ -254,6 +264,84 @@
 				});
 			});
 		});
+	}
+
+	// ── Image carousel ──
+
+	var carouselEl = null;
+	var carouselImages = [];
+	var carouselIndex = 0;
+
+	function renderCarousel(){
+		var file = carouselImages[carouselIndex];
+		var imgEl = carouselEl.querySelector('.c-media-carousel__img');
+		var captionEl = carouselEl.querySelector('.c-media-carousel__caption');
+		var counterEl = carouselEl.querySelector('.c-media-carousel__counter');
+
+		imgEl.src = file.url;
+		imgEl.alt = file.name;
+		captionEl.textContent = file.url;
+		counterEl.textContent = (carouselIndex + 1) + ' / ' + carouselImages.length;
+
+		carouselEl.querySelector('.c-media-carousel__nav--prev').hidden = carouselImages.length < 2;
+		carouselEl.querySelector('.c-media-carousel__nav--next').hidden = carouselImages.length < 2;
+		counterEl.hidden = carouselImages.length < 2;
+
+		// Brief fade/scale flourish on swap: force a reflow so the browser applies the
+		// "loading" state before it's removed, otherwise both changes land in the same
+		// frame and the CSS transition never runs.
+		imgEl.classList.add('c-media-carousel__img--loading');
+		void imgEl.offsetWidth;
+		imgEl.classList.remove('c-media-carousel__img--loading');
+	}
+
+	function openCarousel(images, index){
+		carouselImages = images;
+		carouselIndex = index;
+
+		if (!carouselEl) {
+			carouselEl = document.createElement('div');
+			carouselEl.className = 'c-media-carousel';
+			carouselEl.innerHTML =
+				'<div class="c-media-carousel__backdrop"></div>' +
+				'<div class="c-media-carousel__chrome">' +
+					'<span class="c-media-carousel__counter"></span>' +
+					'<button type="button" class="c-media-carousel__close" aria-label="Close"><i class="bi bi-x-lg"></i></button>' +
+				'</div>' +
+				'<button type="button" class="c-media-carousel__nav c-media-carousel__nav--prev" aria-label="Previous image"><i class="bi bi-chevron-left"></i></button>' +
+				'<button type="button" class="c-media-carousel__nav c-media-carousel__nav--next" aria-label="Next image"><i class="bi bi-chevron-right"></i></button>' +
+				'<figure class="c-media-carousel__figure">' +
+					'<img class="c-media-carousel__img" alt="">' +
+					'<figcaption class="c-media-carousel__caption"></figcaption>' +
+				'</figure>';
+			document.body.appendChild(carouselEl);
+
+			carouselEl.querySelector('.c-media-carousel__backdrop').addEventListener('click', closeCarousel);
+			carouselEl.querySelector('.c-media-carousel__close').addEventListener('click', closeCarousel);
+			carouselEl.querySelector('.c-media-carousel__nav--prev').addEventListener('click', function(){ stepCarousel(-1); });
+			carouselEl.querySelector('.c-media-carousel__nav--next').addEventListener('click', function(){ stepCarousel(1); });
+			document.addEventListener('keydown', onCarouselKeydown);
+		}
+
+		carouselEl.hidden = false;
+		renderCarousel();
+	}
+
+	function closeCarousel(){
+		if (carouselEl) carouselEl.hidden = true;
+	}
+
+	function stepCarousel(delta){
+		if (!carouselImages.length) return;
+		carouselIndex = (carouselIndex + delta + carouselImages.length) % carouselImages.length;
+		renderCarousel();
+	}
+
+	function onCarouselKeydown(e){
+		if (!carouselEl || carouselEl.hidden) return;
+		if (e.key === 'Escape') closeCarousel();
+		else if (e.key === 'ArrowLeft') stepCarousel(-1);
+		else if (e.key === 'ArrowRight') stepCarousel(1);
 	}
 
 	uploadBtn.addEventListener('click', function(){ fileInput.click(); });
