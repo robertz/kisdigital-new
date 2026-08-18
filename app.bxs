@@ -50,7 +50,7 @@ goatCounterClient = new models.util.GoatCounterClient(
 app.use(
 	boxExpressJSON(),
 	boxExpressUrlencoded(),
-	boxExpressSession( { maxAge: 30 * 24 * 60 * 60 } ), // 30 days, matches the old app's session timeout
+	boxExpressSession( { store: boxExpressCacheStore("sessionCache"), maxAge: 30 * 24 * 60 * 60 } ), // 30 days, matches the old app's session timeout
 	boxExpressStatic( expandPath( "./public" ), { maxAge: 86400 } ),
 	boxExpressHelmet( { referrerPolicy: "strict-origin-when-cross-origin" } )
 )
