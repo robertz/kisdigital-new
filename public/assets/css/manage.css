@@ -1923,28 +1923,17 @@
 	grid-column: 1 / -1;
 }
 
-/* ── Hourly hits chart card ── */
-
-.c-manage-dashboard__card--hourly {
-	grid-column: 1 / -1;
-}
-
-.c-hourly-chart {
-	position: relative;
-	height: 220px;
-}
-
 .c-dashboard-sparkline {
 	display: flex;
 	align-items: center;
 	gap: var(--space-6);
 }
 
-.c-dashboard-sparkline__svg {
+.c-dashboard-sparkline__chart {
+	position: relative;
 	flex: 1;
 	min-width: 0;
-	height: 56px;
-	color: var(--post-link-text);
+	height: 180px;
 }
 
 .c-dashboard-sparkline__stats {

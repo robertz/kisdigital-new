@@ -197,7 +197,7 @@ class {
 			pageTitle       : "Dashboard",
 			manageSection   : "dashboard",
 			manageUser      : req.session.manage_user,
-			traffic         : buildTrafficSparkline( variables.postService.getDailyViewTotals( 30 ) ),
+			traffic         : buildTrafficChartData( variables.postService.getDailyViewTotals( 30 ) ),
 			zeroResultSearches : variables.postService.getZeroResultSearches( 30 ),
 			recentActivity     : variables.postService.getRecentActivity( 8 ),
 			contentHealth      : variables.postService.getContentHealth()
@@ -205,38 +205,29 @@ class {
 	}
 
 	/**
-	 * Turns a day-by-day view-totals array into everything the dashboard's
-	 * inline SVG sparkline needs to draw itself: a "x,y x,y …" polyline
-	 * points string (normalized to a 300x56 viewBox, y inverted since SVG
-	 * grows downward), the period total, and the single busiest day for a
-	 * one-line caption. No charting library — this is one line, drawn once.
+	 * Turns a day-by-day view-totals array into what the dashboard's Chart.js
+	 * traffic graph needs: parallel labels/values arrays, the period total,
+	 * and the single busiest day for the stat boxes beside the chart.
 	 */
-	private function buildTrafficSparkline( required array dailyTotals ){
-		var width  = 300;
-		var height = 56;
-		var n      = arguments.dailyTotals.len();
-
+	private function buildTrafficChartData( required array dailyTotals ){
 		var maxViews = 0;
 		var total    = 0;
+		var labels   = [];
+		var values   = [];
+
 		for ( var row in arguments.dailyTotals ){
 			total += row.total_views;
 			if ( row.total_views > maxViews ) maxViews = row.total_views;
-		}
-
-		var points = [];
-		for ( var i = 1; i <= n; i++ ){
-			var x = n > 1 ? ( ( i - 1 ) / ( n - 1 ) ) * width : width;
-			var y = maxViews > 0 ? height - ( arguments.dailyTotals[ i ].total_views / maxViews ) * height : height;
-			points.append( numberFormat( x, "0.0" ) & "," & numberFormat( y, "0.0" ) );
+			labels.append( dateTimeFormat( row.view_date, "mmm d" ) );
+			values.append( row.total_views );
 		}
 
 		return {
-			"points"   : points.toList( " " ),
-			"width"    : width,
-			"height"   : height,
+			"labels"   : labels,
+			"values"   : values,
 			"total"    : total,
 			"maxViews" : maxViews,
-			"days"     : n
+			"days"     : arguments.dailyTotals.len()
 		};
 	}
 
@@ -702,8 +693,7 @@ class {
 			total          : configured ? insightsFetch( () => variables.goatCounterClient.getTotal( daysBack ) ) : javacast( "null", "" ),
 			topPaths       : configured ? insightsFetch( () => variables.goatCounterClient.getTopPaths( daysBack, 10 ) ) : javacast( "null", "" ),
 			topReferrers   : configured ? insightsFetch( () => variables.goatCounterClient.getTopReferrers( daysBack, 10 ) ) : javacast( "null", "" ),
-			locations      : configured ? insightsFetch( () => variables.goatCounterClient.getLocations( daysBack, 8 ) ) : javacast( "null", "" ),
-			hourlyHits     : configured ? insightsFetch( () => variables.goatCounterClient.getLast24HoursHits() ) : javacast( "null", "" )
+			locations      : configured ? insightsFetch( () => variables.goatCounterClient.getLocations( daysBack, 8 ) ) : javacast( "null", "" )
 		} );
 	}
 

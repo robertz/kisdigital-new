@@ -28,9 +28,9 @@
 					<span class="c-manage-dashboard__eyebrow">Traffic &mdash; last #data.traffic.days# days</span>
 				</div>
 				<div class="c-dashboard-sparkline">
-					<svg viewBox="0 0 #data.traffic.width# #data.traffic.height#" class="c-dashboard-sparkline__svg" preserveAspectRatio="none" aria-hidden="true">
-						<polyline points="#data.traffic.points#" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
-					</svg>
+					<div class="c-dashboard-sparkline__chart">
+						<canvas id="traffic-chart" aria-label="Site traffic over the last #data.traffic.days# days" role="img"></canvas>
+					</div>
 					<div class="c-dashboard-sparkline__stats">
 						<div class="c-dashboard-sparkline__stat">
 							<span class="c-dashboard-sparkline__stat-value">#numberFormat( data.traffic.total )#</span>
@@ -42,6 +42,41 @@
 						</div>
 					</div>
 				</div>
+				<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.0/chart.umd.min.js" integrity="sha512-Y51n9mtKTVBh3Jbx5pZSJNDDMyY+yGe77DGtBPzRlgsf/YLCh13kSZ3JmfHGzYFCmOndraf0sQgfM654b7dJ3w==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+				<script>
+				(function(){
+					var labels = #jsonSerialize( data.traffic.labels )#;
+					var values = #jsonSerialize( data.traffic.values )#;
+
+					var styles = getComputedStyle(document.documentElement);
+					var lineColor = styles.getPropertyValue('--post-link-text').trim() || '##7c83fd';
+
+					new Chart(document.getElementById('traffic-chart'), {
+						type: 'line',
+						data: {
+							labels: labels,
+							datasets: [{
+								data: values,
+								borderColor: lineColor,
+								backgroundColor: lineColor + '33',
+								fill: true,
+								tension: 0.3,
+								pointRadius: 0,
+								borderWidth: 2
+							}]
+						},
+						options: {
+							responsive: true,
+							maintainAspectRatio: false,
+							plugins: { legend: { display: false } },
+							scales: {
+								x: { ticks: { maxTicksLimit: 8 }, grid: { display: false } },
+								y: { beginAtZero: true, ticks: { precision: 0 } }
+							}
+						}
+					});
+				})();
+				</script>
 			</section>
 
 			<!--- Content health card --->

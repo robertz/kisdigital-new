@@ -72,49 +72,6 @@ class {
 		return _getStatsPage( "locations", arguments.daysBack, arguments.limit );
 	}
 
-	/**
-	 * Hit counts for each of the last 24 hours, oldest first — GoatCounter's
-	 * API has no rolling-window endpoint of its own, only calendar-day
-	 * buckets (UTC) that each carry a 24-entry hourly breakdown (see the
-	 * /stats/total response shape). This fetches 2 days back — always at
-	 * least 48 hourly buckets, so there's a full 24 to take regardless of
-	 * what the current UTC hour is — flattens them into one chronological
-	 * list, and keeps just the trailing 24.
-	 * @return {array} of { hour: ISO-8601 UTC timestamp, count }
-	 */
-	function getLast24HoursHits(){
-		var json = _get( "/stats/total", _rangeParams( 2 ) );
-		var flatHours = [];
-		for ( var dayEntry in ( json.stats ?: [] ) ){
-			var hourly = dayEntry.hourly ?: [];
-			for ( var h = 1; h <= hourly.len(); h++ ){
-				flatHours.append( { "hour": dayEntry.day & "T" & right( "0" & ( h - 1 ), 2 ) & ":00:00Z", "count": hourly[ h ] } );
-			}
-		}
-
-		// GoatCounter always pads its response out to whole UTC calendar
-		// days, so today's bucket includes hours that haven't happened yet
-		// (legitimately 0, but not part of "the last 24 hours" — they're in
-		// the future). Drop anything past the current UTC hour before
-		// taking the trailing 24, or a request made at, say, 08:00 UTC
-		// would return today's first 8 real hours padded out with 16 hours
-		// of not-yet-happened zeros instead of yesterday's remaining hours.
-		var currentHourBoundary = dateTimeFormat( dateConvert( "local2utc", now() ), "yyyy-mm-dd'T'HH:00:00'Z'" );
-		var pastHours = [];
-		for ( var entry in flatHours ){
-			if ( entry.hour <= currentHourBoundary ){
-				pastHours.append( entry );
-			}
-		}
-
-		var startIdx = max( 1, pastHours.len() - 24 + 1 );
-		var last24 = [];
-		for ( var i = startIdx; i <= pastHours.len(); i++ ){
-			last24.append( pastHours[ i ] );
-		}
-		return last24;
-	}
-
 	private function _getStatsPage( required string page, required numeric daysBack, required numeric limit ){
 		var params = _rangeParams( arguments.daysBack );
 		params[ "limit" ] = arguments.limit;
