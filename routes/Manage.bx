@@ -71,6 +71,12 @@ class {
 		this.router.get( "/manage/settings", admin, ( req, res ) => settingsIndex( req, res ) );
 		this.router.post( "/manage/settings/update", admin, ( req, res ) => updateSetting( req, res ) );
 
+		// Browses the whole R2 bucket (not just the posts/ upload prefix), so
+		// gated to admins like Authors/Settings rather than every author.
+		this.router.get( "/manage/media", admin, ( req, res ) => mediaIndex( req, res ) );
+		this.router.get( "/manage/media/list-url", admin, ( req, res ) => mediaListUrl( req, res ) );
+		this.router.post( "/manage/media/upload-url", admin, ( req, res ) => mediaUploadUrl( req, res ) );
+
 		return this;
 	}
 
@@ -591,6 +597,87 @@ class {
 
 		flashSet( req, { success: message } );
 		res.redirect( "/manage/settings" );
+	}
+
+	// ── Media manager ────────────────────────────────────────────────────────
+	// Browses the R2 bucket from its root, not just the posts/ prefix the post
+	// editor's picker is scoped to — folder navigation and uploads are entirely
+	// client-driven (see the view's JS), same presign-then-fetch-directly
+	// pattern as the editor's image picker (R2Client never touches the file
+	// bytes or the listing itself; see R2Client.presignPutUrl()).
+
+	// GET /manage/media
+	function mediaIndex( req, res ){
+		res.render( "manage/media/index", {
+			pageTitle     : "Media",
+			manageSection : "media",
+			csrfToken     : req.csrfToken(),
+			r2Configured  : variables.r2Client.isConfigured()
+		} );
+	}
+
+	// GET /manage/media/list-url?path=sub/dir — presigns a delimited listing
+	// of one directory (folders as CommonPrefixes, files as Contents), not the
+	// whole bucket recursively.
+	function mediaListUrl( req, res ){
+		if ( !variables.r2Client.isConfigured() ){
+			return res.status( 501 ).json( { success: false, error: "Image hosting isn't configured (missing R2 env vars)." } );
+		}
+
+		try {
+			var path = sanitizeMediaPath( req.query.path ?: "" );
+			var listUrl = variables.r2Client.presignListUrl( path, 1000, 300, "/" );
+			res.json( { success: true, listUrl: listUrl, publicBaseUrl: variables.r2Client.getPublicBaseUrl(), path: path } );
+		} catch ( any e ) {
+			println( "[error] media list presign failed: " & e.message );
+			res.status( 502 ).json( { success: false, error: "Couldn't prepare the directory listing." } );
+		}
+	}
+
+	// POST /manage/media/upload-url — same two-step presigned upload as the
+	// post editor's cover-image upload, except the destination directory is
+	// whatever the browser currently has open rather than a fixed prefix.
+	function mediaUploadUrl( req, res ){
+		if ( !variables.r2Client.isConfigured() ){
+			return res.status( 501 ).json( { success: false, error: "Image hosting isn't configured (missing R2 env vars)." } );
+		}
+
+		var filename    = trim( req.body.filename ?: "" );
+		var contentType = trim( req.body.contentType ?: "" );
+		var allowedTypes = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif" };
+		var ext = allowedTypes[ lCase( contentType ) ] ?: "";
+		if ( !len( ext ) ){
+			return res.status( 415 ).json( { success: false, error: "Unsupported image type: #encodeForHTML( contentType )#. Use JPEG, PNG, WebP, or GIF." } );
+		}
+
+		try {
+			var path = sanitizeMediaPath( req.body.path ?: "" );
+			var key = path & slugifyFilename( filename ) & "." & ext;
+			var presigned = variables.r2Client.presignPutUrl( key, contentType );
+			res.json( { success: true, uploadUrl: presigned.uploadUrl, url: presigned.publicUrl, key: key } );
+		} catch ( any e ) {
+			println( "[error] media upload presign failed: " & e.message );
+			res.status( 502 ).json( { success: false, error: "Couldn't prepare the upload." } );
+		}
+	}
+
+	/**
+	 * Turns a client-supplied directory path into a safe key prefix: strips
+	 * leading/trailing slashes, drops empty/"."/".." segments (blocks
+	 * traversal out of the bucket root), and restricts each remaining
+	 * segment to a conservative charset. Returns "" for the bucket root, or
+	 * "a/b/" (trailing slash, no leading slash) for a subdirectory — ready to
+	 * prepend directly to an object key or pass as a list prefix.
+	 */
+	private function sanitizeMediaPath( required string path ){
+		var segments = listToArray( arguments.path.reReplace( "\\", "/", "all" ), "/" );
+		var cleanSegments = [];
+		for ( var seg in segments ){
+			var s = trim( seg );
+			if ( !len( s ) || s == "." || s == ".." || !reFind( "^[A-Za-z0-9._ -]+$", s ) ) continue;
+			cleanSegments.append( s );
+		}
+		return cleanSegments.len() ? cleanSegments.toList( "/" ) & "/" : "";
 	}
 
 }

@@ -1,0 +1,287 @@
+<bx:include template="../../partials/_head.bxm">
+<bx:output>
+<div class="c-manage">
+
+	<!--- Sidebar nav --->
+	<bx:include template="../../partials/manageNav.bxm">
+
+	<!--- Main content --->
+	<main class="c-manage-main">
+
+		<div class="c-manage-header">
+			<div>
+				<h1 class="c-manage-header__title">Media</h1>
+				<p class="c-manage-header__sub">Browse the image server and upload files into the current directory.</p>
+			</div>
+		</div>
+
+		<bx:if !data.r2Configured>
+			<div class="c-manage-alert c-manage-alert--error">
+				<i class="bi bi-exclamation-circle-fill"></i>
+				Image hosting isn't configured (missing R2 env vars) — browsing and uploads are unavailable.
+			</div>
+		<bx:else>
+
+			<input type="hidden" id="media-csrf" value="#encodeForHTMLAttribute( data.csrfToken )#">
+			<div id="media-status" class="c-manage-alert" hidden></div>
+
+			<div class="c-media-manager">
+
+				<div class="c-media-manager__toolbar">
+					<nav id="media-breadcrumb" class="c-media-manager__breadcrumb" aria-label="Directory path"></nav>
+
+					<div class="c-media-manager__upload">
+						<input type="file" id="media-file-input" accept="image/jpeg,image/png,image/webp,image/gif" multiple hidden>
+						<button type="button" id="media-upload-btn" class="c-manage-form__btn">
+							<i class="bi bi-upload"></i> Upload here
+						</button>
+					</div>
+				</div>
+
+				<div id="media-grid" class="c-media-manager__grid">
+					<p class="text-muted">Loading…</p>
+				</div>
+
+			</div>
+		</bx:if>
+
+	</main>
+</div>
+
+<script>
+(function(){
+	var breadcrumbEl  = document.getElementById('media-breadcrumb');
+	if (!breadcrumbEl) return; // R2 not configured — nothing below is on the page
+
+	var csrfToken = document.getElementById('media-csrf').value;
+	var statusEl      = document.getElementById('media-status');
+	var gridEl        = document.getElementById('media-grid');
+	var uploadBtn     = document.getElementById('media-upload-btn');
+	var fileInput     = document.getElementById('media-file-input');
+
+	var IMAGE_EXT = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
+
+	function currentPath(){
+		return new URLSearchParams(window.location.search).get('path') || '';
+	}
+
+	function navigateTo(path){
+		var params = new URLSearchParams();
+		if (path) params.set('path', path);
+		window.location.href = '/manage/media' + (params.toString() ? '?' + params.toString() : '');
+	}
+
+	function showStatus(message, kind){
+		statusEl.className = 'c-manage-alert c-manage-alert--' + (kind || 'success');
+		statusEl.innerHTML = '<i class="bi bi-' + (kind === 'error' ? 'exclamation-circle-fill' : 'check-circle-fill') + '"></i> ' + message;
+		statusEl.hidden = false;
+	}
+
+	function extOf(name){
+		var parts = name.split('.');
+		return parts.length > 1 ? parts.pop().toLowerCase() : '';
+	}
+
+	function formatSize(bytes){
+		bytes = Number(bytes) || 0;
+		if (bytes < 1024) return bytes + ' B';
+		if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+		return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+	}
+
+	function renderBreadcrumb(path){
+		breadcrumbEl.innerHTML = '';
+		var rootLink = document.createElement('button');
+		rootLink.type = 'button';
+		rootLink.className = 'c-media-manager__crumb';
+		rootLink.textContent = 'Root';
+		rootLink.addEventListener('click', function(){ navigateTo(''); });
+		breadcrumbEl.appendChild(rootLink);
+
+		var segments = path.split('/').filter(Boolean);
+		var built = '';
+		segments.forEach(function(seg){
+			built += seg + '/';
+			var sep = document.createElement('span');
+			sep.className = 'c-media-manager__crumb-sep';
+			sep.textContent = '/';
+			breadcrumbEl.appendChild(sep);
+
+			var crumbPath = built;
+			var link = document.createElement('button');
+			link.type = 'button';
+			link.className = 'c-media-manager__crumb';
+			link.textContent = seg;
+			link.addEventListener('click', function(){ navigateTo(crumbPath); });
+			breadcrumbEl.appendChild(link);
+		});
+	}
+
+	// Two-step, same as the post editor's picker: our server only presigns a
+	// list URL (never fetches the listing itself), then this fetches that
+	// URL directly and parses the ListBucketResult XML client-side.
+	function loadDirectory(path){
+		gridEl.innerHTML = '<p class="text-muted">Loading…</p>';
+
+		fetch('/manage/media/list-url?path=' + encodeURIComponent(path), { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+		.then(function(res){ return res.json(); })
+		.then(function(data){
+			if (!data.success) return Promise.reject(data.error || 'Could not load this directory.');
+			return fetch(data.listUrl).then(function(listRes){
+				if (!listRes.ok) return Promise.reject('Could not load this directory.');
+				return listRes.text().then(function(xmlText){
+					return { xmlText: xmlText, publicBaseUrl: data.publicBaseUrl, path: data.path };
+				});
+			});
+		})
+		.then(function(result){
+			renderBreadcrumb(result.path);
+
+			var xml = new DOMParser().parseFromString(result.xmlText, 'application/xml');
+
+			var folders = Array.prototype.slice.call(xml.getElementsByTagName('CommonPrefixes')).map(function(node){
+				var prefix = node.getElementsByTagName('Prefix')[0].textContent;
+				var name = prefix.slice(result.path.length).replace(/\/$/, '');
+				return { prefix: prefix, name: name };
+			}).filter(function(f){ return f.name.length; });
+
+			var files = Array.prototype.slice.call(xml.getElementsByTagName('Contents')).map(function(node){
+				var key = node.getElementsByTagName('Key')[0].textContent;
+				var sizeNode = node.getElementsByTagName('Size')[0];
+				return {
+					key: key,
+					name: key.slice(result.path.length),
+					size: sizeNode ? sizeNode.textContent : 0,
+					url: result.publicBaseUrl + '/' + key
+				};
+			}).filter(function(f){ return f.name.length; }); // drop the directory's own zero-byte marker object, if any
+
+			gridEl.innerHTML = '';
+
+			if (!folders.length && !files.length) {
+				gridEl.innerHTML = '<p class="text-muted">This directory is empty.</p>';
+				return;
+			}
+
+			folders.forEach(function(folder){
+				var tile = document.createElement('button');
+				tile.type = 'button';
+				tile.className = 'c-media-manager__tile c-media-manager__tile--folder';
+				tile.innerHTML = '<i class="bi bi-folder-fill"></i><span>' + folder.name + '</span>';
+				tile.addEventListener('click', function(){ navigateTo(folder.prefix); });
+				gridEl.appendChild(tile);
+			});
+
+			files.forEach(function(file){
+				var tile = document.createElement('a');
+				tile.href = file.url;
+				tile.target = '_blank';
+				tile.rel = 'noopener';
+				tile.className = 'c-media-manager__tile c-media-manager__tile--file';
+				tile.title = file.name;
+
+				if (IMAGE_EXT.indexOf(extOf(file.name)) !== -1) {
+					var img = document.createElement('img');
+					img.src = file.url;
+					img.alt = file.name;
+					img.loading = 'lazy';
+					tile.appendChild(img);
+				} else {
+					var icon = document.createElement('i');
+					icon.className = 'bi bi-file-earmark';
+					tile.appendChild(icon);
+				}
+
+				var caption = document.createElement('div');
+				caption.className = 'c-media-manager__tile-caption';
+				caption.innerHTML = '<span>' + file.name + '</span><small>' + formatSize(file.size) + '</small>';
+				tile.appendChild(caption);
+
+				gridEl.appendChild(tile);
+			});
+		})
+		.catch(function(err){
+			gridEl.innerHTML = '<p class="text-danger">' + (typeof err === 'string' ? err : 'Couldn\'t load this directory — check your connection and try again.') + '</p>';
+		});
+	}
+
+	// Downscales to 800px wide before upload, same cap used everywhere else
+	// images enter this app (see the post editor). GIFs pass through
+	// untouched so animation survives.
+	function resizeImageFile(file, maxWidth){
+		if (file.type === 'image/gif') return Promise.resolve(file);
+		return new Promise(function(resolve){
+			var objectUrl = URL.createObjectURL(file);
+			var img = new Image();
+			img.onload = function(){
+				URL.revokeObjectURL(objectUrl);
+				if (img.width <= maxWidth) return resolve(file);
+				var scale = maxWidth / img.width;
+				var canvas = document.createElement('canvas');
+				canvas.width = maxWidth;
+				canvas.height = Math.round(img.height * scale);
+				canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+				canvas.toBlob(function(blob){
+					if (!blob) return resolve(file);
+					resolve(new File([blob], file.name, { type: file.type }));
+				}, file.type, 0.9);
+			};
+			img.onerror = function(){
+				URL.revokeObjectURL(objectUrl);
+				resolve(file);
+			};
+			img.src = objectUrl;
+		});
+	}
+
+	function uploadOne(file, path){
+		return resizeImageFile(file, 800).then(function(sizedFile){
+			return fetch('/manage/media/upload-url', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': csrfToken },
+				body: new URLSearchParams({ filename: file.name, contentType: file.type, path: path })
+			})
+			.then(function(res){ return res.json(); })
+			.then(function(data){
+				if (!data.success) return Promise.reject(data.error || 'Upload failed.');
+				return fetch(data.uploadUrl, {
+					method: 'PUT',
+					headers: { 'Content-Type': file.type },
+					body: sizedFile
+				}).then(function(putRes){
+					if (!putRes.ok) return Promise.reject('Upload to image host failed.');
+					return data.url;
+				});
+			});
+		});
+	}
+
+	uploadBtn.addEventListener('click', function(){ fileInput.click(); });
+
+	fileInput.addEventListener('change', function(){
+		var files = Array.prototype.slice.call(fileInput.files);
+		if (!files.length) return;
+
+		var path = currentPath();
+		uploadBtn.disabled = true;
+		showStatus('Uploading ' + files.length + ' file' + (files.length > 1 ? 's' : '') + '…', 'success');
+
+		Promise.all(files.map(function(file){ return uploadOne(file, path); }))
+		.then(function(){
+			uploadBtn.disabled = false;
+			fileInput.value = '';
+			showStatus('Upload complete.', 'success');
+			loadDirectory(path);
+		})
+		.catch(function(err){
+			uploadBtn.disabled = false;
+			fileInput.value = '';
+			showStatus(typeof err === 'string' ? err : 'Upload failed — check your connection and try again.', 'error');
+		});
+	});
+
+	loadDirectory(currentPath());
+})();
+</script>
+</bx:output>
+<bx:include template="../../partials/_foot.bxm">

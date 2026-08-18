@@ -10,6 +10,9 @@
 	<a href="/manage/authors" class="c-manage-nav__link #( ( data.manageSection ?: '' ) == 'authors' ? 'c-manage-nav__link--active' : '' )#">
 		<i class="bi bi-people"></i> Authors
 	</a>
+	<a href="/manage/media" class="c-manage-nav__link #( ( data.manageSection ?: '' ) == 'media' ? 'c-manage-nav__link--active' : '' )#">
+		<i class="bi bi-images"></i> Media
+	</a>
 	<a href="/manage/settings" class="c-manage-nav__link #( ( data.manageSection ?: '' ) == 'settings' ? 'c-manage-nav__link--active' : '' )#">
 		<i class="bi bi-gear"></i> Settings
 	</a>

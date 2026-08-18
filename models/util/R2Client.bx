@@ -85,14 +85,23 @@ class {
 	 * @param {string} prefix - Key prefix to list under, e.g. "posts/". No leading slash.
 	 * @param {numeric} maxKeys - Maximum objects to return. Defaults to 100.
 	 * @param {numeric} expiresSeconds - How long the signed URL stays valid. Defaults to 5 minutes.
+	 * @param {string} delimiter - S3 "folder" delimiter. Pass "/" to have the
+	 *        response group anything past the next "/" into CommonPrefixes
+	 *        instead of listing it flat — what the media manager's directory
+	 *        browsing needs; left empty (the default) for callers like the
+	 *        cover-image picker that just want every key under the prefix.
 	 * @return {string} Signed URL.
 	 */
-	function presignListUrl( required string prefix, numeric maxKeys = 100, numeric expiresSeconds = 300 ){
-		return _presign( "GET", "/#variables.bucket#", {
+	function presignListUrl( required string prefix, numeric maxKeys = 100, numeric expiresSeconds = 300, string delimiter = "" ){
+		var queryParams = {
 			"list-type": "2",
 			"max-keys": arguments.maxKeys,
 			"prefix": arguments.prefix
-		}, arguments.expiresSeconds );
+		};
+		if ( len( arguments.delimiter ) ){
+			queryParams[ "delimiter" ] = arguments.delimiter;
+		}
+		return _presign( "GET", "/#variables.bucket#", queryParams, arguments.expiresSeconds );
 	}
 
 	/**

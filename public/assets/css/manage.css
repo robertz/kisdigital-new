@@ -1476,6 +1476,124 @@
 	object-fit: cover;
 }
 
+/* ── Media manager ── */
+
+.c-media-manager__toolbar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	gap: var(--space-3);
+	margin-bottom: var(--space-5);
+}
+
+.c-media-manager__breadcrumb {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: var(--space-1);
+	font-size: 0.875rem;
+}
+
+.c-media-manager__crumb {
+	background: none;
+	border: none;
+	padding: var(--space-1) var(--space-2);
+	border-radius: var(--ui-radius-sm);
+	color: var(--text-secondary);
+	cursor: pointer;
+}
+
+.c-media-manager__crumb:last-child {
+	color: var(--post-anchor);
+	font-weight: 600;
+}
+
+.c-media-manager__crumb:hover {
+	background: var(--ui-surface-2);
+	color: var(--post-anchor);
+}
+
+.c-media-manager__crumb-sep {
+	color: var(--text-secondary);
+	opacity: 0.6;
+}
+
+.c-media-manager__grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+	gap: var(--space-3);
+}
+
+.c-media-manager__tile {
+	display: flex;
+	flex-direction: column;
+	padding: 0;
+	border: 1px solid var(--ui-border-subtle);
+	border-radius: var(--ui-radius-sm);
+	overflow: hidden;
+	background: var(--ui-surface-2);
+	cursor: pointer;
+	text-decoration: none;
+	color: var(--post-anchor);
+	transition: border-color 120ms ease, transform 120ms ease;
+}
+
+.c-media-manager__tile:hover {
+	border-color: var(--post-link-text);
+	transform: translateY(-1px);
+}
+
+.c-media-manager__tile--folder {
+	align-items: center;
+	justify-content: center;
+	gap: var(--space-2);
+	aspect-ratio: 1;
+	font-size: 0.8125rem;
+	font-weight: 600;
+	text-align: center;
+	padding: var(--space-3);
+}
+
+.c-media-manager__tile--folder i {
+	font-size: 2rem;
+	color: var(--post-link-text);
+}
+
+.c-media-manager__tile--file img {
+	display: block;
+	width: 100%;
+	aspect-ratio: 1;
+	object-fit: cover;
+}
+
+.c-media-manager__tile--file i.bi-file-earmark {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	aspect-ratio: 1;
+	font-size: 2rem;
+	color: var(--text-secondary);
+}
+
+.c-media-manager__tile-caption {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: var(--space-2);
+	font-size: 0.75rem;
+}
+
+.c-media-manager__tile-caption span {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.c-media-manager__tile-caption small {
+	color: var(--text-secondary);
+}
+
 @media (max-width: 1023.98px) {
 	.c-post-editor__grid {
 		grid-template-columns: 1fr;
