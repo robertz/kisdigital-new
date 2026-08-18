@@ -147,9 +147,20 @@ class {
 	}
 
 	// POST /manage/login
+	//
+	// Two independent brute-force defenses stack here: the router
+	// registration below wraps this in boxExpressRateLimit( { windowMs: 15min,
+	// max: 5 } ), which throttles by req.ip — cheap, catches a scripted flood
+	// fast, but only protects per source IP, so a botnet rotating IPs sails
+	// straight through it against one target account. _isLoginRateLimited()
+	// below closes that gap with a *per-account* lockout, independent of
+	// where the requests come from — the two combined mean neither "many
+	// guesses against one account" nor "one IP guessing many accounts" gets
+	// unlimited tries.
 	function doLogin( req, res ){
 		var userEmail    = trim( req.body.email    ?: "" );
 		var userPassword = trim( req.body.password ?: "" );
+		var accountKey   = "login-attempts:" & lCase( userEmail );
 
 		if ( !len( userEmail ) || !len( userPassword ) ){
 			flashSet( req, { loginError: "Please enter your email and password." } );
@@ -164,14 +175,24 @@ class {
 			return;
 		}
 
+		if ( _isLoginRateLimited( accountKey ) ){
+			println( "[auth] rate-limited login attempt for '" & userEmail & "' from " & req.ip );
+			flashSet( req, { loginError: "Too many failed attempts for this account. Try again in a few minutes." } );
+			res.redirect( "/manage/login" );
+			return;
+		}
+
 		var user = variables.authService.authenticate( userEmail, userPassword );
 
 		if ( user.isEmpty() ){
+			_recordFailedLogin( accountKey );
 			println( "[auth] failed login attempt for '" & userEmail & "' from " & req.ip );
 			flashSet( req, { loginError: "Invalid email or password." } );
 			res.redirect( "/manage/login" );
 			return;
 		}
+
+		_clearLoginAttempts( accountKey );
 
 		req.session.manage_user = {
 			"id"           : user.id,
@@ -182,6 +203,28 @@ class {
 
 		println( "[auth] successful login for '" & userEmail & "' from " & req.ip );
 		res.redirect( "/manage" );
+	}
+
+	// Fixed-window counter in the same "default" cache other services here
+	// already use (SettingsService, GoatCounterClient's successor) — get/set
+	// isn't atomic, so two requests racing at the exact same instant could
+	// both read the same pre-increment count, same trade-off boxlang-express's
+	// own RateLimit.bx makes with its in-memory map. Acceptable here: worst
+	// case an attacker gets one or two extra guesses in that race, not an
+	// unlimited bypass.
+	private function _isLoginRateLimited( required string key, numeric maxAttempts = 5 ){
+		var count = cache( "default" ).get( arguments.key );
+		return count.isPresent() && count.get() >= arguments.maxAttempts;
+	}
+
+	private function _recordFailedLogin( required string key, numeric windowSeconds = 900 ){
+		var count = cache( "default" ).get( arguments.key );
+		var current = count.isPresent() ? count.get() : 0;
+		cache( "default" ).set( arguments.key, current + 1, arguments.windowSeconds );
+	}
+
+	private function _clearLoginAttempts( required string key ){
+		cache( "default" ).clear( arguments.key );
 	}
 
 	// GET /manage/logout
