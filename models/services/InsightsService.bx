@@ -44,6 +44,9 @@ class {
 	}
 
 	/**
+	 * Excludes 404s — a broken/removed link showing up as a "top page" is
+	 * noise, not a page anyone actually visited.
+	 *
 	 * @return {array} of { path, count }, highest first.
 	 */
 	function getTopPaths( numeric daysBack = 30, numeric limit = 10 ){
@@ -55,6 +58,7 @@ class {
 			"SELECT path, COUNT(*) AS count
 			FROM RequestLog
 			WHERE " & _where() & "
+				AND " & _excluding404() & "
 			GROUP BY path
 			ORDER BY count DESC
 			LIMIT :lim",
@@ -101,7 +105,9 @@ class {
 	 * Something GoatCounter never offered: real server-side response times.
 	 * Requires at least 3 hits for a path in the window, so one slow one-off
 	 * (a cold cache, a background job sharing the box) can't make a
-	 * barely-visited path look like the slowest thing on the site.
+	 * barely-visited path look like the slowest thing on the site. Excludes
+	 * 404s for the same reason getTopPaths() does — a missing page's
+	 * response time isn't a "slow page", it's not a page at all.
 	 *
 	 * @return {array} of { path, avgDurationMs, count }, slowest first.
 	 */
@@ -114,6 +120,7 @@ class {
 			"SELECT path, ROUND(AVG(duration_ms)) AS avgDurationMs, COUNT(*) AS count
 			FROM RequestLog
 			WHERE " & _where() & "
+				AND " & _excluding404() & "
 			GROUP BY path
 			HAVING COUNT(*) >= 3
 			ORDER BY avgDurationMs DESC
@@ -185,6 +192,16 @@ class {
 			AND user_agent <> ''
 			AND user_agent NOT REGEXP :botPattern
 		";
+	}
+
+	// NULL-safe on purpose: status_code is NULL for any row logged before
+	// boxlang-express's getStatusCode() existed (see RequestLogger.bx), and
+	// "status_code <> 404" alone would silently exclude every one of those
+	// too — SQL's three-valued logic treats NULL <> 404 as unknown, not
+	// true, so a plain inequality drops NULL rows from the WHERE clause
+	// along with the real 404s.
+	private function _excluding404(){
+		return "( status_code IS NULL OR status_code <> 404 )";
 	}
 
 	private function _params( required numeric days ){
