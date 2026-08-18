@@ -63,7 +63,7 @@ ENV BOXLANG_MODULES=bx-mysql,bx-markdown,bx-password-encrypt,bx-esapi,bx-compat-
 # ForgeBox-side propagation delay on what "latest" resolves to. A direct GitHub tag
 # reference isn't subject to that: it's exactly the ref, not something resolved
 # through a registry that can lag.
-ENV BOXLANG_EXPRESS_REF=v0.1.16
+ENV BOXLANG_EXPRESS_REF=v0.1.17
 
 # Installed at build time, not container start: `box install X --local` only
 # places a "boxlang-modules"-typed package (boxlang-express) into
