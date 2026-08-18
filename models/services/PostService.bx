@@ -124,11 +124,46 @@ class {
 	 * Returns a single published post by slug as a PostBean.
 	 * Delegates to PostBean.loadBySlug() — published posts only.
 	 *
+	 * Only the publishedOnly=true path is cached (in the "default" cache,
+	 * keyed by slug) — that's the one public readers hit, repeatedly, for
+	 * the same handful of URLs. publishedOnly=false is the CMS's own
+	 * preview/edit path (an authenticated user viewing a draft or scheduled
+	 * post): always loaded fresh and never written to the cache, so a draft
+	 * can never end up served — even by accident — from a cache a public
+	 * request might also read from. savePost() clears this cache entry
+	 * (both the old and new slug, if a save renamed it) so an edit is
+	 * visible immediately rather than waiting out the TTL.
+	 *
+	 * A cache hit returns the exact same PostBean instance every time until
+	 * it expires or is busted — its view count (see recordView()) is
+	 * therefore only as fresh as the last cache write, not live per request.
+	 * A 5-minute TTL bounds how stale that gets while still absorbing a
+	 * burst of traffic to the same post.
+	 *
+	 * A miss that finds nothing (post doesn't exist) is deliberately not
+	 * cached — caching a "not found" would keep a brand-new post 404ing at
+	 * its own URL for up to the TTL if it happened to reuse a slug someone
+	 * had just requested.
+	 *
 	 * @param {string} slug - The URL slug of the post.
 	 * @return {PostBean} Populated bean. Call exists() to check if the post was found.
 	 */
 	function getPostBySlug( required string slug, boolean publishedOnly = true ){
-		return new models.PostBean().loadBySlug( arguments.slug, arguments.publishedOnly );
+		if ( !arguments.publishedOnly ) {
+			return new models.PostBean().loadBySlug( arguments.slug, false );
+		}
+
+		var cacheKey = "post:slug:" & arguments.slug;
+		var cached   = cache( "default" ).get( cacheKey );
+		if ( cached.isPresent() ) {
+			return cached.get();
+		}
+
+		var post = new models.PostBean().loadBySlug( arguments.slug, true );
+		if ( post.exists() ) {
+			cache( "default" ).set( cacheKey, post, 300 );
+		}
+		return post;
 	}
 
 	/**
@@ -593,6 +628,18 @@ class {
 		var baseSlug  = len( trim( bean.getSlug() ) ) ? trim( bean.getSlug() ) : slugify( bean.getTitle() );
 		var finalSlug = makeUniqueSlug( baseSlug, isNew ? "" : postId );
 
+		// Read before the UPDATE overwrites it — needed below to also bust
+		// the *old* slug's cache entry if this save renames the post.
+		var previousSlug = "";
+		if ( !isNew ) {
+			var existingRows = queryExecute(
+				"SELECT slug FROM Post WHERE id = :id",
+				{ "id": { value: postId, cfsqltype: "cf_sql_varchar" } },
+				{ returnType: "array" }
+			);
+			previousSlug = existingRows.len() ? existingRows[ 1 ].slug : "";
+		}
+
 		var coverImage     = bean.getCoverImage();
 		var publishDateVal = bean.getPublishDate() ?: "";
 
@@ -636,6 +683,18 @@ class {
 					"publish_date" : { value: publishDate, cfsqltype: "cf_sql_timestamp" }
 				}
 			);
+		}
+
+		// getPostBySlug() caches published-post lookups by slug — clear the
+		// slug this post is saved under now, and, if this save renamed it,
+		// the one it used to be under. Without the second clear the old URL
+		// would keep serving the pre-rename cached bean until the TTL
+		// expired, instead of falling through to the DB and correctly
+		// 404ing (or, worse, resolving to whatever post claims that slug
+		// next).
+		cache( "default" ).clear( "post:slug:" & finalSlug );
+		if ( len( previousSlug ) && previousSlug != finalSlug ) {
+			cache( "default" ).clear( "post:slug:" & previousSlug );
 		}
 
 		return postId;
