@@ -91,21 +91,12 @@ app.locals.jsHref   = jsHref
 
 app.use( ( req, res, next ) => {
 	res.locals.manageUser = req.session.manage_user ?: ""
-	// Lets _foot.bxm decide whether to load the GoatCounter count script —
-	// /manage/* pages (CMS admin, not public content) shouldn't be tracked
-	// as visitor traffic, in dev or production alike.
-	res.locals.currentPath = req.path
 	next()
 } )
 
 app.set( "views", expandPath( "./views" ) )
 app.set( "env", getSystemSetting( "ENV", "production" ) )
 app.set( "reloadOnChange", app.getSetting( "env" ) == "development" )
-
-// Also exposed as a template local (app.locals, not app.settings) — _foot.bxm
-// uses this to skip loading the GoatCounter count script outside production,
-// so local/dev traffic never pollutes real visitor analytics.
-app.locals.env = app.getSetting( "env" )
 
 // DigitalOcean App Platform's readiness/liveness probe. Deliberately touches
 // no datasource and renders no view — a MySQL blip shouldn't fail the whole
