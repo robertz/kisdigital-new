@@ -64,6 +64,15 @@ ENV BOXLANG_MODULES=bx-mysql,bx-markdown,bx-password-encrypt,bx-esapi,bx-compat-
 # install isn't subject to that: every build gets whatever's on the default branch
 # right now, not something resolved through a registry that can lag.
 
+# Cache-busts the RUN below: an ADD with a remote URL re-checks the source on
+# every build (via its Last-Modified/ETag) and only reuses the cached layer if
+# it's unchanged — so a `docker build`/`docker compose up --build` with no
+# special flags still notices a new commit on boxlang-express's default
+# branch and reinstalls, instead of silently keeping whatever was installed
+# the last time this layer happened to run. The file itself is never read;
+# it only exists to give this layer something that changes when the repo does.
+ADD https://api.github.com/repos/robertz/boxlang-express/commits/main /tmp/boxlang-express-head.json
+
 # Installed at build time, not container start: `box install X --local` only
 # places a "boxlang-modules"-typed package (boxlang-express) into
 # CommandBox's own serverHome, not this app's boxlang_modules/ — the bare
