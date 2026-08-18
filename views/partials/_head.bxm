@@ -68,11 +68,37 @@
 				<bx:if len( data.manageUser ?: "" )>
 					<a href="/manage" class="header__link">Dashboard</a>
 				</bx:if>
-				<button class="header-icon-button" id="theme-toggle" aria-label="Toggle colour theme">
-					<i class="bi bi-moon-fill" id="theme-icon"></i>
-				</button>
 			</nav>
+			<button class="header-icon-button" id="theme-toggle" aria-label="Toggle colour theme">
+				<i class="bi bi-moon-fill" id="theme-icon"></i>
+			</button>
+			<button class="header-icon-button header-menu-toggle" id="mobile-menu-toggle" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-menu">
+				<i class="bi bi-list" id="mobile-menu-icon"></i>
+			</button>
 		</div>
+	</div>
+
+	<!--- Mobile-only dropdown: search + nav links that .header-search/.header-actions
+	      hide below 768px (no room for them inline — see site.css). Toggled by the
+	      hamburger button above; JS lives in _foot.bxm next to the theme toggle. --->
+	<div class="mobile-menu" id="mobile-menu" hidden>
+		<form method="get" action="/search" class="mobile-menu__search" role="search">
+			<i class="bi bi-search mobile-menu__search-icon" aria-hidden="true"></i>
+			<input type="search" name="q" class="mobile-menu__search-input" placeholder="Search articles…" aria-label="Search articles">
+		</form>
+		<nav class="mobile-menu__links">
+			<a href="/posts" class="mobile-menu__link">
+				<i class="bi bi-file-text"></i> Articles
+			</a>
+			<a href="/about" class="mobile-menu__link">
+				<i class="bi bi-person"></i> About
+			</a>
+			<bx:if len( data.manageUser ?: "" )>
+				<a href="/manage" class="mobile-menu__link">
+					<i class="bi bi-speedometer2"></i> Dashboard
+				</a>
+			</bx:if>
+		</nav>
 	</div>
 </header>
 

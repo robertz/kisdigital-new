@@ -1794,6 +1794,12 @@
 	position: relative;
 	display: flex;
 	flex-direction: column;
+	/* Grid/flex items default to a content-based min-width ("auto"), which
+	   otherwise wins over the 1fr track and the nowrap+ellipsis rules below
+	   it (.c-dashboard-list__label etc.) — the track grows to fit the text
+	   instead of the text ever truncating, dragging the whole page into
+	   horizontal scroll on narrow viewports. */
+	min-width: 0;
 	gap: var(--space-3);
 	padding: var(--space-5);
 	background: var(--ui-surface-1);
@@ -2026,6 +2032,10 @@
 	gap: var(--space-3);
 	padding: var(--space-2) 0;
 	border-bottom: 1px solid var(--ui-border-subtle);
+	/* Same min-width:auto trap as .c-manage-dashboard__card above, one level
+	   deeper — without this, .c-dashboard-list__label's ellipsis never
+	   engages because this row just grows to fit the un-wrapped text. */
+	min-width: 0;
 }
 
 .c-dashboard-list__item:last-child {
@@ -2034,6 +2044,11 @@
 }
 
 .c-dashboard-list__label {
+	/* flex-basis 0 (not auto's content-based default) is what actually lets
+	   this shrink below its text's width — the ellipsis rules below need
+	   that to ever engage instead of pushing .c-dashboard-list__item wide. */
+	flex: 1 1 0;
+	min-width: 0;
 	font-size: 0.875rem;
 	color: var(--text-primary);
 	overflow: hidden;

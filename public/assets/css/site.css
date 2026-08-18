@@ -204,6 +204,112 @@ pre {
 	gap: 8px;
 }
 
+@media (max-width: 767.98px) {
+	.header-actions {
+		display: none;
+	}
+}
+
+/* ── Mobile menu toggle (hamburger) ── */
+/* Hidden on desktop — .header-search/.header-actions have room to show inline
+   there; below 768px neither fits (see the collapses above), so this opens
+   .mobile-menu instead, which carries the same search + links stacked. */
+
+.header-menu-toggle {
+	display: none;
+}
+
+@media (max-width: 767.98px) {
+	.header-menu-toggle {
+		display: inline-flex;
+	}
+}
+
+/* ── Mobile menu panel ── */
+
+.mobile-menu {
+	display: none;
+	flex-direction: column;
+	gap: 4px;
+	padding: 12px;
+	background: var(--site-header-background-color);
+	backdrop-filter: blur(12px);
+	-webkit-backdrop-filter: blur(12px);
+	border-bottom: 1px solid var(--ui-border-subtle);
+}
+
+@media (max-width: 767.98px) {
+	.mobile-menu:not([hidden]) {
+		display: flex;
+	}
+}
+
+.mobile-menu__search {
+	position: relative;
+	display: flex;
+	align-items: center;
+	margin-bottom: 4px;
+}
+
+.mobile-menu__search-icon {
+	position: absolute;
+	left: 12px;
+	font-size: 0.9rem;
+	color: var(--text-muted);
+	pointer-events: none;
+}
+
+.mobile-menu__search-input {
+	width: 100%;
+	padding: 10px 12px 10px 36px;
+	border: 1px solid var(--ui-border-subtle);
+	border-radius: 10px;
+	background: var(--ui-surface-2);
+	color: var(--post-anchor);
+	font-family: var(--font-sans);
+	font-size: 0.9375rem;
+}
+
+.mobile-menu__search-input:focus {
+	outline: none;
+	border-color: var(--post-link-text);
+	background: var(--ui-surface-1);
+}
+
+.mobile-menu__search-input::placeholder {
+	color: var(--text-placeholder);
+}
+
+.mobile-menu__links {
+	display: flex;
+	flex-direction: column;
+}
+
+.mobile-menu__link {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 12px 8px;
+	border-radius: 10px;
+	font-family: var(--font-mono);
+	font-size: 0.9375rem;
+	font-weight: 500;
+	color: var(--text-secondary);
+	text-decoration: none;
+}
+
+.mobile-menu__link i {
+	width: 1.1em;
+	text-align: center;
+	color: var(--text-muted);
+}
+
+.mobile-menu__link:hover,
+.mobile-menu__link:active {
+	background: var(--ui-surface-2);
+	color: var(--post-anchor);
+}
+
 /* Icon button (create post, etc.) */
 
 .header-icon-button {

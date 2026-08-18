@@ -24,6 +24,47 @@
 		applyTheme(html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
 	});
 })();
+
+(function () {
+	var menuToggle = document.getElementById('mobile-menu-toggle');
+	var menuIcon   = document.getElementById('mobile-menu-icon');
+	var menu       = document.getElementById('mobile-menu');
+	if (!menuToggle || !menu) return;
+
+	function closeMenu() {
+		menu.hidden = true;
+		menuToggle.setAttribute('aria-expanded', 'false');
+		menuIcon.className = 'bi bi-list';
+	}
+
+	function openMenu() {
+		menu.hidden = false;
+		menuToggle.setAttribute('aria-expanded', 'true');
+		menuIcon.className = 'bi bi-x-lg';
+	}
+
+	menuToggle.addEventListener('click', function () {
+		if (menu.hidden) { openMenu(); } else { closeMenu(); }
+	});
+
+	// A same-page link (e.g. "Articles" while already on /posts) doesn't
+	// navigate, which would otherwise leave the menu stuck open.
+	menu.querySelectorAll('a').forEach(function (link) {
+		link.addEventListener('click', closeMenu);
+	});
+
+	document.addEventListener('keydown', function (e) {
+		if (e.key === 'Escape' && !menu.hidden) closeMenu();
+	});
+
+	// Collapsing back to desktop width with the menu open would otherwise
+	// leave it stuck visible (it's plain content flow once un-hidden, not
+	// conditioned on viewport) — the width query mirrors the CSS breakpoint.
+	var desktopQuery = window.matchMedia('(min-width: 768px)');
+	desktopQuery.addEventListener('change', function (e) {
+		if (e.matches && !menu.hidden) closeMenu();
+	});
+})();
 </script>
 
 </body>
