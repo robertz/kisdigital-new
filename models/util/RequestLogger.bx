@@ -1,0 +1,181 @@
+/**
+ * Apache-combined-style access log, written to the RequestLog table (see
+ * db/migrations/0004_add_request_log.sql). Replaces GoatCounter as the
+ * source for /manage/insights — GoatCounterClient.bx called out to
+ * GoatCounter's rate-limited API synchronously from request handlers, which
+ * locked up request handling when that API was slow or throttled.
+ *
+ * That failure mode is exactly what this is built to avoid: nothing in
+ * middleware() ever touches the database. Each request just appends a
+ * struct to an in-memory queue (a java.util.concurrent.ConcurrentLinkedQueue
+ * — safe for many virtual threads to write to concurrently without a lock),
+ * and a single background thread drains it on a timer. A slow or briefly
+ * unreachable database delays analytics, never a response.
+ *
+ * Register this as the very first middleware (app.use(requestLogger.middleware()),
+ * before boxExpressStatic() and everything else) so next() wraps the entire
+ * downstream chain — that's what makes this a true access log (every
+ * request this server handles, static assets included), not just a
+ * page-view counter.
+ */
+class {
+
+	variables.queue                = createObject( "java", "java.util.concurrent.ConcurrentLinkedQueue" ).init();
+	variables.maxQueueSize         = 5000;
+	variables.maxBatchPerFlush     = 500;
+	variables.flushIntervalSeconds = 5;
+	variables.retentionDays        = 90;
+	// Roughly every 30 min at the default 5s flush interval — no need to run
+	// a DELETE on every single flush.
+	variables.flushesBetweenCleanup = 360;
+	variables.flushesSinceCleanup   = 0;
+
+	function init( numeric flushIntervalSeconds = 5, numeric retentionDays = 90 ){
+		variables.flushIntervalSeconds = arguments.flushIntervalSeconds;
+		variables.retentionDays        = arguments.retentionDays;
+		_startFlushLoop();
+		return this;
+	}
+
+	/**
+	 * Returns the (req, res, next) middleware closure for app.use().
+	 */
+	function middleware(){
+		return ( req, res, next ) => {
+			var startedAt = getTickCount();
+			next();
+			_enqueue( req, res, getTickCount() - startedAt );
+		};
+	}
+
+	/**
+	 * Queues one log row. Never throws, never blocks on I/O — the only cost
+	 * here is building a struct and appending to a lock-free queue.
+	 */
+	private function _enqueue( req, res, durationMs ){
+		try {
+			// Once the queue backs up (a stalled DB, a flush that's fallen
+			// behind), drop new rows instead of growing without bound — an
+			// unbounded queue under sustained load is its own way to take the
+			// app down, just delayed. Losing some log rows during an outage
+			// is an acceptable tradeoff for that guarantee.
+			if ( variables.queue.size() >= variables.maxQueueSize ){
+				return;
+			}
+
+			variables.queue.add( {
+				requestedAt: now(),
+				method     : req.method,
+				path       : req.path,
+				queryString: _rawQueryString( req ),
+				statusCode : _statusCodeOf( res ),
+				durationMs : durationMs,
+				ip         : req.ip ?: "",
+				referrer   : req.get( "Referer" ) ?: "",
+				userAgent  : req.get( "User-Agent" ) ?: ""
+			} );
+		} catch ( any e ){
+			// A logging bug should never surface as a request failure.
+		}
+	}
+
+	/**
+	 * req.originalUrl carries the raw (still URL-encoded) query string as
+	 * the platform received it. Rebuilding it from req.query instead would
+	 * mean re-encoding already-decoded values, which risks mangling a "&" or
+	 * "=" that was inside an encoded value rather than a real delimiter.
+	 */
+	private function _rawQueryString( req ){
+		var qPos = req.originalUrl.find( "?" );
+		return qPos ? req.originalUrl.mid( qPos + 1, req.originalUrl.len() - qPos ) : "";
+	}
+
+	/**
+	 * res.getStatusCode() needs a boxlang-express release newer than the
+	 * currently pinned v0.1.17 (see Dockerfile). Guarded so this middleware
+	 * runs fine either way — status_code just stays NULL until the pin is
+	 * bumped, no other change needed here.
+	 */
+	private function _statusCodeOf( res ){
+		if ( !structKeyExists( res, "getStatusCode" ) ){
+			return javacast( "null", "" );
+		}
+		try {
+			return res.getStatusCode();
+		} catch ( any e ){
+			return javacast( "null", "" );
+		}
+	}
+
+	private function _startFlushLoop(){
+		var scheduler = createObject( "java", "java.util.concurrent.Executors" ).newSingleThreadScheduledExecutor();
+		var runnable  = createDynamicProxy( new models.util.Runnable( () => _flush() ), [ "java.lang.Runnable" ] );
+		var seconds   = createObject( "java", "java.util.concurrent.TimeUnit" ).SECONDS;
+		scheduler.scheduleAtFixedRate( runnable, variables.flushIntervalSeconds, variables.flushIntervalSeconds, seconds );
+	}
+
+	/**
+	 * Drains up to maxBatchPerFlush rows and inserts them one at a time.
+	 * Runs entirely on the background scheduler thread — a slow or failing
+	 * database here delays the next flush, nothing else.
+	 */
+	private function _flush(){
+		try {
+			var batch = [];
+			var entry = variables.queue.poll();
+			while ( !isNull( entry ) && batch.len() < variables.maxBatchPerFlush ){
+				batch.append( entry );
+				entry = variables.queue.poll();
+			}
+			if ( batch.isEmpty() ){
+				return;
+			}
+
+			for ( var row in batch ){
+				_insertRow( row );
+			}
+
+			_cleanupOldRowsPeriodically();
+		} catch ( any e ){
+			// A DB blip should cost this batch, not the scheduler — the next
+			// tick just tries again with whatever's queued by then.
+			println( "[RequestLogger] flush failed: " & e.message );
+		}
+	}
+
+	private function _insertRow( required struct row ){
+		queryExecute(
+			"INSERT INTO RequestLog
+				(requested_at, method, path, query_string, status_code, duration_ms, ip_address, referrer, user_agent)
+			VALUES
+				(:requestedAt, :method, :path, :queryString, :statusCode, :durationMs, :ip, :referrer, :userAgent)",
+			{
+				"requestedAt": { value: row.requestedAt, cfsqltype: "cf_sql_timestamp" },
+				"method"     : { value: row.method,      cfsqltype: "cf_sql_varchar" },
+				"path"       : { value: row.path,        cfsqltype: "cf_sql_varchar" },
+				"queryString": { value: row.queryString, cfsqltype: "cf_sql_longvarchar" },
+				"statusCode" : isNull( row.statusCode )
+					? { value: "", cfsqltype: "cf_sql_integer", null: true }
+					: { value: row.statusCode, cfsqltype: "cf_sql_integer" },
+				"durationMs" : { value: row.durationMs, cfsqltype: "cf_sql_integer" },
+				"ip"         : { value: row.ip,         cfsqltype: "cf_sql_varchar" },
+				"referrer"   : { value: row.referrer,   cfsqltype: "cf_sql_longvarchar" },
+				"userAgent"  : { value: row.userAgent,  cfsqltype: "cf_sql_longvarchar" }
+			}
+		);
+	}
+
+	private function _cleanupOldRowsPeriodically(){
+		variables.flushesSinceCleanup++;
+		if ( variables.flushesSinceCleanup < variables.flushesBetweenCleanup ){
+			return;
+		}
+		variables.flushesSinceCleanup = 0;
+
+		queryExecute(
+			"DELETE FROM RequestLog WHERE requested_at < DATE_SUB(NOW(), INTERVAL :days DAY)",
+			{ "days": { value: variables.retentionDays, cfsqltype: "cf_sql_integer" } }
+		);
+	}
+
+}

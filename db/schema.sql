@@ -136,3 +136,28 @@ create index idx_search_log_query
 
 create index idx_search_log_searched_at
     on SearchLog (searched_at);
+
+-- Apache-style access log, written to asynchronously by RequestLogger.bx —
+-- replaces GoatCounter as the source for /manage/insights (see
+-- db/migrations/0004_add_request_log.sql for why: GoatCounter's synchronous,
+-- rate-limited API calls could lock up request handling).
+create table RequestLog
+(
+    id           bigint unsigned auto_increment          not null
+        primary key,
+    requested_at timestamp(3) default CURRENT_TIMESTAMP(3) not null,
+    method       varchar(10)                              not null,
+    path         varchar(2048)                            not null,
+    query_string text                                     not null,
+    status_code  smallint unsigned                        null,
+    duration_ms  int unsigned                             not null,
+    ip_address   varchar(45) default ''                   not null,
+    referrer     text                                     not null,
+    user_agent   text                                     not null
+);
+
+create index idx_request_log_path
+    on RequestLog (path(191));
+
+create index idx_request_log_requested_at
+    on RequestLog (requested_at);

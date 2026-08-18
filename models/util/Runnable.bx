@@ -1,0 +1,19 @@
+/**
+ * Adapts a BoxLang closure to java.lang.Runnable — createDynamicProxy needs a
+ * class instance whose method matches the target interface, not a bare
+ * closure. Used by RequestLogger.bx to hand its flush loop to a
+ * ScheduledExecutorService. Same pattern as boxlang-express's own
+ * ThreadRunnable.bx (a separate module, not reused directly from here).
+ */
+class {
+
+	function init( fn ) {
+		variables.fn = fn
+		return this
+	}
+
+	function run() {
+		variables.fn()
+	}
+
+}

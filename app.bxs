@@ -46,7 +46,19 @@ goatCounterClient = new models.util.GoatCounterClient(
 	getSystemSetting( "GOATCOUNTER_API_KEY", "" )
 )
 
+// Apache-style access log (RequestLog table) — see models/util/RequestLogger.bx
+// for why this replaces GoatCounter as the source for /manage/insights:
+// GoatCounter's synchronous, rate-limited API calls could lock up request
+// handling, and this can't, by construction (nothing here touches the
+// database inline with a request).
+requestLogger = new models.util.RequestLogger()
+
 // ── Middleware ───────────────────────────────────────────────────────────
+// requestLogger goes first, ahead of everything else, so its next() wraps
+// the entire chain below — every request this server handles gets a row,
+// static assets included, same scope as an actual Apache access log.
+app.use( requestLogger.middleware() )
+
 app.use(
 	boxExpressJSON(),
 	boxExpressUrlencoded(),
