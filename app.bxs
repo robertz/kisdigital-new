@@ -56,7 +56,13 @@ app.use( requestLogger.middleware() )
 app.use(
 	boxExpressJSON(),
 	boxExpressUrlencoded(),
-	boxExpressSession( { store: boxExpressCacheStore("sessionCache"), maxAge: 30 * 24 * 60 * 60 } ), // 30 days, matches the old app's session timeout
+	// 30 days, matches the old app's session timeout. Keep boxlang.json's
+	// sessionCache defaultTimeout/defaultLastAccessTimeout at this same
+	// figure (JSON can't hold a comment pointing back here) — this maxAge
+	// only overrides the cache entry's TTL per request, not its idle
+	// timeout, so a shorter defaultLastAccessTimeout there silently evicts
+	// idle sessions well before the cookie itself expires.
+	boxExpressSession( { store: boxExpressCacheStore("sessionCache"), maxAge: 30 * 24 * 60 * 60 } ),
 	boxExpressStatic( expandPath( "./public" ), { maxAge: 86400 } ),
 	boxExpressHelmet( { referrerPolicy: "strict-origin-when-cross-origin" } )
 )

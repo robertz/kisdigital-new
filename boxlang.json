@@ -29,8 +29,8 @@
 				"maxObjects": 10000,
 				"evictionPolicy": "LRU",
 				"evictCount": 500,
-				"defaultTimeout": 3600,
-				"defaultLastAccessTimeout": 1800,
+				"defaultTimeout": 2592000,
+				"defaultLastAccessTimeout": 2592000,
 				"reapFrequency": 300
 			}
 		}
