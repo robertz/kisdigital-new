@@ -125,7 +125,7 @@ site-wide, just here where it's actually used. --->
 								<template x-for="row in filteredRows" :key="row.id">
 									<tr>
 										<td class="c-manage-table__cell-muted c-log-table__nowrap">
-											<span x-text="row.timeLabel"></span>
+											<span x-text="formatTime(row.timeSort)"></span>
 										</td>
 										<td>
 											<span class="c-log-method" :class="'c-log-method--' + row.method.toLowerCase()" x-text="row.method"></span>
@@ -231,6 +231,7 @@ site-wide, just here where it's actually used. --->
 	</main>
 </div>
 
+<script src="/assets/js/local-time.js"></script>
 <script>
 function requestLogTable(){
 	var initialFilters = JSON.parse(document.getElementById('log-initial-filters').textContent);
@@ -242,6 +243,13 @@ function requestLogTable(){
 		quickFilter: initialFilters.quick,
 		sortKey: 'timeSort',
 		sortDir: 'desc',
+
+		// row.timeSort is a UTC ISO string (see _rowsForClient() in
+		// Manage.bx) — this is what actually renders it, in the viewer's
+		// own local timezone rather than the server's.
+		formatTime: function(utcIso){
+			return LocalTime.format(utcIso, 'datetime-seconds') || utcIso;
+		},
 
 		// Alpine calls this automatically (it's a reserved method name) once
 		// the component's reactive state exists — mirrors every filter

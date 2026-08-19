@@ -52,7 +52,7 @@
 								<td class="text-muted">#author.getPostCount()#</td>
 								<td class="text-muted">
 									<bx:if len( author.getCreated() )>
-										#dateFormat( author.getCreated(), "d mmm yyyy" )#
+										<time datetime="#dateTimeFormat( author.getCreated(), "yyyy-mm-dd'T'HH:nn:ss'Z'" )#" data-local-time data-local-format="date">#dateFormat( author.getCreated(), "d mmm yyyy" )#</time>
 									<bx:else>
 										—
 									</bx:if>
@@ -71,5 +71,7 @@
 
 	</main>
 </div>
+
+<script src="/assets/js/local-time.js"></script>
 </bx:output>
 <bx:include template="../../partials/_foot.bxm">

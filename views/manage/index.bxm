@@ -148,7 +148,7 @@
 								</a>
 								<span class="c-dashboard-list__meta">
 									<span class="c-status-badge c-status-badge--#lCase( row.status )#">#encodeForHTML( row.status )#</span>
-									#dateTimeFormat( row.last_updated, "mmm d" )#
+									<time datetime="#dateTimeFormat( row.last_updated, "yyyy-mm-dd'T'HH:nn:ss'Z'" )#" data-local-time data-local-format="month-day">#dateTimeFormat( row.last_updated, "mmm d" )#</time>
 								</span>
 							</li>
 						</bx:loop>
@@ -267,5 +267,7 @@
 
 	</main>
 </div>
+
+<script src="/assets/js/local-time.js"></script>
 </bx:output>
 <bx:include template="../partials/_foot.bxm">

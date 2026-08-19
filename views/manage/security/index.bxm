@@ -58,8 +58,8 @@
 										</td>
 											<td>#numberFormat( row.total_requests )#</td>
 											<td>#numberFormat( row.distinct_paths )#</td>
-											<td class="c-manage-table__cell-muted">#dateTimeFormat( row.first_seen, "mmm d, h:nn tt" )#</td>
-											<td class="c-manage-table__cell-muted">#dateTimeFormat( row.last_seen, "mmm d, h:nn tt" )#</td>
+											<td class="c-manage-table__cell-muted"><time datetime="#dateTimeFormat( row.first_seen, "yyyy-mm-dd'T'HH:nn:ss'Z'" )#" data-local-time data-local-format="datetime">#dateTimeFormat( row.first_seen, "mmm d, h:nn tt" )#</time></td>
+											<td class="c-manage-table__cell-muted"><time datetime="#dateTimeFormat( row.last_seen, "yyyy-mm-dd'T'HH:nn:ss'Z'" )#" data-local-time data-local-format="datetime">#dateTimeFormat( row.last_seen, "mmm d, h:nn tt" )#</time></td>
 										</tr>
 									</bx:loop>
 								</tbody>
@@ -195,7 +195,7 @@
 										<bx:set statusCode = isNull( row.status_code ) ? "" : row.status_code>
 										<bx:set statusClass = !len( statusCode ) ? "unknown" : ( statusCode < 300 ? "2xx" : ( statusCode < 400 ? "3xx" : ( statusCode < 500 ? "4xx" : "5xx" ) ) )>
 										<tr>
-											<td class="c-manage-table__cell-muted">#dateTimeFormat( row.requested_at, "mmm d, h:nn:ss tt" )#</td>
+											<td class="c-manage-table__cell-muted"><time datetime="#dateTimeFormat( row.requested_at, "yyyy-mm-dd'T'HH:nn:ss'Z'" )#" data-local-time data-local-format="datetime-seconds">#dateTimeFormat( row.requested_at, "mmm d, h:nn:ss tt" )#</time></td>
 											<td><span class="c-signal-badge c-signal-badge--#encodeForHTMLAttribute( row.signal_type ?: 'unknown' )#">#encodeForHTML( row.signal_type ?: 'unknown' )#</span></td>
 											<td class="c-manage-table__cell-muted">
 											#encodeForHTML( row.ip_address )#
@@ -294,7 +294,7 @@
 										<bx:set statusCode = isNull( row.status_code ) ? "" : row.status_code>
 										<bx:set statusClass = !len( statusCode ) ? "unknown" : ( statusCode < 300 ? "2xx" : ( statusCode < 400 ? "3xx" : ( statusCode < 500 ? "4xx" : "5xx" ) ) )>
 										<tr>
-											<td class="c-manage-table__cell-muted">#dateTimeFormat( row.requested_at, "mmm d, h:nn:ss tt" )#</td>
+											<td class="c-manage-table__cell-muted"><time datetime="#dateTimeFormat( row.requested_at, "yyyy-mm-dd'T'HH:nn:ss'Z'" )#" data-local-time data-local-format="datetime-seconds">#dateTimeFormat( row.requested_at, "mmm d, h:nn:ss tt" )#</time></td>
 											<td class="c-manage-table__cell-muted">
 											#encodeForHTML( row.ip_address )#
 											<bx:set hostname = data.hostnames[ row.ip_address ] ?: "">
@@ -350,8 +350,8 @@
 											<bx:if len( hostname )><br><span class="c-security-hostname">#encodeForHTML( hostname )#</span></bx:if>
 										</td>
 											<td>#numberFormat( row.hits )#</td>
-											<td class="c-manage-table__cell-muted">#dateTimeFormat( row.first_seen, "mmm d, h:nn tt" )#</td>
-											<td class="c-manage-table__cell-muted">#dateTimeFormat( row.last_seen, "mmm d, h:nn tt" )#</td>
+											<td class="c-manage-table__cell-muted"><time datetime="#dateTimeFormat( row.first_seen, "yyyy-mm-dd'T'HH:nn:ss'Z'" )#" data-local-time data-local-format="datetime">#dateTimeFormat( row.first_seen, "mmm d, h:nn tt" )#</time></td>
+											<td class="c-manage-table__cell-muted"><time datetime="#dateTimeFormat( row.last_seen, "yyyy-mm-dd'T'HH:nn:ss'Z'" )#" data-local-time data-local-format="datetime">#dateTimeFormat( row.last_seen, "mmm d, h:nn tt" )#</time></td>
 										</tr>
 									</bx:loop>
 								</tbody>
@@ -365,5 +365,7 @@
 
 	</main>
 </div>
+
+<script src="/assets/js/local-time.js"></script>
 </bx:output>
 <bx:include template="../../partials/_foot.bxm">

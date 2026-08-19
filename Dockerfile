@@ -110,4 +110,15 @@ RUN for module in $(echo "$BOXLANG_MODULES" | tr "," "\n"); do \
 
 EXPOSE 3005
 
+# The `boxlang` launcher (a standard Gradle-generated start script) appends
+# $JAVA_OPTS to its own default JVM flags (-XX:TieredStopAtLevel=1
+# -Xshare:auto -XX:SharedArchiveFile=...) rather than replacing them — this
+# doesn't disable the AppCDS shared archive or JIT tiering it sets up.
+# Capped heap + SerialGC: this runs on a small, single-container instance
+# (DigitalOcean App Platform's basic tier), where SerialGC's single-threaded,
+# lower-overhead collection is a better fit than the default (G1, tuned for
+# multi-core hosts with room to spare) and a bounded max heap keeps the JVM
+# from growing to fill however much RAM the instance happens to have.
+ENV JAVA_OPTS="-Xmx400m -Xms128m -XX:+UseSerialGC"
+
 CMD ["boxlang", "--bx-config", "boxlang.json", "app.bxs"]

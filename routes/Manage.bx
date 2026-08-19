@@ -909,8 +909,11 @@ class {
 		return arguments.rows.map( ( row ) => {
 			return {
 				"id"         : row.id,
-				"timeLabel"  : dateFormat( row.requested_at, "mmm d" ) & " " & dateTimeFormat( row.requested_at, "h:nn:ss tt" ),
-				"timeSort"   : dateTimeFormat( row.requested_at, "yyyy-mm-dd'T'HH:nn:ss" ),
+				// A UTC ISO string, not a display label — the browser formats
+				// it into the viewer's own local timezone client-side (see
+				// LocalTime.format() in local-time.js), and it doubles as the
+				// sort key since ISO-with-Z strings sort correctly as text.
+				"timeSort"   : dateTimeFormat( row.requested_at, "yyyy-mm-dd'T'HH:nn:ss'Z'" ),
 				"method"     : row.method,
 				"path"       : row.path,
 				"queryString": row.query_string,
@@ -1003,6 +1006,7 @@ class {
 				"vmVersion"            : arguments.snapshot.jvm.vmVersion,
 				"specVersion"          : arguments.snapshot.jvm.specVersion,
 				"startTime"            : dateTimeFormat( _epochMillisToDate( arguments.snapshot.jvm.startTime ), "mmm d, h:nn:ss tt" ),
+				"startTimeUtc"         : dateTimeFormat( _epochMillisToDate( arguments.snapshot.jvm.startTime ), "yyyy-mm-dd'T'HH:nn:ss'Z'" ),
 				"uptime"               : _formatDuration( arguments.snapshot.jvm.uptimeMs ),
 				"loadedClassCount"     : numberFormat( arguments.snapshot.jvm.loadedClassCount ),
 				"totalLoadedClassCount": numberFormat( arguments.snapshot.jvm.totalLoadedClassCount ),
