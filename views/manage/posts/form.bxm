@@ -261,7 +261,7 @@
 							<span id="editor-cover-upload-status" class="c-post-editor__cover-upload-status"></span>
 						</div>
 
-						<div id="editor-cover-browse-modal" class="c-image-picker" hidden>
+						<div id="editor-cover-browse-modal" class="c-image-picker" hidden data-default-path="#encodeForHTMLAttribute( data.r2UploadPrefix & '/' )#">
 							<div class="c-image-picker__backdrop" id="editor-cover-browse-backdrop"></div>
 							<div class="c-image-picker__dialog" role="dialog" aria-modal="true" aria-labelledby="editor-cover-browse-title">
 								<header class="c-image-picker__head">
@@ -277,7 +277,8 @@
 									</button>
 									<span id="editor-picker-upload-status" class="c-post-editor__cover-upload-status"></span>
 								</div>
-								<div id="editor-cover-browse-body" class="c-image-picker__body">
+								<nav id="editor-picker-breadcrumb" class="c-media-manager__breadcrumb c-image-picker__breadcrumb" aria-label="Directory path"></nav>
+								<div id="editor-cover-browse-body" class="c-image-picker__body c-media-manager__grid">
 									<p class="text-muted">Loading…</p>
 								</div>
 							</div>
@@ -321,6 +322,7 @@
 
 		</form>
 
+		<script src="/assets/js/media-browser.js"></script>
 		<script>
 		(function(){
 			var descEl    = document.getElementById('editor-description');
@@ -417,12 +419,17 @@
 			// Resizes, then presigns + PUTs straight to R2 — the server never
 			// sees the file bytes (see R2Client.presignPutUrl()). Shared by
 			// the cover-image uploader and the insert-image picker below.
-			function uploadImageFile(file){
+			// path defaults to the picker's starting directory (r2UploadPrefix)
+			// when the caller doesn't have a more specific "currently browsing"
+			// directory to upload into (e.g. the cover panel's direct "Upload
+			// image" button, which isn't inside the folder-browsing picker).
+			function uploadImageFile(file, path){
+				var uploadPath = path || document.getElementById('editor-cover-browse-modal').dataset.defaultPath || '';
 				return resizeImageFile(file, 800).then(function(sizedFile){
 					return fetch('/manage/posts/upload-url', {
 						method: 'POST',
 						headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': csrfToken },
-						body: new URLSearchParams({ filename: file.name, contentType: file.type })
+						body: new URLSearchParams({ filename: file.name, contentType: file.type, path: uploadPath })
 					})
 					.then(function(res){ return res.json(); })
 					.then(function(data){
@@ -459,6 +466,7 @@
 				var modal        = document.getElementById('editor-cover-browse-modal');
 				var modalTitle   = document.getElementById('editor-cover-browse-title');
 				var modalBody    = document.getElementById('editor-cover-browse-body');
+				var modalBreadcrumb = document.getElementById('editor-picker-breadcrumb');
 				var modalClose   = document.getElementById('editor-cover-browse-close');
 				var modalBackdrop = document.getElementById('editor-cover-browse-backdrop');
 				var pickerFileInput = document.getElementById('editor-picker-file');
@@ -467,6 +475,7 @@
 				var toolbarImageBtn = document.getElementById('editor-toolbar-image');
 
 				var pickerMode = 'cover'; // 'cover' | 'insert'
+				var pickerPath = modal.dataset.defaultPath || '';
 
 				function setCoverImage(url){
 					urlInput.value = url;
@@ -521,70 +530,50 @@
 					});
 				});
 
-				// ── Modal: existing-image grid + its own "Upload new" ──
+				// ── Modal: folder-browsable image grid + its own "Upload new" ──
+				// Same navigation as the media manager (breadcrumb + folder
+				// tiles), just in-place inside the modal instead of full-page
+				// navigation, and clicking an image selects it instead of
+				// opening a lightbox.
 				function closeModal(){ modal.hidden = true; }
+
+				function loadPickerDirectory(path){
+					pickerPath = path;
+					MediaBrowser.loadDirectory({
+						path: path,
+						listUrlEndpoint: '/manage/posts/images',
+						gridEl: modalBody,
+						breadcrumbEl: modalBreadcrumb,
+						onNavigateFolder: loadPickerDirectory,
+						onFileClick: function(file){
+							useImage(file.url, file.name);
+							statusEl.className = 'c-post-editor__cover-upload-status';
+							statusEl.textContent = 'Selected.';
+							closeModal();
+						},
+						onNewFolder: function(){
+							MediaBrowser.createFolder({
+								createFolderEndpoint: '/manage/posts/create-folder',
+								csrfToken: csrfToken,
+								path: pickerPath
+							})
+							.then(function(newPath){
+								if (newPath === null) return; // cancelled
+								loadPickerDirectory(newPath);
+							})
+							.catch(function(err){
+								pickerStatusEl.className = 'c-post-editor__cover-upload-status c-post-editor__cover-upload-status--error';
+								pickerStatusEl.textContent = typeof err === 'string' ? err : 'Could not create the folder.';
+							});
+						}
+					});
+				}
+
 				function openModal(mode){
 					pickerMode = mode;
 					modalTitle.textContent = mode === 'insert' ? 'Insert an image' : 'Choose a cover image';
 					modal.hidden = false;
-					modalBody.innerHTML = '<p class="text-muted">Loading…</p>';
-
-					// Two-step, same as upload: our server presigns a list URL (it
-					// never fetches the listing itself), then this fetches that
-					// URL directly and parses the ListBucketResult XML itself.
-					fetch('/manage/posts/images', { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-					.then(function(res){ return res.json(); })
-					.then(function(data){
-						if (!data.success) {
-							return Promise.reject(data.error || 'Could not load images.');
-						}
-						return fetch(data.listUrl).then(function(listRes){
-							if (!listRes.ok) {
-								return Promise.reject('Could not load images.');
-							}
-							return listRes.text().then(function(xmlText){
-								return { xmlText: xmlText, publicBaseUrl: data.publicBaseUrl };
-							});
-						});
-					})
-					.then(function(result){
-						var xml = new DOMParser().parseFromString(result.xmlText, 'application/xml');
-						var contents = Array.prototype.slice.call(xml.getElementsByTagName('Contents'));
-						var images = contents.map(function(node){
-							var key = node.getElementsByTagName('Key')[0].textContent;
-							return { key: key, url: result.publicBaseUrl + '/' + key };
-						}).filter(function(img){ return img.key.slice(-1) !== '/'; });
-
-						if (!images.length) {
-							modalBody.innerHTML = '<p class="text-muted">No uploaded images yet — use "Upload new" above to add one.</p>';
-							return;
-						}
-						var grid = document.createElement('div');
-						grid.className = 'c-image-picker__grid';
-						images.forEach(function(img){
-							var item = document.createElement('button');
-							item.type = 'button';
-							item.className = 'c-image-picker__item';
-							item.title = img.key;
-							var thumb = document.createElement('img');
-							thumb.src = img.url;
-							thumb.alt = img.key;
-							thumb.loading = 'lazy';
-							item.appendChild(thumb);
-							item.addEventListener('click', function(){
-								useImage(img.url, img.key.split('/').pop());
-								statusEl.className = 'c-post-editor__cover-upload-status';
-								statusEl.textContent = 'Selected.';
-								closeModal();
-							});
-							grid.appendChild(item);
-						});
-						modalBody.innerHTML = '';
-						modalBody.appendChild(grid);
-					})
-					.catch(function(err){
-						modalBody.innerHTML = '<p class="text-danger">' + (typeof err === 'string' ? err : 'Couldn\'t load existing images — check your connection and try again.') + '</p>';
-					});
+					loadPickerDirectory(modal.dataset.defaultPath || '');
 				}
 
 				pickerUploadBtn.addEventListener('click', function(){ pickerFileInput.click(); });
@@ -597,7 +586,7 @@
 					pickerStatusEl.textContent = 'Uploading…';
 					pickerUploadBtn.disabled = true;
 
-					uploadImageFile(file)
+					uploadImageFile(file, pickerPath)
 					.then(function(url){
 						pickerUploadBtn.disabled = false;
 						pickerFileInput.value = '';

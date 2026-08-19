@@ -61,9 +61,12 @@ class {
 		this.router.post( "/manage/posts/save", auth, ( req, res ) => savePost( req, res ) );
 		this.router.post( "/manage/posts/preview", auth, ( req, res ) => previewPost( req, res ) );
 		// Both of these hand back a presigned R2 URL rather than doing the
-		// upload/list themselves — see R2Client.presignPutUrl() for why.
+		// upload/list themselves — see R2Client.presignPutUrl() for why. The
+		// picker browses the whole bucket, same as /manage/media below (not
+		// just r2UploadPrefix) — r2UploadPrefix is only where it starts.
 		this.router.post( "/manage/posts/upload-url", auth, ( req, res ) => coverImageUploadUrl( req, res ) );
 		this.router.get( "/manage/posts/images", auth, ( req, res ) => listCoverImagesUrl( req, res ) );
+		this.router.post( "/manage/posts/create-folder", auth, ( req, res ) => postsCreateFolder( req, res ) );
 
 		this.router.get( "/manage/authors", admin, ( req, res ) => authorsList( req, res ) );
 		this.router.get( "/manage/authors/new", admin, ( req, res ) => newAuthor( req, res ) );
@@ -73,11 +76,14 @@ class {
 		this.router.get( "/manage/settings", admin, ( req, res ) => settingsIndex( req, res ) );
 		this.router.post( "/manage/settings/update", admin, ( req, res ) => updateSetting( req, res ) );
 
-		// Browses the whole R2 bucket (not just the posts/ upload prefix), so
-		// gated to admins like Authors/Settings rather than every author.
+		// The standalone media manager page itself (browse/upload without a
+		// post attached) stays admin-only, like Authors/Settings — the
+		// underlying bucket access it exercises is the same as the post
+		// editor's picker above, just reached through a dedicated page.
 		this.router.get( "/manage/media", admin, ( req, res ) => mediaIndex( req, res ) );
 		this.router.get( "/manage/media/list-url", admin, ( req, res ) => mediaListUrl( req, res ) );
 		this.router.post( "/manage/media/upload-url", admin, ( req, res ) => mediaUploadUrl( req, res ) );
+		this.router.post( "/manage/media/create-folder", admin, ( req, res ) => mediaCreateFolder( req, res ) );
 
 		this.router.get( "/manage/insights", admin, ( req, res ) => insightsIndex( req, res ) );
 		this.router.get( "/manage/logs", admin, ( req, res ) => logsIndex( req, res ) );
@@ -398,26 +404,7 @@ class {
 	// PUTs the file straight to R2 itself (see R2Client.presignPutUrl() for
 	// why this server never touches the file bytes).
 	function coverImageUploadUrl( req, res ){
-		if ( !variables.r2Client.isConfigured() ){
-			return res.status( 501 ).json( { success: false, error: "Image hosting isn't configured (missing R2 env vars)." } );
-		}
-
-		var filename    = trim( req.body.filename ?: "" );
-		var contentType = trim( req.body.contentType ?: "" );
-		var allowedTypes = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif" };
-		var ext = allowedTypes[ lCase( contentType ) ] ?: "";
-		if ( !len( ext ) ){
-			return res.status( 415 ).json( { success: false, error: "Unsupported image type: #encodeForHTML( contentType )#. Use JPEG, PNG, WebP, or GIF." } );
-		}
-
-		try {
-			var key = variables.r2UploadPrefix & "/" & slugifyFilename( filename ) & "." & ext;
-			var presigned = variables.r2Client.presignPutUrl( key, contentType );
-			res.json( { success: true, uploadUrl: presigned.uploadUrl, url: presigned.publicUrl } );
-		} catch ( any e ) {
-			println( "[error] cover image presign failed: " & e.message );
-			res.status( 502 ).json( { success: false, error: "Couldn't prepare the upload." } );
-		}
+		_presignedUpload( req, res );
 	}
 
 	/**
@@ -436,21 +423,21 @@ class {
 		return len( slug ) ? slug : "image";
 	}
 
-	// GET /manage/posts/images — backs the editor's "Choose existing" picker
-	// modal. Hands back a presigned R2 list URL; the browser fetches it and
-	// parses the ListBucketResult XML itself (see R2Client.presignListUrl()).
+	// GET /manage/posts/images?path=sub/dir — backs the editor's "Choose
+	// existing" picker modal. Hands back a presigned R2 list URL for one
+	// directory (folders as CommonPrefixes, files as Contents); the browser
+	// fetches it and parses the ListBucketResult XML itself (see
+	// R2Client.presignListUrl()). The modal opens at r2UploadPrefix but can
+	// navigate anywhere in the bucket from there, same as the media manager.
 	function listCoverImagesUrl( req, res ){
-		if ( !variables.r2Client.isConfigured() ){
-			return res.status( 501 ).json( { success: false, error: "Image hosting isn't configured (missing R2 env vars)." } );
-		}
+		_presignedListing( req, res );
+	}
 
-		try {
-			var listUrl = variables.r2Client.presignListUrl( variables.r2UploadPrefix & "/" );
-			res.json( { success: true, listUrl: listUrl, publicBaseUrl: variables.r2Client.getPublicBaseUrl() } );
-		} catch ( any e ) {
-			println( "[error] cover image list presign failed: " & e.message );
-			res.status( 502 ).json( { success: false, error: "Couldn't prepare the image list." } );
-		}
+	// POST /manage/posts/create-folder — same as mediaCreateFolder below,
+	// available from the post editor's picker too since it shares the same
+	// full-bucket browsing.
+	function postsCreateFolder( req, res ){
+		_presignedCreateFolder( req, res );
 	}
 
 	private function validatePostForm( req ){
@@ -484,7 +471,8 @@ class {
 			tagsList      : arguments.post.getTags().toList( ", " ),
 			error         : arguments.error,
 			success       : arguments.success,
-			csrfToken     : req.csrfToken()
+			csrfToken     : req.csrfToken(),
+			r2UploadPrefix: variables.r2UploadPrefix
 		} );
 	}
 
@@ -660,6 +648,29 @@ class {
 	// of one directory (folders as CommonPrefixes, files as Contents), not the
 	// whole bucket recursively.
 	function mediaListUrl( req, res ){
+		_presignedListing( req, res );
+	}
+
+	// POST /manage/media/upload-url — same two-step presigned upload as the
+	// post editor's cover-image upload, except the destination directory is
+	// whatever the browser currently has open rather than a fixed prefix.
+	function mediaUploadUrl( req, res ){
+		_presignedUpload( req, res );
+	}
+
+	// POST /manage/media/create-folder — folders are virtual in S3-compatible
+	// storage, so "creating" one just means writing a zero-byte ".keep"
+	// object under the new prefix (see _presignedCreateFolder()), which is
+	// enough for it to show up as a CommonPrefix on the next listing.
+	function mediaCreateFolder( req, res ){
+		_presignedCreateFolder( req, res );
+	}
+
+	// ── Shared by the media manager and the post editor's picker — both
+	// browse/upload/create-folder against the same bucket the same way, just
+	// through different route prefixes and auth levels (admin vs any author).
+
+	private function _presignedListing( req, res ){
 		if ( !variables.r2Client.isConfigured() ){
 			return res.status( 501 ).json( { success: false, error: "Image hosting isn't configured (missing R2 env vars)." } );
 		}
@@ -669,15 +680,12 @@ class {
 			var listUrl = variables.r2Client.presignListUrl( path, 1000, 300, "/" );
 			res.json( { success: true, listUrl: listUrl, publicBaseUrl: variables.r2Client.getPublicBaseUrl(), path: path } );
 		} catch ( any e ) {
-			println( "[error] media list presign failed: " & e.message );
+			println( "[error] directory list presign failed: " & e.message );
 			res.status( 502 ).json( { success: false, error: "Couldn't prepare the directory listing." } );
 		}
 	}
 
-	// POST /manage/media/upload-url — same two-step presigned upload as the
-	// post editor's cover-image upload, except the destination directory is
-	// whatever the browser currently has open rather than a fixed prefix.
-	function mediaUploadUrl( req, res ){
+	private function _presignedUpload( req, res ){
 		if ( !variables.r2Client.isConfigured() ){
 			return res.status( 501 ).json( { success: false, error: "Image hosting isn't configured (missing R2 env vars)." } );
 		}
@@ -696,8 +704,34 @@ class {
 			var presigned = variables.r2Client.presignPutUrl( key, contentType );
 			res.json( { success: true, uploadUrl: presigned.uploadUrl, url: presigned.publicUrl, key: key } );
 		} catch ( any e ) {
-			println( "[error] media upload presign failed: " & e.message );
+			println( "[error] upload presign failed: " & e.message );
 			res.status( 502 ).json( { success: false, error: "Couldn't prepare the upload." } );
+		}
+	}
+
+	// A "folder" only starts showing up in listings once something exists
+	// under its prefix — S3-compatible storage has no real mkdir. Writing a
+	// zero-byte "<path>/<name>/.keep" object is the standard workaround; the
+	// browser's listing parser drops ".keep" entries so they never render as
+	// a file (see media-browser.js's parseListing()).
+	private function _presignedCreateFolder( req, res ){
+		if ( !variables.r2Client.isConfigured() ){
+			return res.status( 501 ).json( { success: false, error: "Image hosting isn't configured (missing R2 env vars)." } );
+		}
+
+		var path = sanitizeMediaPath( req.body.path ?: "" );
+		var name = trim( req.body.name ?: "" );
+		if ( !len( name ) || name == "." || name == ".." || !reFind( "^[A-Za-z0-9._ -]+$", name ) ){
+			return res.status( 422 ).json( { success: false, error: "Enter a valid folder name (letters, numbers, spaces, dots, dashes, underscores)." } );
+		}
+
+		try {
+			var folderPath = path & name & "/";
+			var presigned = variables.r2Client.presignPutUrl( folderPath & ".keep", "application/x-directory" );
+			res.json( { success: true, uploadUrl: presigned.uploadUrl, path: folderPath } );
+		} catch ( any e ) {
+			println( "[error] create-folder presign failed: " & e.message );
+			res.status( 502 ).json( { success: false, error: "Couldn't prepare the new folder." } );
 		}
 	}
 

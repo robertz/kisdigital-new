@@ -48,6 +48,7 @@
 	</main>
 </div>
 
+<script src="/assets/js/media-browser.js"></script>
 <script>
 (function(){
 	var breadcrumbEl  = document.getElementById('media-breadcrumb');
@@ -58,8 +59,6 @@
 	var gridEl        = document.getElementById('media-grid');
 	var uploadBtn     = document.getElementById('media-upload-btn');
 	var fileInput     = document.getElementById('media-file-input');
-
-	var IMAGE_EXT = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
 
 	function currentPath(){
 		return new URLSearchParams(window.location.search).get('path') || '';
@@ -77,141 +76,28 @@
 		statusEl.hidden = false;
 	}
 
-	function extOf(name){
-		var parts = name.split('.');
-		return parts.length > 1 ? parts.pop().toLowerCase() : '';
-	}
-
-	function formatSize(bytes){
-		bytes = Number(bytes) || 0;
-		if (bytes < 1024) return bytes + ' B';
-		if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-		return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-	}
-
-	function renderBreadcrumb(path){
-		breadcrumbEl.innerHTML = '';
-		var rootLink = document.createElement('button');
-		rootLink.type = 'button';
-		rootLink.className = 'c-media-manager__crumb';
-		rootLink.textContent = 'Root';
-		rootLink.addEventListener('click', function(){ navigateTo(''); });
-		breadcrumbEl.appendChild(rootLink);
-
-		var segments = path.split('/').filter(Boolean);
-		var built = '';
-		segments.forEach(function(seg){
-			built += seg + '/';
-			var sep = document.createElement('span');
-			sep.className = 'c-media-manager__crumb-sep';
-			sep.textContent = '/';
-			breadcrumbEl.appendChild(sep);
-
-			var crumbPath = built;
-			var link = document.createElement('button');
-			link.type = 'button';
-			link.className = 'c-media-manager__crumb';
-			link.textContent = seg;
-			link.addEventListener('click', function(){ navigateTo(crumbPath); });
-			breadcrumbEl.appendChild(link);
-		});
-	}
-
-	// Two-step, same as the post editor's picker: our server only presigns a
-	// list URL (never fetches the listing itself), then this fetches that
-	// URL directly and parses the ListBucketResult XML client-side.
 	function loadDirectory(path){
-		gridEl.innerHTML = '<p class="text-muted">Loading…</p>';
-
-		fetch('/manage/media/list-url?path=' + encodeURIComponent(path), { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-		.then(function(res){ return res.json(); })
-		.then(function(data){
-			if (!data.success) return Promise.reject(data.error || 'Could not load this directory.');
-			return fetch(data.listUrl).then(function(listRes){
-				if (!listRes.ok) return Promise.reject('Could not load this directory.');
-				return listRes.text().then(function(xmlText){
-					return { xmlText: xmlText, publicBaseUrl: data.publicBaseUrl, path: data.path };
+		MediaBrowser.loadDirectory({
+			path: path,
+			listUrlEndpoint: '/manage/media/list-url',
+			gridEl: gridEl,
+			breadcrumbEl: breadcrumbEl,
+			onNavigateFolder: navigateTo,
+			onFileClick: function(file, images, index){ openCarousel(images, index); },
+			onNewFolder: function(){
+				MediaBrowser.createFolder({
+					createFolderEndpoint: '/manage/media/create-folder',
+					csrfToken: csrfToken,
+					path: path
+				})
+				.then(function(newPath){
+					if (newPath === null) return; // cancelled
+					navigateTo(newPath);
+				})
+				.catch(function(err){
+					showStatus(typeof err === 'string' ? err : 'Could not create the folder.', 'error');
 				});
-			});
-		})
-		.then(function(result){
-			renderBreadcrumb(result.path);
-
-			var xml = new DOMParser().parseFromString(result.xmlText, 'application/xml');
-
-			var folders = Array.prototype.slice.call(xml.getElementsByTagName('CommonPrefixes')).map(function(node){
-				var prefix = node.getElementsByTagName('Prefix')[0].textContent;
-				var name = prefix.slice(result.path.length).replace(/\/$/, '');
-				return { prefix: prefix, name: name };
-			}).filter(function(f){ return f.name.length; });
-
-			var files = Array.prototype.slice.call(xml.getElementsByTagName('Contents')).map(function(node){
-				var key = node.getElementsByTagName('Key')[0].textContent;
-				var sizeNode = node.getElementsByTagName('Size')[0];
-				return {
-					key: key,
-					name: key.slice(result.path.length),
-					size: sizeNode ? sizeNode.textContent : 0,
-					url: result.publicBaseUrl + '/' + key
-				};
-			}).filter(function(f){ return f.name.length; }); // drop the directory's own zero-byte marker object, if any
-
-			gridEl.innerHTML = '';
-
-			if (!folders.length && !files.length) {
-				gridEl.innerHTML = '<p class="text-muted">This directory is empty.</p>';
-				return;
 			}
-
-			folders.forEach(function(folder){
-				var tile = document.createElement('button');
-				tile.type = 'button';
-				tile.className = 'c-media-manager__tile c-media-manager__tile--folder';
-				tile.innerHTML = '<i class="bi bi-folder-fill"></i><span>' + folder.name + '</span>';
-				tile.addEventListener('click', function(){ navigateTo(folder.prefix); });
-				gridEl.appendChild(tile);
-			});
-
-			var images = files.filter(function(f){ return IMAGE_EXT.indexOf(extOf(f.name)) !== -1; });
-
-			files.forEach(function(file){
-				var isImage = IMAGE_EXT.indexOf(extOf(file.name)) !== -1;
-				var tile = document.createElement(isImage ? 'button' : 'a');
-				if (isImage) {
-					tile.type = 'button';
-				} else {
-					tile.href = file.url;
-					tile.target = '_blank';
-					tile.rel = 'noopener';
-				}
-				tile.className = 'c-media-manager__tile c-media-manager__tile--file';
-				tile.title = file.name;
-
-				if (isImage) {
-					var img = document.createElement('img');
-					img.src = file.url;
-					img.alt = file.name;
-					img.loading = 'lazy';
-					tile.appendChild(img);
-					tile.addEventListener('click', function(){
-						openCarousel(images, images.indexOf(file));
-					});
-				} else {
-					var icon = document.createElement('i');
-					icon.className = 'bi bi-file-earmark';
-					tile.appendChild(icon);
-				}
-
-				var caption = document.createElement('div');
-				caption.className = 'c-media-manager__tile-caption';
-				caption.innerHTML = '<span>' + file.name + '</span><small>' + formatSize(file.size) + '</small>';
-				tile.appendChild(caption);
-
-				gridEl.appendChild(tile);
-			});
-		})
-		.catch(function(err){
-			gridEl.innerHTML = '<p class="text-danger">' + (typeof err === 'string' ? err : 'Couldn\'t load this directory — check your connection and try again.') + '</p>';
 		});
 	}
 
