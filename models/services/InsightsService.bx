@@ -139,12 +139,14 @@ class {
 	 * unfiltered, so it deliberately skips _where()/_params() and queries
 	 * RequestLog directly.
 	 *
-	 * The one exception is /health: DigitalOcean's platform probe hits it
-	 * every few seconds, forever, and it's never a real request a reader or
-	 * an admin debugging something would care about — left in, it would
-	 * drown out everything else in the list. Unlike the bot/asset filtering
-	 * in _where(), this is unconditional (no path-search override), since
-	 * there's no scenario where seeing health-check noise here is useful.
+	 * The exceptions are /health and /manage/server/data: DigitalOcean's
+	 * platform probe hits /health every few seconds forever, and
+	 * /manage/server/data is the server-monitor page's own 5s polling
+	 * loop — neither is ever a real request a reader or an admin debugging
+	 * something would care about; left in, either would drown out
+	 * everything else in the list. Unlike the bot/asset filtering in
+	 * _where(), these are unconditional (no path-search override), since
+	 * there's no scenario where seeing this noise here is useful.
 	 *
 	 * @param {string} pathFilter - Optional substring match against path,
 	 *        case-insensitive per this table's collation. Empty = no filter.
@@ -155,7 +157,7 @@ class {
 		var offset        = ( arguments.page - 1 ) * safePageSize;
 		var hasFilter      = len( trim( arguments.pathFilter ) ) > 0;
 		var likeParam      = { value: "%" & trim( arguments.pathFilter ) & "%", cfsqltype: "cf_sql_varchar" };
-		var whereClause    = "WHERE path <> '/health'" & ( hasFilter ? " AND path LIKE :path" : "" );
+		var whereClause    = "WHERE path NOT IN ('/health', '/manage/server/data')" & ( hasFilter ? " AND path LIKE :path" : "" );
 
 		var total = queryExecute(
 			"SELECT COUNT(*) AS cnt FROM RequestLog " & whereClause,

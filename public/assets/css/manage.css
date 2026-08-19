@@ -2257,17 +2257,23 @@
 	min-width: 900px;
 }
 
-.c-log-table th:nth-child(1) { width: 130px; }
+.c-log-table th:nth-child(1) { width: 150px; }
 .c-log-table th:nth-child(2) { width: 70px; }
 .c-log-table th:nth-child(3) { width: auto; }
 .c-log-table th:nth-child(4) { width: 70px; }
 .c-log-table th:nth-child(5) { width: 80px; }
-.c-log-table th:nth-child(6) { width: 110px; }
+/* Wide enough for a full IPv6 address (up to 39 chars), not just IPv4 —
+   too narrow here used to overflow straight into the Referrer column
+   and visually interleave with its text instead of clipping. */
+.c-log-table th:nth-child(6) { width: 170px; }
 .c-log-table th:nth-child(7) { width: 15%; }
 .c-log-table th:nth-child(8) { width: 18%; }
 
 .c-log-table__nowrap {
+	overflow: hidden;
+	text-overflow: ellipsis;
 	white-space: nowrap;
+	max-width: 0; /* forces the table-layout:fixed column to actually clip, same trick as .c-log-table__path/__truncate */
 }
 
 .c-log-table__sortable {
