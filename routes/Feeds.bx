@@ -10,6 +10,11 @@ class {
 
 		this.router = boxExpressRouter();
 		this.router.get( "/rss", ( req, res ) => rss( req, res ) );
+		// Feed readers/pollers hit these conventional paths instead of /rss
+		// (e.g. Feedly, RSS-Amplifier) — redirect rather than wildcard-match
+		// so unrelated /rss* noise still 404s normally.
+		this.router.get( "/rss.xml", ( req, res ) => res.redirect( "/rss", 301 ) );
+		this.router.get( "/rss.cfm", ( req, res ) => res.redirect( "/rss", 301 ) );
 		this.router.get( "/sitemap.xml", ( req, res ) => sitemap( req, res ) );
 
 		return this;
