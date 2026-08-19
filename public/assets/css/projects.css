@@ -223,6 +223,15 @@
 	opacity: 0.8;
 }
 
+/* Long unbroken tokens (env-var placeholders, paths) inside inline code or
+   table cells otherwise bleed past their box and force the whole page to
+   scroll horizontally on narrow viewports. */
+.c-docs-body .bx-inline,
+.c-docs-body th,
+.c-docs-body td {
+	overflow-wrap: anywhere;
+}
+
 .c-docs-body .bx-inline {
 	font-family: var(--font-mono);
 	font-size: 0.875em;
@@ -314,6 +323,7 @@
 @media (max-width: 900px) {
 	.c-docs {
 		flex-direction: column;
+		align-items: stretch;
 	}
 
 	.c-docs-nav {
@@ -322,6 +332,10 @@
 		flex-direction: row;
 		overflow-x: auto;
 		white-space: nowrap;
+	}
+
+	.c-docs-content {
+		max-width: 100%;
 	}
 
 	.c-docs-nav__heading {
