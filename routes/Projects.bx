@@ -12,6 +12,12 @@ class {
 			name    : "boxlang-express",
 			icon    : "bi-boxes",
 			tagline : "An Express.js-style API for building lightweight HTTP servers in BoxLang."
+		},
+		{
+			slug    : "bx-zork",
+			name    : "bx-zork",
+			icon    : "bi-controller",
+			tagline : "A from-scratch text-adventure parser engine in BoxLang, loaded with the world of Zork I."
 		}
 	];
 
@@ -37,6 +43,7 @@ class {
 		this.router.get( "/projects", ( req, res ) => index( req, res ) );
 		this.router.get( "/projects/boxlang-express", ( req, res ) => boxlangExpressOverview( req, res ) );
 		this.router.get( "/projects/boxlang-express/docs/:page", ( req, res, next ) => boxlangExpressDoc( req, res, next ) );
+		this.router.get( "/projects/bx-zork", ( req, res ) => bxZorkOverview( req, res ) );
 
 		return this;
 	}
@@ -90,6 +97,15 @@ class {
 			contentView  : "docs/" & slug,
 			prevDoc      : prevDoc,
 			nextDoc      : nextDoc
+		} );
+	}
+
+	// route: /projects/bx-zork
+	function bxZorkOverview( req, res ){
+		res.render( "projects/bx-zork/overview", {
+			pageTitle    : "bx-zork",
+			canonicalUrl : variables.siteDefaults.canonicalUrl( req.path ),
+			meta         : variables.siteDefaults.defaultMeta( req.path )
 		} );
 	}
 

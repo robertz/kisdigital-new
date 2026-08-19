@@ -1,0 +1,133 @@
+<bx:include template="../../partials/_head.bxm">
+<bx:output>
+<div class="container py-5">
+	<div class="c-project-hero">
+		<p class="c-project-hero__eyebrow">Project</p>
+		<h1 class="c-project-hero__title">bx-zork</h1>
+		<p class="c-project-hero__tagline">A from-scratch text-adventure parser engine in <a href="https://boxlang.io" target="_blank" rel="noopener" class="c-post-link">BoxLang</a>, loaded with the world of <strong>Zork I</strong> ported verbatim from the original 1983 Infocom ZIL source (MIT-licensed, via <a href="https://github.com/historicalsource/zork1" target="_blank" rel="noopener" class="c-post-link">historicalsource/zork1</a>).</p>
+		<div class="c-project-hero__actions">
+			<a href="https://github.com/robertz/bx-zork" target="_blank" rel="noopener" class="btn btn-primary-custom">View on GitHub</a>
+		</div>
+	</div>
+
+	<div class="c-project-features">
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-map"></i> The full map</p>
+			<p class="c-project-feature__body">All 110 rooms and 122 objects from <code>1dungeon.zil</code>, descriptions and synonyms taken verbatim from the original source.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-chat-dots"></i> ~40 verbs</p>
+			<p class="c-project-feature__body">Zero-, one-, and two-object grammar (<code>put X in Y</code>, <code>give X to Y</code>, <code>unlock X with Y</code>), pronouns, command chaining, and <code>oops</code> corrections.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-lightning"></i> Real combat</p>
+			<p class="c-project-feature__body">Ported from <code>VILLAIN-BLOW</code>/<code>HERO-BLOW</code>'s actual strength tables — the troll, thief, and cyclops are all fightable, no stubs.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-moon-stars"></i> Darkness &amp; the grue</p>
+			<p class="c-project-feature__body">Underground rooms without a light source are pitch black — after two dark turns, the grue starts hunting, matching ZIL's own probabilities.</p>
+		</div>
+	</div>
+
+	<div class="c-post__body c-docs-body">
+
+		<h2>Running it</h2>
+		<pre class="bx-code"><span class="bx-code-label">bash</span><code>## Play interactively (reads commands from stdin until "quit"/"exit")
+boxlang zorkParser.bxs
+
+## Run a scripted walkthrough instead of waiting for input
+boxlang zorkParser.bxs demo</code></pre>
+		<p>If a <code class="bx-inline">zork.save</code> file exists in the working directory, the game resumes from it automatically. Use <code class="bx-inline">save</code> during play to write one.</p>
+
+		<h2>Two files, cleanly separated</h2>
+		<table class="bx-table">
+			<tr><th>File</th><th>What it is</th></tr>
+			<tr><td><code class="bx-inline">zorkParser.bxs</code></td><td>The engine — tokenizer, grammar matcher, scope resolver, verb dispatcher, combat system, and the REPL/demo runner. No Zork-specific content.</td></tr>
+			<tr><td><code class="bx-inline">zorkData.bxs</code></td><td>The content — every room and object in Zork I, as data. No engine logic.</td></tr>
+		</table>
+		<p><code class="bx-inline">zorkParser.bxs</code> <code class="bx-inline">include</code>s <code class="bx-inline">zorkData.bxs</code>, so the engine and the world are cleanly separated — a different <code class="bx-inline">zorkData.bxs</code> (a different game) could drop in without the parser needing to change.</p>
+
+		<h2>Commands</h2>
+		<p>Directions: <code class="bx-inline">north</code>/<code class="bx-inline">n</code>, <code class="bx-inline">south</code>/<code class="bx-inline">s</code>, <code class="bx-inline">east</code>/<code class="bx-inline">e</code>, <code class="bx-inline">west</code>/<code class="bx-inline">w</code>, <code class="bx-inline">ne</code>, <code class="bx-inline">nw</code>, <code class="bx-inline">se</code>, <code class="bx-inline">sw</code>, <code class="bx-inline">up</code>/<code class="bx-inline">u</code>, <code class="bx-inline">down</code>/<code class="bx-inline">d</code>, <code class="bx-inline">in</code>/<code class="bx-inline">enter</code>, <code class="bx-inline">out</code>/<code class="bx-inline">exit</code> — used bare or after <code class="bx-inline">go</code>.</p>
+		<table class="bx-table">
+			<tr><th>Arity</th><th>Verbs</th></tr>
+			<tr><td>No object</td><td><code class="bx-inline">look</code>, <code class="bx-inline">inventory</code>, <code class="bx-inline">score</code>, <code class="bx-inline">pray</code>, <code class="bx-inline">diagnose</code>, <code class="bx-inline">listen</code>, <code class="bx-inline">launch</code>, <code class="bx-inline">odysseus</code>/<code class="bx-inline">ulysses</code>, <code class="bx-inline">save</code></td></tr>
+			<tr><td>One object</td><td><code class="bx-inline">examine</code>/<code class="bx-inline">x</code>, <code class="bx-inline">take</code>, <code class="bx-inline">drop</code>, <code class="bx-inline">open</code>, <code class="bx-inline">close</code>, <code class="bx-inline">read</code>, <code class="bx-inline">eat</code>, <code class="bx-inline">drink</code>, <code class="bx-inline">climb</code>, <code class="bx-inline">wave</code>, <code class="bx-inline">ring</code>, <code class="bx-inline">wind</code>, <code class="bx-inline">push</code>, <code class="bx-inline">board</code>, <code class="bx-inline">search</code>, <code class="bx-inline">light</code>, <code class="bx-inline">extinguish</code>, <code class="bx-inline">turn on</code>/<code class="bx-inline">off</code>, <code class="bx-inline">raise</code>/<code class="bx-inline">lower</code>, <code class="bx-inline">rub</code>, <code class="bx-inline">kick</code>, <code class="bx-inline">cut</code>, <code class="bx-inline">look under</code>, <code class="bx-inline">follow</code>, <code class="bx-inline">wake</code>, <code class="bx-inline">answer</code>, <code class="bx-inline">smell</code>, and more</td></tr>
+			<tr><td>Two objects</td><td><code class="bx-inline">give X to Y</code>, <code class="bx-inline">put X in/on Y</code>, <code class="bx-inline">tie X to Y</code>, <code class="bx-inline">unlock/lock X with Y</code>, <code class="bx-inline">pour X on/in Y</code>, <code class="bx-inline">fill X with Y</code>, <code class="bx-inline">inflate X with Y</code>, <code class="bx-inline">burn X with Y</code>, <code class="bx-inline">dig X with Y</code>, <code class="bx-inline">attack X with Y</code></td></tr>
+		</table>
+		<p>Also: <code class="bx-inline">land</code> (come ashore while boating the river), <code class="bx-inline">throw X</code> / <code class="bx-inline">throw X at Y</code> (drops the object, or has the target duck — smashes the brass lantern if thrown, breaks the egg if thrown at anything). <code class="bx-inline">quit</code>/<code class="bx-inline">exit</code> ends an interactive session.</p>
+		<p>Parser shortcuts: pronouns (<code class="bx-inline">it</code>/<code class="bx-inline">him</code>/<code class="bx-inline">her</code>/<code class="bx-inline">them</code> refer to the last named object), <code class="bx-inline">again</code>/<code class="bx-inline">g</code> repeats the last command, <code class="bx-inline">oops &lt;word&gt;</code> corrects the last unknown word, <code class="bx-inline">all</code> and <code class="bx-inline">all but &lt;noun&gt;</code> work with <code class="bx-inline">take</code>/<code class="bx-inline">drop</code>. Multiple commands can be chained with <code class="bx-inline">.</code> or <code class="bx-inline">then</code> (<code class="bx-inline">take lamp. turn it on</code>).</p>
+
+		<h2>How a command becomes a result</h2>
+		<p>Each line of input goes through one pipeline, implemented in <code class="bx-inline">processCommand()</code> → <code class="bx-inline">dispatchCommand()</code>:</p>
+		<pre class="bx-code"><code>"attack troll with sword"
+        │
+        ▼
+ tokenize()          split into words, strip noise words (a/an/the)
+        │
+        ▼
+ extractVerb()        match the first word (or two — "turn on" is a
+        │             two-word verb) against the verb table
+        │
+        ▼
+ grammar dispatch     zero-object / one-object / two-object, based on
+        │             which table the verb is registered in
+        │
+        ▼
+ resolveObject()      find the noun phrase among objects currently in
+        │             scope (synonyms + adjectives disambiguate)
+        │
+        ▼
+ handle*() function    the actual game logic for that verb</code></pre>
+
+		<h3>Tokenizing and the verb table</h3>
+		<p><code class="bx-inline">tokenize()</code> just lowercases and regex-splits into words. <code class="bx-inline">extractVerb()</code> tries a two-word phrase first (<code class="bx-inline">"turn on"</code>, <code class="bx-inline">"turn off"</code>) so those don't get misread as the single-word verb <code class="bx-inline">turn</code> (rotate). Every verb is registered in one of three tables depending on its arity:</p>
+		<ul>
+			<li><code class="bx-inline">ZERO_OBJECT_VERBS</code> — <code class="bx-inline">look</code>, <code class="bx-inline">inventory</code>, <code class="bx-inline">score</code>, <code class="bx-inline">pray</code>, <code class="bx-inline">odysseus</code>, ...</li>
+			<li><code class="bx-inline">ONE_OBJECT_VERBS</code> — <code class="bx-inline">take</code>, <code class="bx-inline">open</code>, <code class="bx-inline">read</code>, <code class="bx-inline">climb</code>, <code class="bx-inline">attack</code>, ...</li>
+			<li><code class="bx-inline">TWO_OBJECT_VERBS</code> — <code class="bx-inline">put X in Y</code>, <code class="bx-inline">give X to Y</code>, <code class="bx-inline">unlock X with Y</code>, ... each with its own allowed preposition(s) for splitting the sentence into a direct and indirect object</li>
+		</ul>
+		<p>A bare direction (<code class="bx-inline">"north"</code>, <code class="bx-inline">"in"</code>) or <code class="bx-inline">go &lt;direction&gt;</code> is handled before verb lookup.</p>
+
+		<h3>Scope and object resolution</h3>
+		<p><code class="bx-inline">getVisibleObjectIds()</code> computes what the player can currently reference: anything in the current room, anything carried, the contents of any open or transparent container (recursively), and any "global" scenery objects that list the current room in their <code class="bx-inline">globalIn</code> (e.g. the kitchen window is visible from both <em>Behind House</em> and the <em>Kitchen</em>). In darkness, this collapses to carried items only — room contents are invisible and unreachable.</p>
+		<p><code class="bx-inline">resolveObject()</code> matches a noun phrase against that scope by synonym, using any leading adjectives to disambiguate when a word matches more than one object (e.g. distinguishing "knife" from "rusty knife" if both were reachable). Objects outside the current scope but known by vocabulary produce "You don't see that here." rather than "I don't know that word" — the same distinction the original game makes.</p>
+
+		<h2>The data model</h2>
+		<h3>Objects</h3>
+		<p>Every object is built by <code class="bx-inline">makeObject(id, name, synonyms, desc, takeable, options)</code>, which returns a plain struct with ~30 fields covering the ZIL <code class="bx-inline">FLAGS</code> you'd expect — <code class="bx-inline">container</code>/<code class="bx-inline">open</code>/<code class="bx-inline">openable</code>, <code class="bx-inline">door</code>, <code class="bx-inline">light</code>/<code class="bx-inline">on</code>, <code class="bx-inline">weapon</code>, <code class="bx-inline">readable</code>/<code class="bx-inline">text</code>, <code class="bx-inline">value</code>/<code class="bx-inline">treasureValue</code> (scoring), <code class="bx-inline">locked</code>/<code class="bx-inline">unlocksWith</code>, and so on. There's no class hierarchy; a struct's fields just happen to be zero/false for the flags that don't apply to it.</p>
+		<p>The one field that matters most is <strong>location</strong> — every object's authoritative position, which is just a room id, another object's id (nested inside a container), or <code class="bx-inline">"player"</code>. Rooms don't keep their own list of contents; <code class="bx-inline">describeRoom()</code> and the scope resolver always filter the full <code class="bx-inline">objects</code> struct by <code class="bx-inline">location</code> live. That means dropping something somewhere it didn't start, or a villain dragging loot into the Treasure Room, just works — there's nothing to keep in sync.</p>
+		<p>A <code class="bx-inline">hidden</code> flag separately tracks ZIL's <code class="bx-inline">INVISIBLE</code> — a real, correctly located object that isn't in scope yet because its reveal trigger (a puzzle) either isn't implemented or hasn't fired. The trap door, the grating, and the thief all start <code class="bx-inline">hidden: true</code> for this reason.</p>
+
+		<h3>Rooms</h3>
+		<p>Each room has an <code class="bx-inline">id</code>, <code class="bx-inline">name</code>, a <code class="bx-inline">description</code> (or a <code class="bx-inline">dynamicDescription</code> closure for rooms whose text depends on game state — the kitchen window's open/closed state, the reservoir's water level, etc.), and an <code class="bx-inline">exits</code> map. An exit value is one of:</p>
+		<ul>
+			<li>a plain string — the destination room id, always available</li>
+			<li><code class="bx-inline">{ "blocked": "message" }</code> — never passable, just flavor text</li>
+			<li><code class="bx-inline">{ "to": id, "requiresOpen"/"requiresFlag"/"requiresNotCarrying"/"requiresEmptyHanded": ... }</code> — conditionally passable</li>
+			<li><code class="bx-inline">{ "per": "name" }</code> — routed through <code class="bx-inline">PER_EXITS</code>, for exits with custom logic that doesn't fit a simple condition (the one-way maze "diodes", the grating, the narrow chimney climb)</li>
+		</ul>
+		<p>Rooms can also have an <code class="bx-inline">onEnter</code> hook (e.g. the Grating Room reveals the grate the first time you walk in), mirroring ZIL's <code class="bx-inline">M-ENTER</code>.</p>
+
+		<h3>Game state</h3>
+		<p><code class="bx-inline">gameState</code> (in <code class="bx-inline">zorkParser.bxs</code>) holds everything that isn't a fixed property of a room or object: the current room, a turn counter, the player's wound/strength adjustment, and a <code class="bx-inline">flags</code> struct mirroring ZIL's boolean globals (<code class="bx-inline">trollFlag</code>, <code class="bx-inline">lowTide</code>, <code class="bx-inline">magicFlag</code>, <code class="bx-inline">domeFlag</code>, ...) that puzzles set and exits/descriptions read.</p>
+
+		<h2>What's implemented</h2>
+		<ul>
+			<li><strong>The full map</strong>: all 110 rooms and 122 objects from <code class="bx-inline">1dungeon.zil</code>, descriptions and synonyms taken verbatim.</li>
+			<li><strong>~40 verbs</strong>, including two-object grammar (<code class="bx-inline">put</code>/<code class="bx-inline">give</code>/<code class="bx-inline">tie</code>/<code class="bx-inline">unlock</code>/...) and <code class="bx-inline">throw</code>/<code class="bx-inline">hurl</code>/<code class="bx-inline">chuck</code>/<code class="bx-inline">toss</code> (drops the object; <code class="bx-inline">throw X at villain</code> has them duck; object-specific overrides smash the brass lantern and break the egg).</li>
+			<li><strong>Real combat</strong>, ported from <code class="bx-inline">VILLAIN-BLOW</code>/<code class="bx-inline">HERO-BLOW</code>'s actual strength tables and message tables — not a stub. The troll, thief, and cyclops are all fightable, with the cyclops's <code class="bx-inline">STRENGTH 10000</code> making direct combat with him exactly as suicidal as it is in the original (use <code class="bx-inline">odysseus</code>/<code class="bx-inline">ulysses</code> or give him water instead).</li>
+			<li><strong>Scoring and the endgame</strong>: taking a treasure banks its points once, depositing it in the trophy case banks the rest — same split as ZIL's <code class="bx-inline">VALUE</code>/<code class="bx-inline">TVALUE</code>. <code class="bx-inline">score</code> reports a rank from a verbatim port of <code class="bx-inline">V-SCORE</code>'s table. Collecting and depositing everything currently reachable sets <code class="bx-inline">wonFlag</code>, unlocking the path from West of House to the Stone Barrow; walking in triggers the real ending text and ends the game.</li>
+			<li><strong>Nearly every named puzzle</strong>, ported verbatim from <code class="bx-inline">1actions.zil</code> where a real mechanic exists to port: the trap door, the Torch Room descent, the grate, the dam/reservoir, the Hades exorcism, the coffin curse, the rainbow, the coal mine, egg/canary fragility, the mirror rooms, boating the river, and light source fuel timers.</li>
+			<li><strong>Darkness and the grue</strong>: rooms without a natural light source are pitch black unless you're carrying a lit lamp, candle, torch, or match. After two turns without light the grue starts hunting you — each turn a probabilistic roll can print a warning, a grue description, or kill you outright, matching ZIL's <code class="bx-inline">GRUE-FCN</code> probabilities.</li>
+			<li><strong>Save/load</strong>: <code class="bx-inline">save</code> writes <code class="bx-inline">zork.save</code> to the working directory (JSON). The game auto-loads it on the next interactive start.</li>
+		</ul>
+
+		<h2>What's not (yet)</h2>
+		<p>What's left is small and tracked in detail in the repo's <code class="bx-inline">NOTES.md</code> — a few ZIL-internal simplifications, called out per puzzle: <code class="bx-inline">MIRROR-MUNG</code> (breaking a mirror) and repairing a punctured boat with putty.</p>
+		<p>Search for <code class="bx-inline">TODO</code> and <code class="bx-inline">note</code> in <code class="bx-inline">zorkData.bxs</code> for every known gap, annotated in place rather than silently faked.</p>
+
+	</div>
+</div>
+</bx:output>
+<bx:include template="../../partials/_foot.bxm">
