@@ -3,6 +3,7 @@
 @import 'post.css';
 @import 'about.css';
 @import 'manage.css';
+@import 'projects.css';
 
 html {
 	scrollbar-gutter: stable;

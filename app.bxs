@@ -142,6 +142,7 @@ app.use( new routes.Main( postService, authorService, siteDefaults ).router )
 app.use( new routes.Posts( postService, postRenderer, siteDefaults ).router )
 app.use( new routes.Tags( postService, siteDefaults ).router )
 app.use( new routes.Feeds( sitemapService ).router )
+app.use( new routes.Projects( siteDefaults ).router )
 app.use( new routes.Manage( authService, postService, authorService, settingsService, postRenderer, r2Client, getSystemSetting( "R2_UPLOAD_PREFIX", "posts" ), insightsService, securityService, hostnameResolver, serverMonitor ).router )
 
 // ── 404 / 500 (themed, matching the site's own look) ────────────────────

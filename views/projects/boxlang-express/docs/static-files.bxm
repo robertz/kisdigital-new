@@ -1,0 +1,67 @@
+<bx:output>
+<h1>Static Files &amp; Uploads</h1>
+<p class="bx-docs-lede">Serving a directory of static assets, sending individual files, and handling multipart uploads.</p>
+
+<h2>Serving a static directory</h2>
+<pre class="bx-code"><span class="bx-code-label">bxs</span><code>app.use( "/public", boxExpressStatic( expandPath( "./public" ) ) )
+// GET /public/logo.png → serves ./public/logo.png</code></pre>
+<p>Mount it with no prefix to serve straight from the site root:</p>
+<pre class="bx-code"><span class="bx-code-label">bxs</span><code>app.use( boxExpressStatic( expandPath( "./public" ) ) )
+// GET /logo.png → serves ./public/logo.png</code></pre>
+<p>A request for a file that doesn't exist under the served directory falls through to <code class="bx-inline">next()</code> rather than erroring — your other routes (or the default 404) still get a chance to handle it.</p>
+
+<h2>Conditional GET (ETag / 304)</h2>
+<p>Static file responses automatically set <code class="bx-inline">ETag</code> and <code class="bx-inline">Last-Modified</code>, and honor <code class="bx-inline">If-None-Match</code> — a matching request gets a <code class="bx-inline">304 Not Modified</code> with no body, instead of re-sending the file. The same conditional-GET support applies to <code class="bx-inline">res.sendFile()</code>.</p>
+
+<h2>Cache-Control (options.maxAge)</h2>
+<p>Both accept <code class="bx-inline">options.maxAge</code> (seconds) to also set <code class="bx-inline">Cache-Control: public, max-age=&lt;n&gt;</code>, letting a browser skip revalidation entirely for that long instead of asking on every request. Off by default — no header at all unless asked for:</p>
+<pre class="bx-code"><span class="bx-code-label">bxs</span><code>app.use( "/public", boxExpressStatic( expandPath( "./public" ), { maxAge: 86400 } ) )  // 1 day
+
+app.get( "/report", ( req, res ) => {
+    res.sendFile( expandPath( "./reports/latest.pdf" ), { maxAge: 3600 } )  // 1 hour
+} )</code></pre>
+
+<h2>HEAD requests</h2>
+<p><code class="bx-inline">HEAD /public/logo.png</code> returns the same headers a <code class="bx-inline">GET</code> would — <code class="bx-inline">Content-Type</code>, <code class="bx-inline">Content-Length</code>, <code class="bx-inline">ETag</code>, <code class="bx-inline">Last-Modified</code> — with no response body. See <a href="/projects/boxlang-express/docs/routing">Routing</a> for how <code class="bx-inline">HEAD</code> works across the framework generally.</p>
+
+<h2>Range requests (partial content)</h2>
+<p>Both static file serving and <code class="bx-inline">res.sendFile()</code>/<code class="bx-inline">download()</code> honor a <code class="bx-inline">Range</code> request header and respond <code class="bx-inline">206 Partial Content</code> with just the requested slice — what makes video/audio scrubbing and resumable downloads work, since the client doesn't have to (re-)download the whole file to seek or resume. Every file response sets <code class="bx-inline">Accept-Ranges: bytes</code>, even a full <code class="bx-inline">200</code>, so a client knows it can send a <code class="bx-inline">Range</code> request on a later one:</p>
+<pre class="bx-code"><span class="bx-code-label">bash</span><code>curl -H "Range: bytes=0-1023" localhost:3000/public/video.mp4
+## -&gt; 206, Content-Range: bytes 0-1023/&lt;total&gt;, body is just those 1024 bytes</code></pre>
+<p>A range starting beyond the file's size gets a <code class="bx-inline">416 Range Not Satisfiable</code> with <code class="bx-inline">Content-Range: bytes */&lt;total&gt;</code> and no body. Two things are out of scope, the trade-off most minimal static-file servers make: a request naming more than one range falls back to a full <code class="bx-inline">200</code> response instead of a <code class="bx-inline">multipart/byteranges</code> reply, and <code class="bx-inline">If-Range</code> (a conditional range against a validator) isn't supported — a <code class="bx-inline">Range</code> request is always attempted regardless of freshness.</p>
+
+<h2>Sending a single file from a route</h2>
+<pre class="bx-code"><span class="bx-code-label">bxs</span><code>app.get( "/report", ( req, res ) => {
+    res.sendFile( expandPath( "./reports/latest.pdf" ) )
+} )
+
+app.get( "/report/download", ( req, res ) => {
+    res.download( expandPath( "./reports/latest.pdf" ), "report.pdf" )
+} )</code></pre>
+<p><code class="bx-inline">res.download()</code> is <code class="bx-inline">sendFile()</code> with <code class="bx-inline">Content-Disposition: attachment</code> forced, defaulting the downloaded filename to the source file's own name if you don't pass one. A caller-supplied filename is sanitized — quote and control characters are stripped so it can't inject extra <code class="bx-inline">Content-Disposition</code> parameters.</p>
+<p>When building a file path from user input (e.g. a route param), pass <code class="bx-inline">options.root</code> to sandbox it — a resolved path that escapes <code class="bx-inline">root</code> is rejected rather than served:</p>
+<pre class="bx-code"><span class="bx-code-label">bxs</span><code>app.get( "/files/:name", ( req, res ) => {
+    res.sendFile( req.params.name, { root: expandPath( "./uploads" ) } )
+} )</code></pre>
+
+<h2>Handling uploads</h2>
+<pre class="bx-code"><span class="bx-code-label">bxs</span><code>app.post(
+    "/upload",
+    boxExpressUpload( { dest: expandPath( "./uploads" ) } ),
+    ( req, res ) => {
+        res.json( { fields: req.body, files: req.files } )
+    }
+)</code></pre>
+<p><code class="bx-inline">boxExpressUpload()</code> parses a <code class="bx-inline">multipart/form-data</code> request: non-file fields land in <code class="bx-inline">req.body</code> same as any other body parser. <code class="bx-inline">req.files</code> is a struct keyed by field name, each value an <em>array</em> of file structs — a field can carry more than one file — with shape <code class="bx-inline">{ fieldName, filename, contentType, size, buffer, path }</code>. <code class="bx-inline">path</code> is only present when <code class="bx-inline">dest</code> was given; the client-supplied filename is never used to build it, sidestepping path-traversal/collision entirely.</p>
+<pre class="bx-code"><span class="bx-code-label">bxs</span><code>app.get( "/uploaded-avatar", ( req, res ) => {
+    res.json( {
+        filename: req.files.avatar[ 1 ].filename,
+        size: req.files.avatar[ 1 ].size,
+        savedAt: req.files.avatar[ 1 ].path
+    } )
+} )</code></pre>
+<div class="bx-callout bx-warn">
+  <strong>No live demo on this site</strong>
+  This documentation section is read-only — there's no working upload form wired up here to try. The code above is exactly what the API supports; wire it into your own app to see it in action.
+</div>
+</bx:output>

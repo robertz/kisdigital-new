@@ -1,0 +1,216 @@
+<bx:output>
+<h1>Middleware</h1>
+<p class="bx-docs-lede">app.use(), execution order, and the middleware that ships with the framework.</p>
+
+<h2>Registering middleware</h2>
+<p><code class="bx-inline">app.use(handler)</code> runs a <code class="bx-inline">(req, res, next)</code> function on every request, in registration order, before route handlers:</p>
+<pre class="bx-code"><span class="bx-code-label">bxs</span><code>app.use( ( req, res, next ) => {
+    println( "##req.method## ##req.path##" )
+    next()
+} )</code></pre>
+<p>A handler that doesn't call <code class="bx-inline">next()</code> ends the chain there — nothing after it runs unless the handler itself sends a response. Scope middleware to a path prefix by passing it as the first argument:</p>
+<pre class="bx-code"><span class="bx-code-label">bxs</span><code>app.use( "/api", ( req, res, next ) => {
+    // only runs for requests under /api
+    next()
+} )</code></pre>
+<p><code class="bx-inline">app.use()</code> also takes more than one handler in a single call — <code class="bx-inline">app.use(mw1, mw2, mw3)</code> registers three separate layers at once, running in the order given:</p>
+<pre class="bx-code"><span class="bx-code-label">bxs</span><code>app.use(
+    ( req, res, next ) => { println( "##req.method## ##req.path##" ); next() },
+    ( req, res, next ) => { res.set( "X-Powered-By", "BoxLang Express" ); next() }
+)</code></pre>
+<p>The first argument is only ever treated as a mount path when it's a plain string — anything else (a closure, or a mounted <code class="bx-inline">Router</code>) is a target — so <code class="bx-inline">app.use(handler)</code> and <code class="bx-inline">app.use(path, handler)</code> are told apart the same way no matter how many more handlers follow.</p>
+<div class="bx-callout">
+  <strong>Common pattern</strong>
+  Grouping related middleware — JSON parsing, urlencoded parsing, sessions, static files — into one <code class="bx-inline">app.use()</code> call keeps a project's <code class="bx-inline">app.bxs</code> readable instead of scattering four separate registrations across the file.
+</div>
+
+<h2>Order matters</h2>
+<p>Middleware and routes share one stack, run in the order they were registered. A middleware registered after all your routes acts as a catch-all — that's exactly how a themed 404 page is built, see <a href="/projects/boxlang-express/docs/errors">Error Handling</a>.</p>
+
+<h2>Built-in middleware</h2>
+<table class="bx-table">
+  <tr><th>BIF</th><th>Purpose</th></tr>
+  <tr><td><code class="bx-inline">boxExpressJSON()</code></td><td>Parses <code class="bx-inline">application/json</code> request bodies into <code class="bx-inline">req.body</code></td></tr>
+  <tr><td><code class="bx-inline">boxExpressUrlencoded()</code></td><td>Parses <code class="bx-inline">application/x-www-form-urlencoded</code> bodies into <code class="bx-inline">req.body</code></td></tr>
+  <tr><td><code class="bx-inline">boxExpressStatic(dir)</code></td><td>Serves static files from <code class="bx-inline">dir</code>, with ETag/Last-Modified conditional GET support</td></tr>
+  <tr><td><code class="bx-inline">boxExpressSession()</code></td><td>Cookie-based sessions — populates <code class="bx-inline">req.session</code></td></tr>
+  <tr><td><code class="bx-inline">boxExpressUpload(options)</code></td><td>Parses <code class="bx-inline">multipart/form-data</code> — fields into <code class="bx-inline">req.body</code>, files into <code class="bx-inline">req.files</code></td></tr>
+  <tr><td><code class="bx-inline">boxExpressHelmet(options)</code></td><td>Sets security-hardening response headers (clickjacking, MIME-sniffing, referrer leakage, etc.) — see below</td></tr>
+  <tr><td><code class="bx-inline">boxExpressCors(options)</code></td><td>Cross-Origin Resource Sharing — sets <code class="bx-inline">Access-Control-*</code> headers and answers preflight requests — see below</td></tr>
+  <tr><td><code class="bx-inline">boxExpressRateLimit(options)</code></td><td>Fixed-window rate limiting, keyed by <code class="bx-inline">req.ip</code> by default — see below</td></tr>
+  <tr><td><code class="bx-inline">boxExpressCsrf(options)</code></td><td>CSRF protection via <code class="bx-inline">req.session</code> — exposes <code class="bx-inline">req.csrfToken()</code> — see below</td></tr>
+  <tr><td><code class="bx-inline">boxExpressRouter()</code></td><td>Returns a mountable <code class="bx-inline">Router</code> — see <a href="/projects/boxlang-express/docs/routing">Routing</a></td></tr>
+</table>
+<pre class="bx-code"><span class="bx-code-label">bxs</span><code>app.use( boxExpressJSON() )
+app.use( boxExpressUrlencoded() )
+app.use( boxExpressSession() )
+app.use( "/public", boxExpressStatic( expandPath( "./public" ) ) )</code></pre>
+<p>These are opt-in by design — a route that never reads <code class="bx-inline">req.body</code> doesn't pay for body-parsing on every request.</p>
+
+<h2>Security headers (boxExpressHelmet)</h2>
+<p>Mirrors the npm <a href="https://github.com/helmetjs/helmet" target="_blank" rel="noopener">helmet</a> package's most commonly used defaults, with no configuration needed:</p>
+<pre class="bx-code"><span class="bx-code-label">bxs</span><code>app.use( boxExpressHelmet() )</code></pre>
+<table class="bx-table">
+  <tr><th>Header</th><th>Default</th></tr>
+  <tr><td><code class="bx-inline">X-Content-Type-Options</code></td><td><code class="bx-inline">nosniff</code></td></tr>
+  <tr><td><code class="bx-inline">X-Frame-Options</code></td><td><code class="bx-inline">SAMEORIGIN</code></td></tr>
+  <tr><td><code class="bx-inline">X-DNS-Prefetch-Control</code></td><td><code class="bx-inline">off</code></td></tr>
+  <tr><td><code class="bx-inline">Referrer-Policy</code></td><td><code class="bx-inline">no-referrer</code></td></tr>
+  <tr><td><code class="bx-inline">X-Permitted-Cross-Domain-Policies</code></td><td><code class="bx-inline">none</code></td></tr>
+  <tr><td><code class="bx-inline">Cross-Origin-Opener-Policy</code></td><td><code class="bx-inline">same-origin</code></td></tr>
+  <tr><td><code class="bx-inline">Cross-Origin-Resource-Policy</code></td><td><code class="bx-inline">same-origin</code></td></tr>
+  <tr><td><code class="bx-inline">Strict-Transport-Security</code></td><td><em>off by default — opt in</em></td></tr>
+  <tr><td><code class="bx-inline">Content-Security-Policy</code></td><td><em>off by default — opt in</em></td></tr>
+</table>
+<p>Every option takes three shapes: omitted (the default above), <code class="bx-inline">false</code> (skip that header entirely), or an exact string to use instead:</p>
+<pre class="bx-code"><span class="bx-code-label">bxs</span><code>app.use( boxExpressHelmet( {
+    frameOptions: "DENY",              // override the default value
+    referrerPolicy: false,             // skip this header entirely
+    hsts: true,                        // opt in, using the built-in default
+    contentSecurityPolicy: "default-src 'self'"   // opt in, with your own policy
+} ) )</code></pre>
+<p><code class="bx-inline">hsts</code> and <code class="bx-inline">contentSecurityPolicy</code> are opt-in rather than on by default: <code class="bx-inline">Strict-Transport-Security</code> only makes sense over an actually-secure connection — BoxLang Express's own <code class="bx-inline">HttpServer</code> never terminates TLS itself, see <a href="/projects/boxlang-express/docs/request-response">Request &amp; Response</a> for <code class="bx-inline">req.secure</code> — so turning it on unconditionally could advertise a guarantee the app doesn't meet. A generic default <code class="bx-inline">Content-Security-Policy</code> is exactly the kind of thing that breaks a real app's own inline scripts/styles or asset domains if applied blindly, so it needs the app's own policy string rather than a one-size-fits-all default.</p>
+
+<h2>CORS (boxExpressCors)</h2>
+<p>Cross-Origin Resource Sharing, mirroring the npm <a href="https://github.com/expressjs/cors" target="_blank" rel="noopener">cors</a> package's most commonly used options. With no options, reflects whatever <code class="bx-inline">Origin</code> the request sent (or <code class="bx-inline">*</code> if there wasn't one) — permissive by default, same as the npm package:</p>
+<pre class="bx-code"><span class="bx-code-label">bxs</span><code>app.use( boxExpressCors() )
+app.use( boxExpressCors( { origin: "https://example.com" } ) )
+app.use( boxExpressCors( { origin: [ "https://a.com", "https://b.com" ], credentials: true } ) )</code></pre>
+<table class="bx-table">
+  <tr><th>Option</th><th>Default</th><th>Effect</th></tr>
+  <tr><td><code class="bx-inline">origin</code></td><td><code class="bx-inline">true</code></td><td><code class="bx-inline">true</code> reflects the request's <code class="bx-inline">Origin</code>; <code class="bx-inline">false</code> disables CORS entirely; a string allows only that exact origin; an array allows any origin in the list</td></tr>
+  <tr><td><code class="bx-inline">methods</code></td><td><code class="bx-inline">GET,HEAD,PUT,PATCH,POST,DELETE</code></td><td><code class="bx-inline">Access-Control-Allow-Methods</code> on a preflight response</td></tr>
+  <tr><td><code class="bx-inline">allowedHeaders</code></td><td><em>reflects the preflight's own request</em></td><td><code class="bx-inline">Access-Control-Allow-Headers</code> on a preflight response</td></tr>
+  <tr><td><code class="bx-inline">credentials</code></td><td><code class="bx-inline">false</code></td><td>sets <code class="bx-inline">Access-Control-Allow-Credentials: true</code> when <code class="bx-inline">true</code></td></tr>
+  <tr><td><code class="bx-inline">maxAge</code></td><td><em>none</em></td><td><code class="bx-inline">Access-Control-Max-Age</code> (seconds) on a preflight response</td></tr>
+</table>
+<p>A CORS preflight — an <code class="bx-inline">OPTIONS</code> request carrying <code class="bx-inline">Access-Control-Request-Method</code> — is answered directly by this middleware (<code class="bx-inline">204</code>, the relevant headers, no body) rather than falling through to the router, since nothing would otherwise be registered to handle <code class="bx-inline">OPTIONS</code> on an arbitrary route.</p>
+
+<h2>Rate limiting (boxExpressRateLimit)</h2>
+<p>Fixed-window rate limiting, mirroring the npm <a href="https://github.com/express-rate-limit/express-rate-limit" target="_blank" rel="noopener">express-rate-limit</a> package's most commonly used options:</p>
+<pre class="bx-code"><span class="bx-code-label">bxs</span><code>app.use( boxExpressRateLimit() )                                     // 100 req/min per req.ip
+app.use( "/login", boxExpressRateLimit( { windowMs: 15 * 60000, max: 5 } ) )  // 5 req/15min, scoped to one route</code></pre>
+<p>Sets the draft-standard <code class="bx-inline">RateLimit-Limit</code>/<code class="bx-inline">RateLimit-Remaining</code>/<code class="bx-inline">RateLimit-Reset</code> headers, and responds <code class="bx-inline">429</code> with <code class="bx-inline">Retry-After</code> once a key's count exceeds <code class="bx-inline">max</code> within <code class="bx-inline">windowMs</code>. Fixed window, not a sliding one or a token bucket — a client can get up to 2x <code class="bx-inline">max</code> requests through right at a window boundary, the same trade-off most minimal in-memory rate limiters make in exchange for O(1) bookkeeping per request.</p>
+<p>Each call creates its own counters, so different routes can have independent limits:</p>
+<pre class="bx-code"><span class="bx-code-label">bxs</span><code>app.post(
+    "/upload",
+    boxExpressRateLimit( { windowMs: 5 * 60000, max: 10 } ),
+    boxExpressUpload( { dest: expandPath( "./uploads" ) } ),
+    ( req, res ) => { /* ... */ }
+)</code></pre>
+
+<h2>CSRF protection (boxExpressCsrf)</h2>
+<p>Mirrors the classic <a href="https://github.com/expressjs/csurf" target="_blank" rel="noopener">csurf</a> package's session-based token strategy. The token lives in <code class="bx-inline">req.session</code>, not its own cookie, so this must be registered <em>after</em> <code class="bx-inline">boxExpressSession()</code>:</p>
+<pre class="bx-code"><span class="bx-code-label">bxs</span><code>app.use( boxExpressSession() )
+app.use( boxExpressUrlencoded() )   // before Csrf if reading the token from a form field
+app.use( boxExpressCsrf() )
+
+app.get( "/form", ( req, res ) => {
+    res.render( "form", { csrfToken: req.csrfToken() } )
+} )</code></pre>
+<pre class="bx-code"><span class="bx-code-label">html — views/form.bxm</span><code>&lt;form method="POST" action="/form"&gt;
+  &lt;input type="hidden" name="_csrf" value="##data.csrfToken##"&gt;
+  ...
+&lt;/form&gt;</code></pre>
+<p>"Safe" methods (<code class="bx-inline">GET</code>/<code class="bx-inline">HEAD</code>/<code class="bx-inline">OPTIONS</code> by default) never validate — a token is only minted and exposed via <code class="bx-inline">req.csrfToken()</code> for those, since that's how a token gets into a form before any state-changing request happens. Every other method must submit a matching token: <code class="bx-inline">req.body._csrf</code> first, falling back to an <code class="bx-inline">X-CSRF-Token</code> header for non-form (JSON/AJAX) clients. A missing/mismatched token gets a <code class="bx-inline">403</code> before the route handler ever runs. Registering this before <code class="bx-inline">req.session</code> exists throws immediately rather than silently doing nothing.</p>
+
+<h2>Writing your own middleware: a Google OAuth example</h2>
+<p>Everything above is a BIF that ships with the framework, but a middleware "layer" is just a <code class="bx-inline">(req, res, next)</code> function — nothing stops you from writing your own. As a worked example, here's a small Google OAuth 2.0 login flow built entirely out of the pieces already on this page: <code class="bx-inline">req.session</code> from <code class="bx-inline">boxExpressSession()</code>, <code class="bx-inline">res.redirect()</code>, and the same <code class="bx-inline">state</code>-parameter CSRF check <code class="bx-inline">boxExpressCsrf()</code> uses for forms, applied here to the OAuth redirect instead.</p>
+<p>Rather than one factory returning one handler, this one returns a <em>struct</em> of three related handlers — a pattern worth using any time a feature needs more than one route to work together:</p>
+<pre class="bx-code"><span class="bx-code-label">bxs — googleAuth.bx</span><code>function googleAuth( options ) {
+    var clientId     = options.clientId
+    var clientSecret = options.clientSecret
+    var redirectUri  = options.redirectUri
+    var scope        = options.scope ?: "openid email profile"
+
+    return {
+        // GET /auth/google — kick off the flow
+        login: ( req, res ) => {
+            var state = createUUID()
+            req.session.oauthState = state   // validated in callback, below
+            var authUrl = "https://accounts.google.com/o/oauth2/v2/auth"
+                & "?client_id=" & urlEncodedFormat( clientId )
+                & "&redirect_uri=" & urlEncodedFormat( redirectUri )
+                & "&response_type=code"
+                & "&scope=" & urlEncodedFormat( scope )
+                & "&state=" & urlEncodedFormat( state )
+            res.redirect( authUrl )
+        },
+
+        // GET /auth/google/callback — Google redirects back here
+        callback: ( req, res ) => {
+            if ( ( req.query.state ?: "" ) != ( req.session.oauthState ?: "" ) ) {
+                return res.status( 403 ).send( "Invalid OAuth state - possible CSRF attempt" )
+            }
+            var code = req.query.code ?: ""
+            if ( !len( code ) ) {
+                return res.status( 400 ).send( "Missing code" )
+            }
+
+            var httpClient = createObject( "java", "java.net.http.HttpClient" ).newHttpClient()
+
+            var tokenRequest = createObject( "java", "java.net.http.HttpRequest" )
+                .newBuilder()
+                .uri( createObject( "java", "java.net.URI" ).create( "https://oauth2.googleapis.com/token" ) )
+                .header( "Content-Type", "application/x-www-form-urlencoded" )
+                .POST( createObject( "java", "java.net.http.HttpRequest$BodyPublishers" ).ofString(
+                    "code=" & urlEncodedFormat( code )
+                    & "&client_id=" & urlEncodedFormat( clientId )
+                    & "&client_secret=" & urlEncodedFormat( clientSecret )
+                    & "&redirect_uri=" & urlEncodedFormat( redirectUri )
+                    & "&grant_type=authorization_code"
+                ) )
+                .build()
+            var tokenData = JSONDeserialize(
+                httpClient.send( tokenRequest, createObject( "java", "java.net.http.HttpResponse$BodyHandlers" ).ofString() ).body()
+            )
+
+            var userRequest = createObject( "java", "java.net.http.HttpRequest" )
+                .newBuilder()
+                .uri( createObject( "java", "java.net.URI" ).create( "https://www.googleapis.com/oauth2/v3/userinfo" ) )
+                .header( "Authorization", "Bearer " & tokenData.access_token )
+                .GET()
+                .build()
+            var profile = JSONDeserialize(
+                httpClient.send( userRequest, createObject( "java", "java.net.http.HttpResponse$BodyHandlers" ).ofString() ).body()
+            )
+
+            req.session.user = { email: profile.email, name: profile.name, picture: profile.picture }
+            structDelete( req.session, "oauthState" )
+            res.redirect( "/" )
+        },
+
+        // route guard — drop this in front of anything that needs a logged-in user
+        requireAuth: ( req, res, next ) => {
+            if ( isNull( req.session.user ) ) {
+                return res.redirect( "/auth/google" )
+            }
+            next()
+        }
+    }
+}</code></pre>
+<p>Wiring it up in <code class="bx-inline">app.bxs</code> — three lines, since the factory above already did the work:</p>
+<pre class="bx-code"><span class="bx-code-label">bxs — app.bxs</span><code>var auth = googleAuth( {
+    clientId: getSystemSetting( "GOOGLE_CLIENT_ID" ),
+    clientSecret: getSystemSetting( "GOOGLE_CLIENT_SECRET" ),
+    redirectUri: "https://yourapp.com/auth/google/callback"
+} )
+
+app.get( "/auth/google", auth.login )
+app.get( "/auth/google/callback", auth.callback )
+app.get( "/dashboard", auth.requireAuth, ( req, res ) => {
+    res.render( "dashboard", { user: req.session.user } )
+} )</code></pre>
+<p><code class="bx-inline">getSystemSetting( name, defaultValue )</code> is BoxLang's native BIF for exactly this — it reads both real environment variables and JVM system properties (whichever's set), and picks up whatever a <code class="bx-inline">.env</code> file supplied at startup the same as a real shell-exported variable would. Throws if the variable isn't set and no <code class="bx-inline">defaultValue</code> is given — pass one (e.g. <code class="bx-inline">getSystemSetting( "GOOGLE_CLIENT_ID", "" )</code>) to get an empty string back instead. <code class="bx-inline">createObject("java","java.lang.System").getenv("VAR_NAME")</code> also works, but <code class="bx-inline">getSystemSetting()</code> is the native, idiomatic way to reach for this in application code.</p>
+
+<h2>Error-handling middleware</h2>
+<p>A handler with <strong>four</strong> parameters — <code class="bx-inline">(err, req, res, next)</code> — is treated as error-handling middleware. It's skipped during normal dispatch and only invoked when a route/middleware throws, or explicitly calls <code class="bx-inline">next(err)</code>:</p>
+<pre class="bx-code"><span class="bx-code-label">bxs</span><code>app.get( "/boom", ( req, res ) => {
+    throw( message = "kaboom", type = "DemoError" )
+} )
+
+app.use( ( err, req, res, next ) => {
+    res.status( 500 ).json( { error: true, message: err.message } )
+} )</code></pre>
+<p>Register error-handling middleware last, after every route — mirroring the built-in default it's overriding. See <a href="/projects/boxlang-express/docs/errors">Error Handling</a> for the full picture, including the framework's own default 404/500 behavior.</p>
+</bx:output>

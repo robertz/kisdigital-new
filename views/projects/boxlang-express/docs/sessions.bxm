@@ -1,0 +1,47 @@
+<bx:output>
+<h1>Sessions</h1>
+<p class="bx-docs-lede">Cookie-based sessions via req.session.</p>
+
+<h2>Enabling sessions</h2>
+<pre class="bx-code"><span class="bx-code-label">bxs</span><code>app.use( boxExpressSession() )</code></pre>
+<p>Once registered, every request gets a session — a new one is created and a session cookie set if the request didn't already carry one.</p>
+
+<h2>Reading and writing session data</h2>
+<pre class="bx-code"><span class="bx-code-label">bxs</span><code>app.get( "/visit-count", ( req, res ) => {
+    req.session.views = ( req.session.views ?: 0 ) + 1
+    res.json( { views: req.session.views, sessionID: req.sessionID } )
+} )</code></pre>
+<p><code class="bx-inline">req.session</code> is a plain struct — read and write it directly. It's persisted server-side and keyed by <code class="bx-inline">req.sessionID</code>, which is also readable directly for logging or debugging.</p>
+
+<h2>Ending a session</h2>
+<pre class="bx-code"><span class="bx-code-label">bxs</span><code>app.get( "/logout", ( req, res ) => {
+    req.destroySession()
+    res.json( { loggedOut: true } )
+} )</code></pre>
+<p><code class="bx-inline">req.destroySession()</code> clears the stored session data and expires the session cookie on the client (<code class="bx-inline">Max-Age=0</code>) — the next request starts a fresh session.</p>
+
+<h2>Durable sessions (boxExpressCacheStore)</h2>
+<p>The default session store is an in-memory <code class="bx-inline">ConcurrentHashMap</code> on the <code class="bx-inline">Session</code> instance — fine for one process, gone on restart, and not shared across a cluster. <code class="bx-inline">boxExpressCacheStore()</code> is a ready-made <code class="bx-inline">store</code> backed by BoxLang's own <code class="bx-inline">cache()</code> service instead:</p>
+<pre class="bx-code"><span class="bx-code-label">bxs</span><code>app.use( boxExpressSession( { store: boxExpressCacheStore( "sessions" ) } ) )</code></pre>
+<p>The named cache (<code class="bx-inline">"sessions"</code> here) has to already be registered in <code class="bx-inline">boxlang.json</code> — this doesn't create one, it just talks to it. Point that cache's <code class="bx-inline">objectStore</code> at <code class="bx-inline">"JDBCStore"</code> and session data lands in a real SQL table instead of memory, surviving a restart and shared across every process pointed at the same database:</p>
+<pre class="bx-code"><span class="bx-code-label">json — boxlang.json</span><code>"caches": {
+  "default": { "provider": "BoxCacheProvider" },
+  "sessions": {
+    "provider": "BoxCacheProvider",
+    "properties": {
+      "objectStore": "JDBCStore",
+      "datasource": "sessionDB",
+      "table": "boxlang_sessions",
+      "autoCreate": false
+    }
+  }
+}</code></pre>
+<p>See <a href="/projects/boxlang-express/docs/config">Configuration</a> for the full datasource block. Two <em>separate</em> things worth knowing, found by actually running it against a real database rather than trusting the docs:</p>
+<ul>
+  <li>Keep <code class="bx-inline">"default"</code> in the <code class="bx-inline">caches</code> block alongside your own entry — overriding <code class="bx-inline">caches</code> replaces it wholesale, and BoxLang's own query engine depends on a <code class="bx-inline">"default"</code> cache existing somewhere in it.</li>
+  <li><strong>Declaring <code class="bx-inline">"default"</code> does not fix <code class="bx-inline">autoCreate: true</code></strong> — that's a separate, still-broken problem. <code class="bx-inline">autoCreate: true</code> can throw <code class="bx-inline">Cache [default] does not exist</code> at BoxLang startup regardless of whether <code class="bx-inline">"default"</code> is declared or where it sits in the JSON, since <code class="bx-inline">JDBCStore</code>'s own table-creation check isn't ordered relative to <code class="bx-inline">"default"</code>'s registration. Create the table once yourself and leave <code class="bx-inline">autoCreate: false</code> — that's the only workaround confirmed to actually work.</li>
+</ul>
+
+<h2>The session cookie</h2>
+<p>The session cookie is named <code class="bx-inline">connect.sid</code>, matching Express's own default — familiar if you're coming from Node. It's set with <code class="bx-inline">HttpOnly</code> by default, the same as <code class="bx-inline">res.cookie()</code>.</p>
+</bx:output>

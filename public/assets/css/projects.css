@@ -1,0 +1,329 @@
+/* ── Projects index ── */
+
+.c-projects-hero {
+	max-width: var(--measure);
+	margin-bottom: var(--space-8);
+}
+
+.c-projects-hero__title {
+	font-size: clamp(1.9rem, 4vw, 2.75rem);
+	font-weight: 800;
+	line-height: 1.15;
+	letter-spacing: -0.025em;
+	color: var(--post-anchor);
+	margin-bottom: var(--space-4);
+}
+
+.c-projects-hero__lede {
+	font-size: 1.0625rem;
+	line-height: 1.6;
+	color: var(--text-secondary);
+}
+
+.c-projects-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+	gap: var(--space-6);
+}
+
+.c-project-card {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-3);
+	padding: var(--space-6);
+	background: var(--ui-surface-1);
+	border: 1px solid var(--ui-border-subtle);
+	border-radius: var(--ui-radius-md);
+	text-decoration: none;
+	transition: border-color 120ms ease, transform 120ms ease;
+}
+
+.c-project-card:hover {
+	border-color: var(--post-link-text);
+	transform: translateY(-2px);
+}
+
+.c-project-card__icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 44px;
+	height: 44px;
+	border-radius: var(--ui-radius-sm);
+	background: var(--ui-surface-2);
+	color: var(--post-link-text);
+	font-size: 1.25rem;
+}
+
+.c-project-card__name {
+	font-size: 1.15rem;
+	font-weight: 700;
+	color: var(--post-anchor);
+}
+
+.c-project-card__tagline {
+	font-size: 0.9375rem;
+	line-height: 1.55;
+	color: var(--text-secondary);
+}
+
+.c-project-card__link {
+	margin-top: auto;
+	font-family: var(--font-mono);
+	font-size: 0.8125rem;
+	font-weight: 500;
+	color: var(--post-link-text);
+}
+
+/* ── Project overview (landing) page ── */
+
+.c-project-hero {
+	max-width: var(--measure);
+	margin-bottom: var(--space-7);
+}
+
+.c-project-hero__eyebrow {
+	font-family: var(--font-mono);
+	font-size: 0.75rem;
+	font-weight: 500;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	color: var(--text-muted);
+	margin-bottom: var(--space-3);
+}
+
+.c-project-hero__title {
+	font-size: clamp(1.9rem, 4vw, 2.75rem);
+	font-weight: 800;
+	line-height: 1.15;
+	letter-spacing: -0.025em;
+	color: var(--post-anchor);
+	margin-bottom: var(--space-4);
+}
+
+.c-project-hero__tagline {
+	font-size: 1.0625rem;
+	line-height: 1.6;
+	color: var(--text-secondary);
+	margin-bottom: var(--space-6);
+}
+
+.c-project-hero__actions {
+	display: flex;
+	gap: var(--space-3);
+	flex-wrap: wrap;
+}
+
+.c-project-features {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+	gap: var(--space-5);
+	margin-bottom: var(--space-7);
+}
+
+.c-project-feature {
+	padding: var(--space-5);
+	background: var(--ui-surface-1);
+	border: 1px solid var(--ui-border-subtle);
+	border-radius: var(--ui-radius-md);
+}
+
+.c-project-feature__title {
+	font-weight: 700;
+	color: var(--post-anchor);
+	margin-bottom: var(--space-2);
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+}
+
+.c-project-feature__title i {
+	color: var(--post-link-text);
+}
+
+.c-project-feature__body {
+	font-size: 0.9375rem;
+	line-height: 1.55;
+	color: var(--text-secondary);
+}
+
+/* ── Docs layout: sidebar + content ── */
+
+.c-docs {
+	display: flex;
+	align-items: flex-start;
+	gap: var(--space-7);
+}
+
+.c-docs-nav {
+	width: 240px;
+	flex-shrink: 0;
+	position: sticky;
+	top: calc(var(--site-padding-top) + var(--space-6));
+	background: var(--ui-surface-1);
+	border: 1px solid var(--ui-border-subtle);
+	border-radius: var(--ui-radius-md);
+	padding: var(--space-4);
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-1);
+}
+
+.c-docs-nav__heading {
+	font-size: 0.6875rem;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--text-secondary);
+	padding: var(--space-3) var(--space-3) var(--space-2);
+}
+
+.c-docs-nav__link {
+	display: block;
+	padding: var(--space-2) var(--space-3);
+	border-radius: var(--ui-radius-sm);
+	color: var(--text-secondary);
+	text-decoration: none;
+	font-size: 0.875rem;
+	font-weight: 500;
+	transition: background 120ms ease, color 120ms ease;
+}
+
+.c-docs-nav__link:hover,
+.c-docs-nav__link--active {
+	background: var(--ui-surface-2);
+	color: var(--post-anchor);
+}
+
+.c-docs-nav__link--active {
+	color: var(--post-link-text);
+}
+
+.c-docs-content {
+	flex: 1;
+	min-width: 0;
+	max-width: var(--measure);
+}
+
+/* Doc-page prose extends .c-post__body's typography — this adds only what
+   post.css doesn't already have: code blocks, inline code, and callouts. */
+
+.c-docs-body .bx-inline {
+	font-family: var(--font-mono);
+	font-size: 0.875em;
+	background: var(--ui-surface-2);
+	border: 1px solid var(--ui-border-subtle);
+	border-radius: 4px;
+	padding: 0.1em 0.4em;
+}
+
+.c-docs-body pre.bx-code {
+	position: relative;
+	margin-bottom: var(--space-5);
+	padding: var(--space-5);
+	padding-top: var(--space-7);
+	background: var(--ui-surface-2);
+	border: 1px solid var(--ui-border-subtle);
+	border-radius: var(--ui-radius-sm);
+	overflow-x: auto;
+}
+
+.c-docs-body pre.bx-code code {
+	font-family: var(--font-mono);
+	font-size: 0.875rem;
+	line-height: 1.6;
+	color: var(--post-anchor);
+	background: none;
+	border: none;
+	padding: 0;
+	white-space: pre;
+}
+
+.c-docs-body .bx-code-label {
+	position: absolute;
+	top: var(--space-2);
+	right: var(--space-3);
+	font-family: var(--font-mono);
+	font-size: 0.6875rem;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	color: var(--text-muted);
+}
+
+.c-docs-body .bx-callout {
+	margin-bottom: var(--space-5);
+	padding: var(--space-4) var(--space-5);
+	border-left: 3px solid var(--post-link-text);
+	background: var(--ui-surface-2);
+	border-radius: 0 var(--ui-radius-sm) var(--ui-radius-sm) 0;
+	font-size: 0.9375rem;
+	line-height: 1.55;
+}
+
+.c-docs-body .bx-callout strong {
+	display: block;
+	margin-bottom: var(--space-2);
+	color: var(--post-anchor);
+}
+
+.c-docs-body .bx-callout.bx-warn {
+	border-left-color: #f59e0b;
+}
+
+.c-docs-pager {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-4);
+	margin-top: var(--space-7);
+	padding-top: var(--space-5);
+	border-top: 1px solid var(--ui-border-subtle);
+	font-size: 0.9375rem;
+}
+
+.c-docs-pager a {
+	color: var(--post-link-text);
+	text-decoration: none;
+	font-weight: 500;
+}
+
+.c-docs-pager a:hover {
+	opacity: 0.8;
+}
+
+.c-docs-pager__next {
+	margin-left: auto;
+	text-align: right;
+}
+
+@media (max-width: 900px) {
+	.c-docs {
+		flex-direction: column;
+	}
+
+	.c-docs-nav {
+		width: 100%;
+		position: static;
+		flex-direction: row;
+		overflow-x: auto;
+		white-space: nowrap;
+	}
+
+	.c-docs-nav__heading {
+		display: none;
+	}
+
+	.c-docs-nav__link {
+		flex-shrink: 0;
+	}
+}
+
+@media (prefers-color-scheme: dark) {
+	html:not([data-theme="light"]) .c-project-card,
+	html:not([data-theme="light"]) .c-project-feature,
+	html:not([data-theme="light"]) .c-docs-nav { background: var(--ui-surface-1); border-color: var(--ui-border-subtle); }
+}
+
+[data-theme="dark"] .c-project-card,
+[data-theme="dark"] .c-project-feature,
+[data-theme="dark"] .c-docs-nav { background: var(--ui-surface-1); border-color: var(--ui-border-subtle); }

@@ -1,0 +1,48 @@
+<bx:include template="../../partials/_head.bxm">
+<bx:output>
+<div class="container py-5">
+	<div class="c-project-hero">
+		<p class="c-project-hero__eyebrow">Project</p>
+		<h1 class="c-project-hero__title">boxlang-express</h1>
+		<p class="c-project-hero__tagline">An Express.js-style API for building lightweight HTTP servers in <a href="https://boxlang.io" target="_blank" rel="noopener" class="c-post-link">BoxLang</a> — routing, middleware, sessions, views, and static files, with the same shape as Express if you've used it before.</p>
+		<div class="c-project-hero__actions">
+			<a href="/projects/boxlang-express/docs/getting-started" class="btn btn-primary-custom">Read the Docs</a>
+			<a href="https://github.com/ortus-boxlang/boxlang-express" target="_blank" rel="noopener" class="btn btn-outline-custom">View on GitHub</a>
+		</div>
+	</div>
+
+	<div class="c-project-features">
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-signpost-split"></i> Familiar routing</p>
+			<p class="c-project-feature__body">Every HTTP verb has a matching method on <code>app</code> — <code>get</code>, <code>post</code>, <code>put</code>, <code>patch</code>, <code>delete</code> — with route params, wildcards, and mountable sub-routers.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-layers"></i> Middleware chain</p>
+			<p class="c-project-feature__body"><code>app.use()</code> runs handlers in registration order, scoped to a path prefix if needed, with built-in JSON, urlencoded, session, CSRF, rate-limit, and security-header middleware.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-file-earmark-code"></i> Views &amp; templates</p>
+			<p class="c-project-feature__body"><code>res.render()</code> supports native BoxLang <code>.bxm</code> templates or Handlebars <code>.hbs</code>, picked automatically by file extension.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-hdd-network"></i> Sessions &amp; static files</p>
+			<p class="c-project-feature__body">Cookie-based sessions via <code>req.session</code>, plus static file serving and multipart uploads with conditional-GET (ETag / 304) support built in.</p>
+		</div>
+	</div>
+
+	<p class="c-post-sidebar__label mb-3">Your first server</p>
+	<div class="c-post__body c-docs-body">
+<pre class="bx-code"><span class="bx-code-label">bxs</span><code>app = boxExpress()
+
+app.get( "/", ( req, res ) => {
+    res.send( "Hello World" )
+} )
+
+app.listen( 3000, ( port ) => {
+    println( "listening on ##port##" )
+} )</code></pre>
+	</div>
+	<p class="mt-3"><a href="/projects/boxlang-express/docs/getting-started" class="c-post-link">Full installation and getting-started guide &rarr;</a></p>
+</div>
+</bx:output>
+<bx:include template="../../partials/_foot.bxm">

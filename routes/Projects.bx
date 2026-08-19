@@ -1,0 +1,96 @@
+/**
+ * /projects — a showcase of side projects, starting with boxlang-express's docs.
+ */
+class {
+
+	variables.siteDefaults = "";
+
+	// Registered projects, shown on /projects as cards.
+	variables.projects = [
+		{
+			slug    : "boxlang-express",
+			name    : "boxlang-express",
+			icon    : "bi-boxes",
+			tagline : "An Express.js-style API for building lightweight HTTP servers in BoxLang."
+		}
+	];
+
+	// Ordered doc topics for boxlang-express, driving both the sidebar and the pager.
+	variables.boxlangExpressDocs = [
+		{ slug : "getting-started",     title : "Getting Started" },
+		{ slug : "config",              title : "Configuration" },
+		{ slug : "routing",             title : "Routing" },
+		{ slug : "middleware",          title : "Middleware" },
+		{ slug : "request-response",    title : "Request & Response" },
+		{ slug : "views",               title : "Views & Templates" },
+		{ slug : "sessions",            title : "Sessions" },
+		{ slug : "static-files",        title : "Static Files & Uploads" },
+		{ slug : "errors",              title : "Error Handling" },
+		{ slug : "lifecycle",           title : "Process Lifecycle" }
+	];
+
+	function init( required siteDefaults ){
+		variables.siteDefaults = arguments.siteDefaults;
+
+		this.router = boxExpressRouter();
+
+		this.router.get( "/projects", ( req, res ) => index( req, res ) );
+		this.router.get( "/projects/boxlang-express", ( req, res ) => boxlangExpressOverview( req, res ) );
+		this.router.get( "/projects/boxlang-express/docs/:page", ( req, res, next ) => boxlangExpressDoc( req, res, next ) );
+
+		return this;
+	}
+
+	// route: /projects
+	function index( req, res ){
+		res.render( "projects/index", {
+			pageTitle    : "Projects",
+			canonicalUrl : variables.siteDefaults.canonicalUrl( req.path ),
+			meta         : variables.siteDefaults.defaultMeta( req.path ),
+			projects     : variables.projects
+		} );
+	}
+
+	// route: /projects/boxlang-express
+	function boxlangExpressOverview( req, res ){
+		res.render( "projects/boxlang-express/overview", {
+			pageTitle    : "boxlang-express",
+			canonicalUrl : variables.siteDefaults.canonicalUrl( req.path ),
+			meta         : variables.siteDefaults.defaultMeta( req.path )
+		} );
+	}
+
+	// route: /projects/boxlang-express/docs/:page
+	function boxlangExpressDoc( req, res, next ){
+		var slug     = req.params.page ?: "";
+		var docIndex = -1;
+
+		for ( var i = 1; i <= variables.boxlangExpressDocs.len(); i++ ){
+			if ( variables.boxlangExpressDocs[ i ].slug == slug ){
+				docIndex = i;
+				break;
+			}
+		}
+
+		if ( docIndex == -1 ){
+			next();
+			return;
+		}
+
+		var current  = variables.boxlangExpressDocs[ docIndex ];
+		var prevDoc  = docIndex > 1 ? variables.boxlangExpressDocs[ docIndex - 1 ] : "";
+		var nextDoc  = docIndex < variables.boxlangExpressDocs.len() ? variables.boxlangExpressDocs[ docIndex + 1 ] : "";
+
+		res.render( "projects/boxlang-express/docs", {
+			pageTitle    : current.title & " — boxlang-express",
+			canonicalUrl : variables.siteDefaults.canonicalUrl( req.path ),
+			meta         : variables.siteDefaults.defaultMeta( req.path ),
+			docs         : variables.boxlangExpressDocs,
+			currentSlug  : slug,
+			contentView  : "docs/" & slug,
+			prevDoc      : prevDoc,
+			nextDoc      : nextDoc
+		} );
+	}
+
+}

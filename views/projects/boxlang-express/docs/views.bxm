@@ -1,0 +1,62 @@
+<bx:output>
+<h1>Views &amp; Templates</h1>
+<p class="bx-docs-lede">res.render(), the two supported template engines, and sharing layout across pages.</p>
+
+<h2>Setting up a views directory</h2>
+<pre class="bx-code"><span class="bx-code-label">bxs</span><code>app.set( "views", expandPath( "./views" ) )</code></pre>
+<p>Every view path passed to <code class="bx-inline">res.render()</code> is resolved against this directory, with a containment check — a view path can't escape it, even if built from user input.</p>
+
+<h2>Two engines, picked by extension</h2>
+<table class="bx-table">
+  <tr><th>Extension</th><th>Engine</th></tr>
+  <tr><td><code class="bx-inline">.bxm</code></td><td>Native BoxLang template — <code class="bx-inline">data</code> is available as a struct, interpolation needs a <code class="bx-inline">&lt;bx:output&gt;</code> block, same as classic CFML <code class="bx-inline">&lt;cfoutput&gt;</code></td></tr>
+  <tr><td><code class="bx-inline">.hbs</code></td><td>Handlebars — <code class="bx-inline">data</code> is the render context directly, so template variables are <code class="bx-inline">{{whatever}}</code></td></tr>
+</table>
+<p>A view name with no extension gets one appended based on <code class="bx-inline">app.set("view engine", ...)</code>, defaulting to <code class="bx-inline">"bxm"</code>.</p>
+
+<h3>.bxm example</h3>
+<pre class="bx-code"><span class="bx-code-label">bxs</span><code>app.get( "/greet/:name", ( req, res ) => {
+    res.render( "greeting", { name: req.params.name } )
+} )</code></pre>
+<pre class="bx-code"><span class="bx-code-label">html — views/greeting.bxm</span><code>&lt;bx:output&gt;&lt;h1&gt;Hello, ##data.name##!&lt;/h1&gt;&lt;/bx:output&gt;</code></pre>
+
+<h3>.hbs example</h3>
+<pre class="bx-code"><span class="bx-code-label">bxs</span><code>app.get( "/greet-hbs/:name", ( req, res ) => {
+    res.render( "greeting.hbs", { data: { name: req.params.name, things: [ "a", "b", "c" ] } } )
+} )</code></pre>
+<pre class="bx-code"><span class="bx-code-label">handlebars — views/greeting.hbs</span><code>&lt;h1&gt;Hello, {{data.name}}!&lt;/h1&gt;
+&lt;p&gt;Things: {{##each data.things}}{{this}}{{##unless @last}}, {{/unless}}{{/each}}&lt;/p&gt;</code></pre>
+
+<h2>Sharing layout with partials</h2>
+<p><code class="bx-inline">.bxm</code> templates are just BoxLang, so ordinary <code class="bx-inline">&lt;bx:include&gt;</code> works for shared header/footer/nav — this documentation section is built exactly this way, with every page including the same head/foot partials:</p>
+<pre class="bx-code"><span class="bx-code-label">html — views/docs/some-page.bxm</span><code>&lt;bx:include template="../partials/_head.bxm"&gt;
+&lt;bx:output&gt;
+  &lt;h1&gt;Page content##data.title##&lt;/h1&gt;
+&lt;/bx:output&gt;
+&lt;bx:include template="../partials/_foot.bxm"&gt;</code></pre>
+<p>Included paths resolve relative to the including template's own directory, same as a plain CFML/BoxLang <code class="bx-inline">include</code> — no special wiring from the framework is needed.</p>
+
+<div class="bx-callout">
+  <strong>How this page is put together</strong>
+  This doc page's sidebar isn't hardcoded per page — the route handler builds an ordered array of <code class="bx-inline">{slug, title}</code> topics once and passes it, along with which one is current, into a single shared <code class="bx-inline">docs.bxm</code> shell. The shell loops the array to render the sidebar's active-state links, then <code class="bx-inline">&lt;bx:include&gt;</code>s the one content partial matching the current slug — the same "shared shell, dynamic include" pattern shown above, just with the array coming from the route instead of <code class="bx-inline">app.locals</code>.
+</div>
+
+<h2>app.locals / res.locals</h2>
+<p>Two plain structs merged into every <code class="bx-inline">render()</code> call's data, so values a route doesn't set explicitly — a site name, the current user, shared nav data — don't have to be threaded through every single <code class="bx-inline">res.render()</code> call by hand. <code class="bx-inline">app.locals</code> is set once, application-wide; <code class="bx-inline">res.locals</code> is set per request (typically from middleware) and only lives for that one request/response cycle. Precedence, low to high: <code class="bx-inline">app.locals</code>, then <code class="bx-inline">res.locals</code> (overriding <code class="bx-inline">app.locals</code>), then whatever you pass as <code class="bx-inline">render()</code>'s own <code class="bx-inline">data</code> argument (overriding both):</p>
+<pre class="bx-code"><span class="bx-code-label">bxs</span><code>app.locals.siteName = "My Site"
+
+app.use( ( req, res, next ) => {
+    res.locals.user = req.session.user ?: "guest"
+    next()
+} )
+
+app.get( "/", ( req, res ) => {
+    res.render( "home", {} )   // views/home.bxm sees data.siteName and data.user
+} )</code></pre>
+
+<h2>Quick debugging without a view</h2>
+<p>For a one-off inspection route, <code class="bx-inline">res.dump()</code> skips views entirely and sends BoxLang's own rich HTML dump of any variable:</p>
+<pre class="bx-code"><span class="bx-code-label">bxs</span><code>app.get( "/debug", ( req, res ) => {
+    res.dump( { req: req.query, session: req.session } )
+} )</code></pre>
+</bx:output>

@@ -1,0 +1,50 @@
+<bx:output>
+<h1>Process Lifecycle</h1>
+<p class="bx-docs-lede">What actually happens on startup, shutdown, a port conflict, and a dev-mode file change.</p>
+
+<h2>Startup: listen() blocks the process</h2>
+<p><code class="bx-inline">app.listen()</code> blocks the calling thread by default (<code class="bx-inline">options.block = true</code>). Node keeps a CLI process alive via its event loop; BoxLang's CLI runtime has no equivalent, so <code class="bx-inline">listen()</code> blocks itself rather than requiring every caller to remember a keep-alive loop:</p>
+<pre class="bx-code"><span class="bx-code-label">bxs</span><code>app.listen( 3000, ( port ) => println( "listening on ##port##" ) )
+// process stays alive here until app.close() is called or the process is signaled</code></pre>
+<p>Pass <code class="bx-inline">{ block: false }</code> for non-blocking startup — useful for a test suite, or embedding the server inside a larger app that manages its own lifecycle. <code class="bx-inline">app.close()</code> stops the server either way.</p>
+
+<h2>Graceful shutdown (Ctrl-C / SIGTERM)</h2>
+<p>The server registers a JVM shutdown hook when it starts, so <code class="bx-inline">Ctrl-C</code> or <code class="bx-inline">SIGTERM</code> always triggers a clean <code class="bx-inline">close()</code> — the listening socket is released and the dev-mode file watcher (if enabled) is stopped, whichever way the process ends. <code class="bx-inline">close()</code> itself is safe to call more than once.</p>
+<div class="bx-callout">
+  <strong>Why this exists</strong>
+  Without the shutdown hook, the JVM could tear the process down without ever calling <code class="bx-inline">close()</code> — the process would exit, but the port could be left in a state where restarting the server immediately afterward failed, and the dev-mode watcher thread wasn't guaranteed to stop cleanly either.
+</div>
+
+<h2>Port already in use</h2>
+<p>If the requested port is already bound, the server exits with a short, readable message instead of a raw Java stack trace:</p>
+<pre class="bx-code"><span class="bx-code-label">plain — stdout</span><code>[BoxExpress] Port 3000 is already in use — exiting.</code></pre>
+<p>The process exits with status code <code class="bx-inline">1</code>. This is detected by inspecting the actual <code class="bx-inline">java.net.BindException</code> cause (not by string-matching the error message), so it's specific to a real port conflict — any other startup failure still surfaces normally.</p>
+
+<h2>Dev-mode auto-reload</h2>
+<pre class="bx-code"><span class="bx-code-label">bxs</span><code>app.set( "reloadOnChange", true )</code></pre>
+<p>This watches the current working directory (recursively, skipping dotfiles and directories like <code class="bx-inline">node_modules</code>/<code class="bx-inline">boxlang_modules</code>/<code class="bx-inline">target</code>/<code class="bx-inline">build</code>/<code class="bx-inline">dist</code>) for <code class="bx-inline">.bx</code>/<code class="bx-inline">.bxs</code>/<code class="bx-inline">.bxm</code> changes, debouncing bursty save events (most editors fire two or three filesystem events per save) into one restart:</p>
+<ol>
+  <li>A file change is detected and debounced (150ms).</li>
+  <li><code class="bx-inline">[reloadOnChange] &lt;path&gt; changed — restarting...</code> is logged.</li>
+  <li>The replacement process is launched <em>first</em>, replaying the exact original JVM invocation via <code class="bx-inline">ProcessHandle.current()</code> — this works whatever the entry script is named and however it was launched (bvm-managed <code class="bx-inline">boxlang</code>, a raw <code class="bx-inline">java -jar</code>, custom JVM flags), rather than assuming a fixed <code class="bx-inline">boxlang &lt;script&gt;</code> shape.</li>
+  <li>Only once that launch succeeds is the current server closed (releasing the port) and the old process exits — the new one binds the same port with the updated code.</li>
+</ol>
+<p>Registration is a one-time recursive snapshot taken at startup — a directory created <em>after</em> the server starts won't be picked up until the next restart. That's an accepted limitation for a dev-only convenience feature.</p>
+
+<p>Watching <code class="bx-inline">.bxm</code> alongside <code class="bx-inline">.bx</code>/<code class="bx-inline">.bxs</code> is broader than a restart actually requires. A restart is only <em>necessary</em> for <code class="bx-inline">app.bxs</code> itself (or any other <code class="bx-inline">.bx</code> class file it loads) — that code runs once at process start, so editing <code class="bx-inline">app.get(...)</code> registrations or anything else at the top level does nothing until the script re-executes. A <code class="bx-inline">.bxm</code> view is different: <code class="bx-inline">res.render()</code> runs it via <code class="bx-inline">include</code>, which re-reads the file from disk on every request as long as <code class="bx-inline">trustedCache</code> is off (the default) — confirmed directly, editing a view and requesting it again immediately picked up the change with no restart at all, even with <code class="bx-inline">reloadOnChange</code> turned off entirely. Restarting on a view-only edit isn't wrong, just redundant work the file already didn't need.</p>
+
+<div class="bx-callout">
+  <strong>A failed restart doesn't take the server down with it</strong>
+  Launching the replacement is attempted before the current server is closed, not after. If it fails for any reason — a bad reconstructed command, a transient OS resource limit — that's caught and logged (<code class="bx-inline">[reloadOnChange] Failed to restart: ...</code>) instead of crashing, and the current server is left running rather than dying with nothing left to replace it.
+</div>
+
+<div class="bx-callout bx-warn">
+  <strong>Orphaned processes from before graceful shutdown was hardened</strong>
+  A process that never received the shutdown hook fix could survive a Ctrl-C entirely — still holding resources, invisible unless you went looking (<code class="bx-inline">ps aux | grep boxlang</code>, or checking whether a supposedly-free port responds). If a "phantom" dev server ever behaves this way, sending <code class="bx-inline">SIGTERM</code> directly (<code class="bx-inline">kill -TERM &lt;pid&gt;</code>) is the reliable fallback.
+</div>
+
+<div class="bx-callout bx-warn">
+  <strong>reloadOnChange doesn't survive being PID 1 in a container</strong>
+  Step 4 above — close the current server, let the old process exit — is exactly what breaks when that process <em>is</em> the container's PID 1 (e.g. an entrypoint that ends in <code class="bx-inline">exec boxlang app.bxs</code>). The replacement is a <em>child</em> process, not a true exec-replacement, so when the old PID 1 exits, Docker tears down the whole container immediately — regardless of whether the replacement had already started successfully. Editing any bind-mounted file (not just <code class="bx-inline">app.bxs</code> — the watcher covers the whole working directory) kills the container outright in this setup. <code class="bx-inline">init: true</code> (Docker's built-in tini) does <em>not</em> fix this either — tini only waits on its one direct child and exits right along with it, rather than adopting the orphaned replacement. What actually works is <code class="bx-inline">restart: unless-stopped</code> on the container: Compose notices the exit and boots a fresh container through the same entrypoint. It gets you the same end result — the edit shows up — but by fully restarting the container (and re-running any boot-time module install) rather than the fast in-process handoff described above.
+</div>
+</bx:output>

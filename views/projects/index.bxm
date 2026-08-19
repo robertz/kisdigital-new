@@ -1,0 +1,22 @@
+<bx:include template="../partials/_head.bxm">
+<bx:output>
+<div class="container py-5">
+	<div class="c-projects-hero">
+		<p class="section-label mb-3">Projects</p>
+		<h1 class="c-projects-hero__title">Things I've built</h1>
+		<p class="c-projects-hero__lede">Open-source tools and libraries, documented here alongside the articles.</p>
+	</div>
+
+	<div class="c-projects-grid">
+		<bx:loop array="#data.projects#" item="project">
+		<a href="/projects/#project.slug#" class="c-project-card">
+			<span class="c-project-card__icon"><i class="bi #project.icon#"></i></span>
+			<span class="c-project-card__name">#encodeForHTML( project.name )#</span>
+			<span class="c-project-card__tagline">#encodeForHTML( project.tagline )#</span>
+			<span class="c-project-card__link">View project &rarr;</span>
+		</a>
+		</bx:loop>
+	</div>
+</div>
+</bx:output>
+<bx:include template="../partials/_foot.bxm">

@@ -1,0 +1,117 @@
+<bx:output>
+<h1>Request &amp; Response</h1>
+<p class="bx-docs-lede">The full req.* and res.* API available inside every handler.</p>
+
+<h2>The request object</h2>
+<table class="bx-table">
+  <tr><th>Property / Method</th><th>Description</th></tr>
+  <tr><td><code class="bx-inline">req.method</code></td><td>Uppercased HTTP method, e.g. <code class="bx-inline">"GET"</code></td></tr>
+  <tr><td><code class="bx-inline">req.path</code></td><td>Path portion of the URL, no query string</td></tr>
+  <tr><td><code class="bx-inline">req.originalUrl</code></td><td>Path plus query string as received</td></tr>
+  <tr><td><code class="bx-inline">req.query</code></td><td>Struct of parsed query-string parameters</td></tr>
+  <tr><td><code class="bx-inline">req.params</code></td><td>Struct of captured route params (<code class="bx-inline">:id</code> segments)</td></tr>
+  <tr><td><code class="bx-inline">req.body</code></td><td>Parsed request body — populated by <code class="bx-inline">boxExpressJSON()</code>/<code class="bx-inline">boxExpressUrlencoded()</code>/<code class="bx-inline">boxExpressUpload()</code>, empty struct otherwise</td></tr>
+  <tr><td><code class="bx-inline">req.files</code></td><td>Uploaded files, populated by <code class="bx-inline">boxExpressUpload()</code></td></tr>
+  <tr><td><code class="bx-inline">req.headers</code></td><td>Struct of request headers</td></tr>
+  <tr><td><code class="bx-inline">req.get(name)</code></td><td>Read a single header by name — returns null if absent</td></tr>
+  <tr><td><code class="bx-inline">req.cookies</code></td><td>Struct of parsed cookies</td></tr>
+  <tr><td><code class="bx-inline">req.ip</code></td><td>Direct TCP peer address by default; prefers <code class="bx-inline">X-Forwarded-For</code> when <code class="bx-inline">app.set("trust proxy", true)</code> — see <a href="/projects/boxlang-express/docs/config">Configuration</a></td></tr>
+  <tr><td><code class="bx-inline">req.protocol</code> / <code class="bx-inline">req.secure</code></td><td>Always <code class="bx-inline">"http"</code> / <code class="bx-inline">false</code> — BoxExpress's own <code class="bx-inline">HttpServer</code> never terminates TLS — unless <code class="bx-inline">trust proxy</code> is on and the request carries <code class="bx-inline">X-Forwarded-Proto: https</code></td></tr>
+  <tr><td><code class="bx-inline">req.hostname</code></td><td>The <code class="bx-inline">Host</code> header (or <code class="bx-inline">X-Forwarded-Host</code> with <code class="bx-inline">trust proxy</code> on) with any <code class="bx-inline">:port</code> stripped</td></tr>
+  <tr><td><code class="bx-inline">req.session</code> / <code class="bx-inline">req.sessionID</code></td><td>Populated by <code class="bx-inline">boxExpressSession()</code> — see <a href="/projects/boxlang-express/docs/sessions">Sessions</a></td></tr>
+  <tr><td><code class="bx-inline">req.rawExchange()</code></td><td>Escape hatch to the underlying <code class="bx-inline">com.sun.net.httpserver.HttpExchange</code></td></tr>
+</table>
+
+<h2>The response object</h2>
+<p>Every terminal method funnels through the same internal path that writes headers and body exactly once and closes the exchange — calling two of them on the same response throws.</p>
+<table class="bx-table">
+  <tr><th>Method</th><th>Description</th></tr>
+  <tr><td><code class="bx-inline">res.send(data)</code></td><td>Sends a string body (or delegates to <code class="bx-inline">res.json()</code> for structs/arrays)</td></tr>
+  <tr><td><code class="bx-inline">res.json(data)</code></td><td>Serializes and sends with <code class="bx-inline">Content-Type: application/json</code></td></tr>
+  <tr><td><code class="bx-inline">res.status(code)</code></td><td>Sets the status code — chainable</td></tr>
+  <tr><td><code class="bx-inline">res.sendStatus(code)</code></td><td>Sends a status with its reason phrase as the body (e.g. <code class="bx-inline">"Not Found"</code>)</td></tr>
+  <tr><td><code class="bx-inline">res.set(name, value)</code> / <code class="bx-inline">res.header(name, value)</code></td><td>Sets an arbitrary response header — aliases of each other</td></tr>
+  <tr><td><code class="bx-inline">res.type(mimeType)</code></td><td>Sets <code class="bx-inline">Content-Type</code></td></tr>
+  <tr><td><code class="bx-inline">res.cookie(name, value, options)</code></td><td>Sets a <code class="bx-inline">Set-Cookie</code> header — options: <code class="bx-inline">path</code>, <code class="bx-inline">maxAge</code>, <code class="bx-inline">httpOnly</code> (default true), <code class="bx-inline">secure</code>, <code class="bx-inline">sameSite</code></td></tr>
+  <tr><td><code class="bx-inline">res.redirect(url, code = 302)</code></td><td>Sends a redirect with a caller-supplied status code</td></tr>
+  <tr><td><code class="bx-inline">res.end(data = "")</code></td><td>Ends the response with an optional body, no content-type inference</td></tr>
+  <tr><td><code class="bx-inline">res.sendBytes(bytes, contentType)</code></td><td>Sends raw bytes with an explicit content type, bypassing the string/UTF-8 round trip</td></tr>
+  <tr><td><code class="bx-inline">res.sendFile(path, options)</code></td><td>Sends a file inline, with ETag/Last-Modified 304 support; <code class="bx-inline">options.root</code> sandboxes the path against directory-escape</td></tr>
+  <tr><td><code class="bx-inline">res.download(path, filename)</code></td><td><code class="bx-inline">sendFile()</code> that forces <code class="bx-inline">Content-Disposition: attachment</code></td></tr>
+  <tr><td><code class="bx-inline">res.render(view, data)</code></td><td>Renders a view — see <a href="/projects/boxlang-express/docs/views">Views &amp; Templates</a></td></tr>
+  <tr><td><code class="bx-inline">res.dump(data)</code></td><td>Sends BoxLang's rich, collapsible <code class="bx-inline">dump()</code> HTML view of a variable as the response — useful for quick debugging routes</td></tr>
+</table>
+
+<h2>Examples</h2>
+<pre class="bx-code"><span class="bx-code-label">bxs</span><code>app.get( "/headers-demo", ( req, res ) => {
+    res.header( "X-Powered-By", "BoxLang Express" )
+       .type( "text/plain" )
+       .send( "check the headers" )
+} )
+
+app.get( "/whoami", ( req, res ) => {
+    res.json( { ip: req.ip, userAgent: req.get( "User-Agent" ) } )
+} )
+
+app.get( "/moved", ( req, res ) => {
+    res.redirect( "/new-location", 301 )
+} )
+
+app.get( "/debug", ( req, res ) => {
+    res.dump( req.query )
+} )</code></pre>
+
+<h2>Tips &amp; Tricks: res.dump()</h2>
+<p><code class="bx-inline">res.dump()</code> is BoxLang's own rich, interactive <code class="bx-inline">dump()</code> — the same one you'd get from a CLI script — rendered as the HTTP response instead of printed to the console. A few things worth knowing:</p>
+
+<h3>It's a terminal method — dump one thing</h3>
+<p>Like <code class="bx-inline">res.send()</code>/<code class="bx-inline">res.json()</code>, <code class="bx-inline">res.dump()</code> writes the response and closes the exchange — nothing can be sent after it. To inspect several things at once, wrap them in a single struct rather than calling it more than once:</p>
+<pre class="bx-code"><span class="bx-code-label">bxs</span><code>app.get( "/debug", ( req, res ) => {
+    res.dump( {
+        query: req.query,
+        params: req.params,
+        headers: req.headers,
+        session: req.session
+    } )
+} )</code></pre>
+
+<h3>It's click-to-expand</h3>
+<p>The rendered dump isn't static markup — struct/array row headers are clickable (and keyboard-focusable) to toggle that branch open or closed, so a large dump doesn't have to be read top-to-bottom. Handy for a deeply nested <code class="bx-inline">req.session</code> or a big query result.</p>
+
+<h3>Gate debug routes behind your env setting</h3>
+<p>A dump can expose more than you'd want a stranger to see — internal struct shapes, full session contents, request headers. Guard debug-only routes the same way the framework's own error pages decide whether to reveal a real error message (see <a href="/projects/boxlang-express/docs/errors">Error Handling</a>):</p>
+<pre class="bx-code"><span class="bx-code-label">bxs</span><code>app.get( "/debug/session", ( req, res, next ) => {
+    if ( app.getSetting( "env" ) != "development" ) {
+        next() // fall through to the normal 404 — don't reveal the route exists
+        return
+    }
+    res.dump( req.session )
+} )</code></pre>
+
+<h3>Reach for more control when you need it</h3>
+<p><code class="bx-inline">res.dump()</code> is a thin convenience wrapper — it only forwards the value to dump, not the underlying <code class="bx-inline">dump()</code> BIF's other options. The BIF itself supports several worth knowing about when you need more than the default view:</p>
+<table class="bx-table">
+  <tr><th>Argument</th><th>Effect</th></tr>
+  <tr><td><code class="bx-inline">label</code></td><td>Adds a titled banner above the dump — useful to tell two dumps apart on the same page</td></tr>
+  <tr><td><code class="bx-inline">expand = false</code></td><td>Renders every branch collapsed by default instead of open — the single biggest win for a large struct or query result</td></tr>
+  <tr><td><code class="bx-inline">top = n</code></td><td>Limits how many levels deep the dump descends before truncating — shrinks the payload for deeply nested data</td></tr>
+</table>
+<p>Since <code class="bx-inline">res.dump()</code> doesn't expose these, write the same temp-file round trip it uses internally in your own route when you need them — <code class="bx-inline">dump()</code>'s HTML output only ever reaches the process console under BoxLang Express's CLI-based HTTP server, so routing it through a temp file and reading it back is what makes it show up in the response at all:</p>
+<pre class="bx-code"><span class="bx-code-label">bxs</span><code>app.get( "/debug/session", ( req, res ) => {
+    var tmpFile = getTempDirectory() & "dump-" & createUUID() & ".html"
+    dump(
+        var = req.session,
+        format = "html",
+        output = tmpFile,
+        label = "Session State",
+        expand = false,
+        top = 3
+    )
+    var dumpHtml = fileRead( tmpFile )
+    fileDelete( tmpFile )
+    res.type( "text/html; charset=utf-8" ).send( dumpHtml )
+} )</code></pre>
+
+<h3>It's fine for dev, not for hot paths</h3>
+<p>Both the temp-file round trip and the HTML dump renderer itself have real cost compared to <code class="bx-inline">res.json()</code>. That's a non-issue for an occasional debug route hit by a developer, but it's not something to leave wired into a frequently-hit production endpoint.</p>
+</bx:output>
