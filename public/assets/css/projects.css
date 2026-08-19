@@ -206,7 +206,22 @@
 }
 
 /* Doc-page prose extends .c-post__body's typography — this adds only what
-   post.css doesn't already have: code blocks, inline code, and callouts. */
+   post.css doesn't already have: themed links, code blocks, inline code,
+   and callouts. */
+
+.c-docs-body a {
+	color: var(--post-link-text);
+	text-decoration-thickness: 0.08em;
+	text-underline-offset: 0.18em;
+}
+
+.c-docs-body a:visited {
+	color: var(--post-anchor-visited);
+}
+
+.c-docs-body a:hover {
+	opacity: 0.8;
+}
 
 .c-docs-body .bx-inline {
 	font-family: var(--font-mono);
