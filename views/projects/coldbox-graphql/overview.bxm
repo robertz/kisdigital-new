@@ -1,0 +1,40 @@
+<bx:include template="../../partials/_head.bxm">
+<bx:output>
+<div class="container py-5">
+	<div class="c-project-hero">
+		<p class="c-project-hero__eyebrow">Project</p>
+		<h1 class="c-project-hero__title">coldbox-graphql</h1>
+		<p class="c-project-hero__tagline">A schema-agnostic <a href="https://coldbox.ortusbooks.com/" target="_blank" rel="noopener" class="c-post-link">ColdBox</a> module that wraps <a href="https://www.graphql-java.com/" target="_blank" rel="noopener" class="c-post-link">graphql-java</a> to serve a GraphQL API from SDL files you supply. Ships with zero domain schema of its own — it parses your <code>.graphqls</code> files, wires resolvers by convention, and exposes a standard <code>POST /graphql</code> endpoint. Verified end-to-end on both Lucee and BoxLang.</p>
+		<div class="c-project-hero__actions">
+			<a href="/projects/coldbox-graphql/docs/getting-started" class="btn btn-primary-custom">Read the Docs</a>
+			<a href="https://github.com/robertz/coldbox-graphql" target="_blank" rel="noopener" class="btn btn-outline-custom">View on GitHub</a>
+		</div>
+	</div>
+
+	<div class="c-project-features">
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-file-earmark-code"></i> Schema-first</p>
+			<p class="c-project-feature__body">Drop <code>.graphqls</code> files in a directory, point <code>schemaPaths</code> at it — every file is parsed and merged into one schema automatically.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-magic"></i> Convention over config</p>
+			<p class="c-project-feature__body">A resolver CFC is only needed for fields with custom logic — everything else falls back to <code>PropertyDataFetcher</code> against a plain struct.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-cpu"></i> Dual-engine</p>
+			<p class="c-project-feature__body">Fully tested on both Lucee (5.4.8.2) and BoxLang (1.16.0) — schema build, resolver wiring, and a real HTTP round-trip on each.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-braces"></i> Custom scalars</p>
+			<p class="c-project-feature__body">Bring your own <code>GraphQLScalarType</code> instances via a <code>customScalarProvider</code> mapping — nothing built in, nothing forced on you.</p>
+		</div>
+	</div>
+
+	<p class="c-post-sidebar__label mb-3">Install</p>
+	<div class="c-post__body c-docs-body">
+<pre class="bx-code"><span class="bx-code-label">bash</span><code>box install coldbox-graphql</code></pre>
+	</div>
+	<p class="mt-3"><a href="/projects/coldbox-graphql/docs/getting-started" class="c-post-link">Full installation and engine-specific setup &rarr;</a></p>
+</div>
+</bx:output>
+<bx:include template="../../partials/_foot.bxm">

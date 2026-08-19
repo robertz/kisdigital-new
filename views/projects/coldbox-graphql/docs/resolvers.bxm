@@ -1,0 +1,68 @@
+<bx:output>
+<h1>Resolvers</h1>
+<p class="bx-docs-lede">The convention that wires a WireBox mapping to a schema type, and the four arguments every resolver method gets.</p>
+
+<h2>The convention</h2>
+<p>For a schema type <code class="bx-inline">TypeName</code> with field <code class="bx-inline">fieldName</code>, the module looks for a WireBox mapping at <code class="bx-inline">{resolverBasePackage}.{TypeName}Resolver</code> and, if it exists and implements a <code class="bx-inline">fieldName()</code> method, calls it. Otherwise it falls back to graphql-java's <code class="bx-inline">PropertyDataFetcher</code> — reading a same-named key off the parent object. This means <strong>you only write a resolver for fields that need custom logic</strong>; a struct with matching keys just works.</p>
+
+<h2>Resolver method signature</h2>
+<p>Resolver methods receive four named arguments:</p>
+<pre class="bx-code"><span class="bx-code-label">cfscript</span><code>any function fieldName( any source, struct args, any context, any env ){
+    // source  — the parent object (struct/whatever the parent resolver returned).
+    //           NULL for root Query/Mutation fields — don't mark it `required`.
+    // args    — the field's GraphQL arguments, as an ordinary CFML struct/array
+    //           (already converted from graphql-java's raw Map — case-insensitive
+    //           dot access works as normal).
+    // context — the ColdBox `event` (RequestContext) for the current request, so you can
+    //           reach rc/prc, headers, session, etc. via the normal ColdBox API.
+    // env     — the raw graphql.schema.DataFetchingEnvironment, for advanced use.
+}</code></pre>
+
+<h2>Example</h2>
+<p><code class="bx-inline">schema.graphqls</code>:</p>
+<pre class="bx-code"><span class="bx-code-label">graphql</span><code>type Query {
+    widget(id: ID!): Widget
+}
+
+type Widget {
+    id: ID!
+    name: String
+    slug: String
+}</code></pre>
+<p><code class="bx-inline">models/resolvers/QueryResolver.cfc</code>:</p>
+<pre class="bx-code"><span class="bx-code-label">cfscript</span><code>component {
+    property name="widgetService" inject="WidgetService";
+
+    any function widget( any source, required struct args, any context, any env ){
+        return widgetService.get( args.id ); // returns a struct with id/name/slug
+    }
+}</code></pre>
+<p>No <code class="bx-inline">WidgetResolver.cfc</code> is needed at all — <code class="bx-inline">id</code>, <code class="bx-inline">name</code>, and <code class="bx-inline">slug</code> all resolve via <code class="bx-inline">PropertyDataFetcher</code> off the struct <code class="bx-inline">widget()</code> returned. If you later need <code class="bx-inline">slug</code> computed rather than stored, add <code class="bx-inline">models/resolvers/WidgetResolver.cfc</code> with just a <code class="bx-inline">slug()</code> method; <code class="bx-inline">id</code> and <code class="bx-inline">name</code> keep resolving automatically.</p>
+
+<h2>Mutations</h2>
+<p><code class="bx-inline">Mutation</code> gets no special treatment — it's just another object type name to the wiring loop in <code class="bx-inline">GraphQLService.wireResolvers()</code>, so it follows the exact same <code class="bx-inline">{resolverBasePackage}.{TypeName}Resolver</code> convention as <code class="bx-inline">Query</code>, with the exact same four named arguments.</p>
+<p>Extending the schema above with a mutation:</p>
+<pre class="bx-code"><span class="bx-code-label">graphql</span><code>type Mutation {
+    createWidget(name: String!): Widget!
+    deleteWidget(id: ID!): Boolean!
+}</code></pre>
+<p><code class="bx-inline">models/resolvers/MutationResolver.cfc</code>:</p>
+<pre class="bx-code"><span class="bx-code-label">cfscript</span><code>component {
+    property name="widgetService" inject="WidgetService";
+
+    any function createWidget( any source, required struct args, any context, any env ){
+        return widgetService.create( args.name ); // returns a struct with id/name/slug
+    }
+
+    boolean function deleteWidget( any source, required struct args, any context, any env ){
+        return widgetService.delete( args.id );
+    }
+}</code></pre>
+<p>The result of <code class="bx-inline">createWidget</code> flows back through the schema exactly like a query result does — since it returns a struct shaped like <code class="bx-inline">Widget</code>, the <code class="bx-inline">id</code>/<code class="bx-inline">name</code>/<code class="bx-inline">slug</code> fields on the response resolve via the same <code class="bx-inline">PropertyDataFetcher</code> fallback, no extra wiring needed.</p>
+<p>One thing the module does <em>not</em> do anything special for: per the GraphQL spec, top-level mutation fields in a single request execute serially, in the order they appear in the query, rather than in parallel like top-level query fields. That's handled entirely by graphql-java's own execution strategy once it sees a <code class="bx-inline">Mutation</code> root type — nothing to configure here.</p>
+
+<div class="bx-callout bx-warn">
+  <strong>Not implemented in this version</strong>
+  Interface/union <code class="bx-inline">TypeResolver</code> wiring — every object type gets its own convention-based resolver, but resolving <em>which</em> concrete type implements an interface/union at runtime is not wired up.
+</div>
+</bx:output>

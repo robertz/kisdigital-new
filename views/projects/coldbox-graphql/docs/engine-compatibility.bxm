@@ -1,0 +1,11 @@
+<bx:output>
+<h1>Engine Compatibility</h1>
+<p class="bx-docs-lede">What's actually been verified on each CFML/BoxLang engine.</p>
+
+<table class="bx-table">
+  <tr><th>Engine</th><th>Status</th></tr>
+  <tr><td>Lucee</td><td>Fully tested (5.4.8.2), including the cbjavaloader + <code class="bx-inline">this.javaSettings</code> split described in <a href="/projects/coldbox-graphql/docs/getting-started">Getting Started</a>.</td></tr>
+  <tr><td>BoxLang</td><td>Fully tested (1.16.0) against a real running server — schema build, resolver wiring (both <code class="bx-inline">PropertyDataFetcher</code> fallback and explicit-resolver precedence), and a real HTTP round-trip through <code class="bx-inline">POST /graphql</code> all pass with zero <code class="bx-inline">Application.bx</code> changes. Requires ColdBox 8+ and TestBox 7+ — those constraints are about ColdBox/TestBox's own BoxLang support, not this module.</td></tr>
+  <tr><td>Adobe ColdFusion</td><td>Not tested. ACF supports <code class="bx-inline">createDynamicProxy()</code>, <code class="bx-inline">this.javaSettings</code>, and cbjavaloader, so the same Lucee code path should work, but has not been verified.</td></tr>
+</table>
+</bx:output>

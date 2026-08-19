@@ -1,0 +1,19 @@
+<bx:output>
+<h1>Testing</h1>
+<p class="bx-docs-lede">Running the module's own test suite, and what the 13 specs actually cover.</p>
+
+<h2>Running it</h2>
+<pre class="bx-code"><span class="bx-code-label">bash</span><code>box install</code></pre>
+<p>then start <code class="bx-inline">tests/resources/App</code> as a CommandBox server (webroot = that directory) and hit <code class="bx-inline">/testrunner.cfm</code>. See <code class="bx-inline">tests/resources/App/config/ColdBox.cfc</code> for the exact settings a consuming app needs (it <em>is</em> a minimal consuming app).</p>
+
+<h2>What's covered</h2>
+<p>13 specs across three files, verified live on both Lucee and BoxLang:</p>
+<ul>
+  <li><strong><code class="bx-inline">tests/specs/GraphQLServiceSpec.cfc</code></strong> — the resolver convention in-process: <code class="bx-inline">PropertyDataFetcher</code> fallback, explicit-resolver precedence, missing-resolver-class fallback, and spec-shaped errors for an invalid query.</li>
+  <li><strong><code class="bx-inline">tests/specs/GraphQLHandlerSpec.cfc</code></strong> — the real thing end-to-end, real HTTP POSTs against the running <code class="bx-inline">/graphql</code> route: the happy path, a malformed request body, and a handful of regression tests for specific bugs found and fixed during a code review — a non-string <code class="bx-inline">query</code>/<code class="bx-inline">operationName</code> (used to crash uncaught instead of returning a graceful 400), resolvers actually receiving the ColdBox <code class="bx-inline">event</code> as <code class="bx-inline">context</code> (used to always be null), and a resolver with its own broken WireBox dependency surfacing as a real error (used to silently fall back to <code class="bx-inline">PropertyDataFetcher</code> instead).</li>
+  <li><strong><code class="bx-inline">tests/specs/GraphQLServiceConfigSpec.cfc</code></strong> — startup config validation: a bad wildcard <code class="bx-inline">schemaPaths</code> directory now fails fast at build time instead of silently dropping that schema fragment. These specs build their own throwaway <code class="bx-inline">GraphQLService</code> instance (via <code class="bx-inline">getWireBox().autowire()</code> + <code class="bx-inline">setSettings()</code>) rather than touching the app's real singleton — the reason <code class="bx-inline">GraphQLService.cfc</code> has <code class="bx-inline">accessors="true"</code>.</li>
+</ul>
+
+<h2>What's not covered</h2>
+<p>Two internal caching optimizations (<code class="bx-inline">JavaClassFactory</code>'s class-handle cache, <code class="bx-inline">DataFetcherAdapter</code>'s per-field <code class="bx-inline">PropertyDataFetcher</code> cache) — both are already exercised indirectly by every other spec (many distinct classes/fields resolving correctly across dozens of calls), so a dedicated test would mostly be reflecting into cache internals rather than asserting on observable behavior.</p>
+</bx:output>

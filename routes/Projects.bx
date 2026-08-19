@@ -1,5 +1,6 @@
 /**
- * /projects — a showcase of side projects, starting with boxlang-express's docs.
+ * /projects — a showcase of side projects, each with an overview page and,
+ * for the ones with enough content to warrant it, a multi-page docs section.
  */
 class {
 
@@ -18,22 +19,42 @@ class {
 			name    : "bx-zork",
 			icon    : "bi-controller",
 			tagline : "A from-scratch text-adventure parser engine in BoxLang, loaded with the world of Zork I."
+		},
+		{
+			slug    : "coldbox-graphql",
+			name    : "coldbox-graphql",
+			icon    : "bi-diagram-3",
+			tagline : "A schema-agnostic ColdBox module that serves a GraphQL API from SDL files you supply."
 		}
 	];
 
-	// Ordered doc topics for boxlang-express, driving both the sidebar and the pager.
-	variables.boxlangExpressDocs = [
-		{ slug : "getting-started",     title : "Getting Started" },
-		{ slug : "config",              title : "Configuration" },
-		{ slug : "routing",             title : "Routing" },
-		{ slug : "middleware",          title : "Middleware" },
-		{ slug : "request-response",    title : "Request & Response" },
-		{ slug : "views",               title : "Views & Templates" },
-		{ slug : "sessions",            title : "Sessions" },
-		{ slug : "static-files",        title : "Static Files & Uploads" },
-		{ slug : "errors",              title : "Error Handling" },
-		{ slug : "lifecycle",           title : "Process Lifecycle" }
-	];
+	// Ordered doc topics per project slug — only projects with a multi-page
+	// docs section (as opposed to a single overview page) appear here.
+	variables.projectDocs = {
+		"boxlang-express" : [
+			{ slug : "getting-started",  title : "Getting Started" },
+			{ slug : "config",           title : "Configuration" },
+			{ slug : "routing",          title : "Routing" },
+			{ slug : "middleware",       title : "Middleware" },
+			{ slug : "request-response", title : "Request & Response" },
+			{ slug : "views",            title : "Views & Templates" },
+			{ slug : "sessions",         title : "Sessions" },
+			{ slug : "static-files",     title : "Static Files & Uploads" },
+			{ slug : "errors",           title : "Error Handling" },
+			{ slug : "lifecycle",        title : "Process Lifecycle" }
+		],
+		"coldbox-graphql" : [
+			{ slug : "getting-started",       title : "Getting Started" },
+			{ slug : "schema-files",          title : "Schema Files" },
+			{ slug : "module-settings",       title : "Module Settings" },
+			{ slug : "resolvers",             title : "Resolvers" },
+			{ slug : "custom-scalars",        title : "Custom Scalars" },
+			{ slug : "http-endpoint",         title : "HTTP Endpoint" },
+			{ slug : "introspection",         title : "Introspection & SDL" },
+			{ slug : "engine-compatibility",  title : "Engine Compatibility" },
+			{ slug : "testing",               title : "Testing" }
+		]
+	};
 
 	function init( required siteDefaults ){
 		variables.siteDefaults = arguments.siteDefaults;
@@ -41,9 +62,8 @@ class {
 		this.router = boxExpressRouter();
 
 		this.router.get( "/projects", ( req, res ) => index( req, res ) );
-		this.router.get( "/projects/boxlang-express", ( req, res ) => boxlangExpressOverview( req, res ) );
-		this.router.get( "/projects/boxlang-express/docs/:page", ( req, res, next ) => boxlangExpressDoc( req, res, next ) );
-		this.router.get( "/projects/bx-zork", ( req, res ) => bxZorkOverview( req, res ) );
+		this.router.get( "/projects/:slug/docs/:page", ( req, res, next ) => doc( req, res, next ) );
+		this.router.get( "/projects/:slug", ( req, res, next ) => overview( req, res, next ) );
 
 		return this;
 	}
@@ -58,22 +78,39 @@ class {
 		} );
 	}
 
-	// route: /projects/boxlang-express
-	function boxlangExpressOverview( req, res ){
-		res.render( "projects/boxlang-express/overview", {
-			pageTitle    : "boxlang-express",
+	// route: /projects/:slug
+	function overview( req, res, next ){
+		var slug    = req.params.slug ?: "";
+		var project = findProject( slug );
+
+		if ( isNull( project ) ){
+			next();
+			return;
+		}
+
+		res.render( "projects/" & slug & "/overview", {
+			pageTitle    : project.name,
 			canonicalUrl : variables.siteDefaults.canonicalUrl( req.path ),
 			meta         : variables.siteDefaults.defaultMeta( req.path )
 		} );
 	}
 
-	// route: /projects/boxlang-express/docs/:page
-	function boxlangExpressDoc( req, res, next ){
-		var slug     = req.params.page ?: "";
+	// route: /projects/:slug/docs/:page
+	function doc( req, res, next ){
+		var slug = req.params.slug ?: "";
+		var page = req.params.page ?: "";
+
+		if ( !variables.projectDocs.keyExists( slug ) ){
+			next();
+			return;
+		}
+
+		var project  = findProject( slug );
+		var docsList = variables.projectDocs[ slug ];
 		var docIndex = -1;
 
-		for ( var i = 1; i <= variables.boxlangExpressDocs.len(); i++ ){
-			if ( variables.boxlangExpressDocs[ i ].slug == slug ){
+		for ( var i = 1; i <= docsList.len(); i++ ){
+			if ( docsList[ i ].slug == page ){
 				docIndex = i;
 				break;
 			}
@@ -84,29 +121,31 @@ class {
 			return;
 		}
 
-		var current  = variables.boxlangExpressDocs[ docIndex ];
-		var prevDoc  = docIndex > 1 ? variables.boxlangExpressDocs[ docIndex - 1 ] : "";
-		var nextDoc  = docIndex < variables.boxlangExpressDocs.len() ? variables.boxlangExpressDocs[ docIndex + 1 ] : "";
+		var current = docsList[ docIndex ];
+		var prevDoc = docIndex > 1 ? docsList[ docIndex - 1 ] : "";
+		var nextDoc = docIndex < docsList.len() ? docsList[ docIndex + 1 ] : "";
 
-		res.render( "projects/boxlang-express/docs", {
-			pageTitle    : current.title & " — boxlang-express",
+		res.render( "projects/_docsShell", {
+			pageTitle    : current.title & " — " & project.name,
 			canonicalUrl : variables.siteDefaults.canonicalUrl( req.path ),
 			meta         : variables.siteDefaults.defaultMeta( req.path ),
-			docs         : variables.boxlangExpressDocs,
-			currentSlug  : slug,
-			contentView  : "docs/" & slug,
+			projectSlug  : slug,
+			projectName  : project.name,
+			docs         : docsList,
+			currentSlug  : page,
+			contentView  : slug & "/docs/" & page,
 			prevDoc      : prevDoc,
 			nextDoc      : nextDoc
 		} );
 	}
 
-	// route: /projects/bx-zork
-	function bxZorkOverview( req, res ){
-		res.render( "projects/bx-zork/overview", {
-			pageTitle    : "bx-zork",
-			canonicalUrl : variables.siteDefaults.canonicalUrl( req.path ),
-			meta         : variables.siteDefaults.defaultMeta( req.path )
-		} );
+	private function findProject( slug ){
+		for ( var project in variables.projects ){
+			if ( project.slug == slug ){
+				return project;
+			}
+		}
+		return javacast( "null", "" );
 	}
 
 }
