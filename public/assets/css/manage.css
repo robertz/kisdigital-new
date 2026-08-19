@@ -371,6 +371,69 @@
 	color: var(--text-secondary);
 }
 
+/* ── Security page (views/manage/security/index.bxm) ── */
+
+.c-security-section {
+	margin-top: var(--space-7);
+}
+
+.c-security-section:first-of-type {
+	margin-top: var(--space-5);
+}
+
+.c-security-section__head {
+	margin-bottom: var(--space-3);
+}
+
+.c-security-section__head h2 {
+	font-size: 1rem;
+	font-weight: 700;
+	color: var(--post-anchor);
+	margin: 0;
+}
+
+.c-security-section__head p {
+	font-size: 0.8125rem;
+	color: var(--text-secondary);
+	margin: var(--space-1) 0 0;
+	max-width: 72ch;
+}
+
+.c-signal-badge {
+	display: inline-flex;
+	align-items: center;
+	padding: 2px 8px;
+	border-radius: 999px;
+	font-size: 0.75rem;
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+.c-signal-badge--sqli {
+	background: rgba(239, 68, 68, 0.14);
+	color: #b91c1c;
+}
+
+.c-signal-badge--xss {
+	background: rgba(245, 158, 11, 0.14);
+	color: #b45309;
+}
+
+.c-signal-badge--path_traversal {
+	background: rgba(59, 130, 246, 0.12);
+	color: #1d4ed8;
+}
+
+.c-signal-badge--command_injection {
+	background: rgba(168, 85, 247, 0.14);
+	color: #7e22ce;
+}
+
+.c-signal-badge--unknown {
+	background: var(--ui-surface-2);
+	color: var(--text-secondary);
+}
+
 /* ── Admin form ── */
 
 .c-manage-form {
@@ -2610,6 +2673,10 @@
 	html:not([data-theme="light"]) .c-status-badge--4xx { color: #fcd34d; }
 	html:not([data-theme="light"]) .c-status-badge--5xx { color: #fca5a5; }
 	html:not([data-theme="light"]) .c-post-editor__cover-upload-status--error { color: #fca5a5; }
+	html:not([data-theme="light"]) .c-signal-badge--sqli { color: #fca5a5; }
+	html:not([data-theme="light"]) .c-signal-badge--xss { color: #fcd34d; }
+	html:not([data-theme="light"]) .c-signal-badge--path_traversal { color: #93c5fd; }
+	html:not([data-theme="light"]) .c-signal-badge--command_injection { color: #d8b4fe; }
 }
 
 [data-theme="dark"] .c-manage-nav { background: var(--ui-surface-1); border-color: var(--ui-border-subtle); }
@@ -2626,3 +2693,7 @@
 [data-theme="dark"] .c-status-badge--4xx { color: #fcd34d; }
 [data-theme="dark"] .c-status-badge--5xx { color: #fca5a5; }
 [data-theme="dark"] .c-post-editor__cover-upload-status--error { color: #fca5a5; }
+[data-theme="dark"] .c-signal-badge--sqli { color: #fca5a5; }
+[data-theme="dark"] .c-signal-badge--xss { color: #fcd34d; }
+[data-theme="dark"] .c-signal-badge--path_traversal { color: #93c5fd; }
+[data-theme="dark"] .c-signal-badge--command_injection { color: #d8b4fe; }

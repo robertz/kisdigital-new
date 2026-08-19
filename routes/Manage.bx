@@ -27,8 +27,9 @@ class {
 	variables.r2Client        = "";
 	variables.r2UploadPrefix  = "posts";
 	variables.insightsService = "";
+	variables.securityService = "";
 
-	function init( required authService, required postService, required authorService, required settingsService, required postRenderer, required r2Client, r2UploadPrefix = "posts", required insightsService ){
+	function init( required authService, required postService, required authorService, required settingsService, required postRenderer, required r2Client, r2UploadPrefix = "posts", required insightsService, required securityService ){
 		variables.authService     = arguments.authService;
 		variables.postService     = arguments.postService;
 		variables.authorService   = arguments.authorService;
@@ -37,6 +38,7 @@ class {
 		variables.r2UploadPrefix  = len( trim( arguments.r2UploadPrefix ) ) ? trim( arguments.r2UploadPrefix ).reReplace( "^/+|/+$", "", "all" ) : "posts";
 		variables.r2Client        = arguments.r2Client;
 		variables.insightsService = arguments.insightsService;
+		variables.securityService = arguments.securityService;
 
 		// Bare method references passed as route handlers lose their binding to
 		// this instance (BoxLang's Router ends up calling them unbound), so every
@@ -87,6 +89,7 @@ class {
 
 		this.router.get( "/manage/insights", admin, ( req, res ) => insightsIndex( req, res ) );
 		this.router.get( "/manage/logs", admin, ( req, res ) => logsIndex( req, res ) );
+		this.router.get( "/manage/security", admin, ( req, res ) => securityIndex( req, res ) );
 
 		return this;
 	}
@@ -829,6 +832,40 @@ class {
 			// of the embedding <script type="application/json"> tag below.
 			rowsJson: replace( JSONSerialize( _rowsForClient( paging.rows ) ), "</", "<\/", "all" )
 		} );
+	}
+
+	// ── Security (RequestLog heuristic scans) ───────────────────────────────
+
+	// GET /manage/security — each section's own query is caught
+	// independently, same reasoning as insightsIndex(): a DB blip or a
+	// pathological regex on a huge table degrades that one section instead
+	// of blanking the whole page.
+	function securityIndex( req, res ){
+		res.render( "manage/security/index", {
+			pageTitle           : "Security",
+			manageSection       : "security",
+			volumeAnomalies     : securityFetch( () => variables.securityService.getVolumeAnomalies() ),
+			burstDetection      : securityFetch( () => variables.securityService.getBurstDetection() ),
+			enumerationScanning : securityFetch( () => variables.securityService.getEnumerationScanning() ),
+			payloadSignatures   : securityFetch( () => variables.securityService.getPayloadSignatures() ),
+			suspiciousUserAgents: securityFetch( () => variables.securityService.getSuspiciousUserAgents() ),
+			sensitivePathProbing: securityFetch( () => variables.securityService.getSensitivePathProbing() ),
+			unusualMethods      : securityFetch( () => variables.securityService.getUnusualMethods() )
+		} );
+	}
+
+	/**
+	 * Same shape as insightsFetch() — runs one SecurityService call, logging
+	 * and swallowing any failure so the view gets a safe null (rendered as
+	 * "couldn't load this section") instead of a 500 for the whole page.
+	 */
+	private function securityFetch( required fetchFn ){
+		try {
+			return arguments.fetchFn();
+		} catch ( any e ) {
+			println( "[error] Security fetch failed: " & e.message );
+			return javacast( "null", "" );
+		}
 	}
 
 	private function _rowsForClient( required array rows ){
