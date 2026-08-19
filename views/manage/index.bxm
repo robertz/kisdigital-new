@@ -212,6 +212,26 @@
 					</div>
 				</a>
 
+				<!--- Server card (admin) --->
+				<a href="/manage/server" class="c-manage-dashboard__card c-manage-dashboard__card--link">
+					<div class="c-manage-dashboard__card-head">
+						<span class="c-manage-dashboard__icon"><i class="bi bi-hdd-stack"></i></span>
+						<span class="c-manage-dashboard__eyebrow">System</span>
+					</div>
+					<bx:if isNull( data.server )>
+						<h2 class="c-manage-dashboard__title">Server</h2>
+						<p class="c-manage-dashboard__meta">Couldn't load this &mdash; see server logs.</p>
+					<bx:else>
+						<h2 class="c-manage-dashboard__title">#data.server.memory.heapPercent#% heap</h2>
+						<p class="c-manage-dashboard__meta">#encodeForHTML( data.server.memory.heapUsed )# of #encodeForHTML( data.server.memory.heapMax )# &middot; up #encodeForHTML( data.server.jvm.uptime )#</p>
+					</bx:if>
+					<div class="c-manage-dashboard__card-foot">
+						<span class="c-manage-dashboard__cta">
+							View server <i class="bi bi-arrow-right"></i>
+						</span>
+					</div>
+				</a>
+
 				<!--- Authors card (admin) --->
 				<a href="/manage/authors" class="c-manage-dashboard__card c-manage-dashboard__card--link">
 					<div class="c-manage-dashboard__card-head">

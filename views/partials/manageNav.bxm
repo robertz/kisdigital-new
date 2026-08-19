@@ -22,6 +22,9 @@
 	<a href="/manage/security" class="c-manage-nav__link #( ( data.manageSection ?: '' ) == 'security' ? 'c-manage-nav__link--active' : '' )#">
 		<i class="bi bi-shield-exclamation"></i> Security
 	</a>
+	<a href="/manage/server" class="c-manage-nav__link #( ( data.manageSection ?: '' ) == 'server' ? 'c-manage-nav__link--active' : '' )#">
+		<i class="bi bi-hdd-stack"></i> Server
+	</a>
 	<a href="/manage/settings" class="c-manage-nav__link #( ( data.manageSection ?: '' ) == 'settings' ? 'c-manage-nav__link--active' : '' )#">
 		<i class="bi bi-gear"></i> Settings
 	</a>

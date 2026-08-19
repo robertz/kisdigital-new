@@ -22,8 +22,8 @@
 			</div>
 
 			<!--- 1. Volume anomalies --->
-			<section class="c-security-section">
-				<header class="c-security-section__head">
+			<section class="c-manage-section">
+				<header class="c-manage-section__head">
 					<h2>Volume anomalies</h2>
 					<p>Top requesting IPs overall. Catches scraping, basic DDoS, credential-stuffing infra.</p>
 				</header>
@@ -70,8 +70,8 @@
 			</section>
 
 			<!--- 2. Burst detection --->
-			<section class="c-security-section">
-				<header class="c-security-section__head">
+			<section class="c-manage-section">
+				<header class="c-manage-section__head">
 					<h2>Burst detection</h2>
 					<p>Request velocity per IP per minute (&gt;60/min). Catches brute force and rate-limit-bypass attempts a daily average would smooth over.</p>
 				</header>
@@ -114,8 +114,8 @@
 			</section>
 
 			<!--- 3. Enumeration / scanning --->
-			<section class="c-security-section">
-				<header class="c-security-section__head">
+			<section class="c-manage-section">
+				<header class="c-manage-section__head">
 					<h2>Enumeration &amp; scanning</h2>
 					<p>IPs probing &gt;15 distinct paths with a &gt;50% 401/403/404 rate. Catches directory brute-forcing, endpoint discovery, auth guessing.</p>
 				</header>
@@ -162,8 +162,8 @@
 			</section>
 
 			<!--- 4. Payload signatures --->
-			<section class="c-security-section">
-				<header class="c-security-section__head">
+			<section class="c-manage-section">
+				<header class="c-manage-section__head">
 					<h2>Payload signatures</h2>
 					<p>SQLi / XSS / path-traversal / command-injection shaped strings in the path or query string. Tagged by category so you can triage rather than treating "suspicious" as one bucket.</p>
 				</header>
@@ -216,8 +216,8 @@
 			</section>
 
 			<!--- 5. Suspicious user agents --->
-			<section class="c-security-section">
-				<header class="c-security-section__head">
+			<section class="c-manage-section">
+				<header class="c-manage-section__head">
 					<h2>Known scanner / suspicious user agents</h2>
 					<p>Empty or known-scanner UA strings, grouped by IP. Low-confidence alone (UA is trivially spoofable) — best used to corroborate another signal.</p>
 				</header>
@@ -262,8 +262,8 @@
 			</section>
 
 			<!--- 6. Sensitive path probing --->
-			<section class="c-security-section">
-				<header class="c-security-section__head">
+			<section class="c-manage-section">
+				<header class="c-manage-section__head">
 					<h2>Sensitive path probing</h2>
 					<p>Requests for paths that only make sense as recon (exposed config, secrets, admin panels) — not filtered to failed status codes. A 200 here is far more urgent than a 404.</p>
 				</header>
@@ -314,8 +314,8 @@
 			</section>
 
 			<!--- 7. Unusual HTTP methods --->
-			<section class="c-security-section">
-				<header class="c-security-section__head">
+			<section class="c-manage-section">
+				<header class="c-manage-section__head">
 					<h2>Unusual HTTP methods</h2>
 					<p>Methods outside GET/POST/PUT/PATCH/DELETE/HEAD/OPTIONS. Catches protocol-level probing (TRACE for XST, CONNECT for tunneling, etc).</p>
 				</header>

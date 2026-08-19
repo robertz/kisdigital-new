@@ -1,0 +1,152 @@
+/**
+ * Live JVM/OS metrics for /manage/server — everything here comes from
+ * java.lang.management (the standard JMX platform beans every JVM exposes)
+ * plus a handful of com.sun.management.OperatingSystemMXBean extras that
+ * are HotSpot-specific, not part of the portable interface. This process
+ * always runs on HotSpot (OpenJDK, see the Dockerfile), so those are
+ * expected to work, but each is still wrapped individually — a metric one
+ * JVM/OS combination doesn't expose shouldn't take the rest of the page
+ * down with it, same reasoning as InsightsService/SecurityService's
+ * per-section isolation.
+ *
+ * Everything returned is a snapshot at the moment of the call — there's no
+ * caching here (unlike HostnameResolver), because these are all local,
+ * near-instant JMX bean reads, not network calls.
+ *
+ * "Disk" below means the container's own filesystem, not the host's — this
+ * process only ever sees what's mounted inside its own container.
+ */
+class {
+
+	function getSnapshot(){
+		return {
+			"memory" : _memory(),
+			"cpu"    : _cpu(),
+			"disk"   : _disk(),
+			"jvm"    : _jvm(),
+			"gc"     : _gc(),
+			"threads": _threads(),
+			"process": _process()
+		};
+	}
+
+	private function _memory(){
+		var mgmt    = createObject( "java", "java.lang.management.ManagementFactory" );
+		var memBean = mgmt.getMemoryMXBean();
+		var heap    = memBean.getHeapMemoryUsage();
+		var nonHeap = memBean.getNonHeapMemoryUsage();
+		var runtime = createObject( "java", "java.lang.Runtime" ).getRuntime();
+
+		return {
+			"heapUsed"        : heap.getUsed(),
+			"heapCommitted"   : heap.getCommitted(),
+			"heapMax"         : heap.getMax(),
+			"heapInit"        : heap.getInit(),
+			"nonHeapUsed"     : nonHeap.getUsed(),
+			"nonHeapCommitted": nonHeap.getCommitted(),
+			"nonHeapMax"      : nonHeap.getMax(),
+			"runtimeTotal"    : runtime.totalMemory(),
+			"runtimeFree"     : runtime.freeMemory(),
+			"runtimeMax"      : runtime.maxMemory()
+		};
+	}
+
+	private function _cpu(){
+		var osBean = createObject( "java", "java.lang.management.ManagementFactory" ).getOperatingSystemMXBean();
+
+		var result = {
+			"availableProcessors": osBean.getAvailableProcessors(),
+			"systemLoadAverage"  : osBean.getSystemLoadAverage()
+		};
+
+		// com.sun.management.OperatingSystemMXBean — HotSpot-only, so each
+		// is optional. osBean is already that concrete type at runtime on
+		// this JVM; the portable java.lang.management interface just
+		// doesn't declare these methods.
+		_tryPut( result, "processCpuLoad", () => osBean.getProcessCpuLoad() );
+		_tryPut( result, "systemCpuLoad", () => osBean.getCpuLoad() );
+		_tryPut( result, "processCpuTime", () => osBean.getProcessCpuTime() );
+		_tryPut( result, "totalPhysicalMemory", () => osBean.getTotalMemorySize() );
+		_tryPut( result, "freePhysicalMemory", () => osBean.getFreeMemorySize() );
+		_tryPut( result, "totalSwap", () => osBean.getTotalSwapSpaceSize() );
+		_tryPut( result, "freeSwap", () => osBean.getFreeSwapSpaceSize() );
+
+		return result;
+	}
+
+	private function _disk(){
+		var root = createObject( "java", "java.io.File" ).init( "/" );
+		return {
+			"totalSpace" : root.getTotalSpace(),
+			"freeSpace"  : root.getFreeSpace(),
+			"usableSpace": root.getUsableSpace()
+		};
+	}
+
+	private function _jvm(){
+		var runtimeBean = createObject( "java", "java.lang.management.ManagementFactory" ).getRuntimeMXBean();
+		var classBean   = createObject( "java", "java.lang.management.ManagementFactory" ).getClassLoadingMXBean();
+
+		return {
+			"vmName"               : runtimeBean.getVmName(),
+			"vmVendor"             : runtimeBean.getVmVendor(),
+			"vmVersion"            : runtimeBean.getVmVersion(),
+			"specVersion"          : runtimeBean.getSpecVersion(),
+			"startTime"            : runtimeBean.getStartTime(),
+			"uptimeMs"             : runtimeBean.getUptime(),
+			"loadedClassCount"     : classBean.getLoadedClassCount(),
+			"totalLoadedClassCount": classBean.getTotalLoadedClassCount(),
+			"unloadedClassCount"   : classBean.getUnloadedClassCount()
+		};
+	}
+
+	// One row per garbage collector the JVM is running (typically 2 on
+	// HotSpot — e.g. "G1 Young Generation" and "G1 Old Generation").
+	private function _gc(){
+		var beans  = createObject( "java", "java.lang.management.ManagementFactory" ).getGarbageCollectorMXBeans();
+		var result = [];
+		for ( var bean in beans ){
+			result.append( {
+				"name"           : bean.getName(),
+				"collectionCount": bean.getCollectionCount(),
+				"collectionTime" : bean.getCollectionTime()
+			} );
+		}
+		return result;
+	}
+
+	private function _threads(){
+		var threadBean = createObject( "java", "java.lang.management.ManagementFactory" ).getThreadMXBean();
+		return {
+			"liveCount"        : threadBean.getThreadCount(),
+			"peakCount"        : threadBean.getPeakThreadCount(),
+			"daemonCount"      : threadBean.getDaemonThreadCount(),
+			"totalStartedCount": threadBean.getTotalStartedThreadCount()
+		};
+	}
+
+	private function _process(){
+		var osBean = createObject( "java", "java.lang.management.ManagementFactory" ).getOperatingSystemMXBean();
+		var result = {
+			"osName" : osBean.getName(),
+			"osVersion": osBean.getVersion(),
+			"osArch" : osBean.getArch(),
+			"javaVersion": createObject( "java", "java.lang.System" ).getProperty( "java.version" ),
+			"userDir": createObject( "java", "java.lang.System" ).getProperty( "user.dir" )
+		};
+		_tryPut( result, "pid", () => createObject( "java", "java.lang.ProcessHandle" ).current().pid() );
+		return result;
+	}
+
+	// Runs fn(), stores its result under key only if it succeeds — used for
+	// the HotSpot-specific metrics above that aren't guaranteed to exist.
+	private function _tryPut( required struct target, required string key, required fn ){
+		try {
+			arguments.target[ arguments.key ] = arguments.fn();
+		} catch ( any e ) {
+			// Left out of the struct entirely — the view treats a missing
+			// key as "not available on this platform", not an error.
+		}
+	}
+
+}

@@ -1,0 +1,298 @@
+<bx:include template="../../partials/_head.bxm">
+<bx:output>
+<div class="c-manage">
+
+	<!--- Sidebar nav --->
+	<bx:include template="../../partials/manageNav.bxm">
+
+	<!--- Main content --->
+	<main class="c-manage-main">
+
+		<div class="c-manage-posts">
+
+			<div class="c-manage-header">
+				<div>
+					<h1 class="c-manage-header__title">Server</h1>
+					<p class="c-manage-header__sub">
+						A live snapshot of this process — memory, CPU, disk, and JVM internals.
+						"Disk" is this container's own filesystem, not the host's.
+					</p>
+				</div>
+			</div>
+
+			<bx:if isNull( data.server )>
+				<div class="c-manage-panel__empty">
+					<i class="bi bi-exclamation-circle"></i>
+					<h2>Couldn't load server metrics</h2>
+					<p>See server logs for details.</p>
+				</div>
+			<bx:else>
+
+				<!--- Memory --->
+				<section class="c-manage-section">
+					<header class="c-manage-section__head">
+						<h2>Memory</h2>
+						<p>JVM heap and non-heap memory usage.</p>
+					</header>
+					<div class="c-manage-panel">
+						<div class="c-monitor-stats">
+							<div class="c-usage-bar">
+								<div class="c-usage-bar__label">
+									<span>Heap used</span>
+									<strong>#encodeForHTML( data.server.memory.heapUsed )# / #encodeForHTML( data.server.memory.heapMax )# (#data.server.memory.heapPercent#%)</strong>
+								</div>
+								<div class="c-usage-bar__track">
+									<div class="c-usage-bar__fill #( data.server.memory.heapPercent >= 90 ? 'c-usage-bar__fill--danger' : ( data.server.memory.heapPercent >= 75 ? 'c-usage-bar__fill--warn' : '' ) )#" style="width: #min( data.server.memory.heapPercent, 100 )#%"></div>
+								</div>
+							</div>
+							<div class="c-monitor-stat">
+								<span class="c-monitor-stat__label">Heap committed</span>
+								<span class="c-monitor-stat__value">#encodeForHTML( data.server.memory.heapCommitted )#</span>
+							</div>
+							<div class="c-monitor-stat">
+								<span class="c-monitor-stat__label">Non-heap used</span>
+								<span class="c-monitor-stat__value">#encodeForHTML( data.server.memory.nonHeapUsed )#</span>
+							</div>
+							<div class="c-monitor-stat">
+								<span class="c-monitor-stat__label">Non-heap committed</span>
+								<span class="c-monitor-stat__value">#encodeForHTML( data.server.memory.nonHeapCommitted )#</span>
+							</div>
+							<div class="c-monitor-stat">
+								<span class="c-monitor-stat__label">Runtime total</span>
+								<span class="c-monitor-stat__value">#encodeForHTML( data.server.memory.runtimeTotal )#</span>
+							</div>
+							<div class="c-monitor-stat">
+								<span class="c-monitor-stat__label">Runtime free</span>
+								<span class="c-monitor-stat__value">#encodeForHTML( data.server.memory.runtimeFree )#</span>
+							</div>
+							<div class="c-monitor-stat">
+								<span class="c-monitor-stat__label">Runtime max</span>
+								<span class="c-monitor-stat__value">#encodeForHTML( data.server.memory.runtimeMax )#</span>
+							</div>
+						</div>
+					</div>
+				</section>
+
+				<!--- CPU & load --->
+				<section class="c-manage-section">
+					<header class="c-manage-section__head">
+						<h2>CPU &amp; load</h2>
+						<p>Process and system CPU usage, plus physical memory/swap where the platform exposes them.</p>
+					</header>
+					<div class="c-manage-panel">
+						<div class="c-monitor-stats">
+							<div class="c-monitor-stat">
+								<span class="c-monitor-stat__label">Available processors</span>
+								<span class="c-monitor-stat__value">#data.server.cpu.availableProcessors#</span>
+							</div>
+							<div class="c-monitor-stat">
+								<span class="c-monitor-stat__label">System load average</span>
+								<span class="c-monitor-stat__value">#encodeForHTML( data.server.cpu.systemLoadAverage )#</span>
+							</div>
+							<div class="c-monitor-stat">
+								<span class="c-monitor-stat__label">Process CPU load</span>
+								<span class="c-monitor-stat__value">#encodeForHTML( data.server.cpu.processCpuLoad )#</span>
+							</div>
+							<div class="c-monitor-stat">
+								<span class="c-monitor-stat__label">System CPU load</span>
+								<span class="c-monitor-stat__value">#encodeForHTML( data.server.cpu.systemCpuLoad )#</span>
+							</div>
+							<div class="c-monitor-stat">
+								<span class="c-monitor-stat__label">Total physical memory</span>
+								<span class="c-monitor-stat__value">#encodeForHTML( data.server.cpu.totalPhysicalMemory )#</span>
+							</div>
+							<div class="c-monitor-stat">
+								<span class="c-monitor-stat__label">Free physical memory</span>
+								<span class="c-monitor-stat__value">#encodeForHTML( data.server.cpu.freePhysicalMemory )#</span>
+							</div>
+							<div class="c-monitor-stat">
+								<span class="c-monitor-stat__label">Total swap</span>
+								<span class="c-monitor-stat__value">#encodeForHTML( data.server.cpu.totalSwap )#</span>
+							</div>
+							<div class="c-monitor-stat">
+								<span class="c-monitor-stat__label">Free swap</span>
+								<span class="c-monitor-stat__value">#encodeForHTML( data.server.cpu.freeSwap )#</span>
+							</div>
+						</div>
+					</div>
+				</section>
+
+				<!--- Disk --->
+				<section class="c-manage-section">
+					<header class="c-manage-section__head">
+						<h2>Disk</h2>
+						<p>Container filesystem (/) — not the underlying host's disk.</p>
+					</header>
+					<div class="c-manage-panel">
+						<div class="c-monitor-stats">
+							<div class="c-usage-bar">
+								<div class="c-usage-bar__label">
+									<span>Used</span>
+									<strong>#data.server.disk.usedPercent#% of #encodeForHTML( data.server.disk.totalSpace )#</strong>
+								</div>
+								<div class="c-usage-bar__track">
+									<div class="c-usage-bar__fill #( data.server.disk.usedPercent >= 90 ? 'c-usage-bar__fill--danger' : ( data.server.disk.usedPercent >= 75 ? 'c-usage-bar__fill--warn' : '' ) )#" style="width: #min( data.server.disk.usedPercent, 100 )#%"></div>
+								</div>
+							</div>
+							<div class="c-monitor-stat">
+								<span class="c-monitor-stat__label">Free space</span>
+								<span class="c-monitor-stat__value">#encodeForHTML( data.server.disk.freeSpace )#</span>
+							</div>
+							<div class="c-monitor-stat">
+								<span class="c-monitor-stat__label">Usable space</span>
+								<span class="c-monitor-stat__value">#encodeForHTML( data.server.disk.usableSpace )#</span>
+							</div>
+						</div>
+					</div>
+				</section>
+
+				<!--- JVM --->
+				<section class="c-manage-section">
+					<header class="c-manage-section__head">
+						<h2>JVM</h2>
+						<p>Runtime identity, uptime, and class loading.</p>
+					</header>
+					<div class="c-manage-panel">
+						<div class="c-monitor-stats">
+							<div class="c-monitor-stat">
+								<span class="c-monitor-stat__label">VM name</span>
+								<span class="c-monitor-stat__value">#encodeForHTML( data.server.jvm.vmName )#</span>
+							</div>
+							<div class="c-monitor-stat">
+								<span class="c-monitor-stat__label">VM vendor</span>
+								<span class="c-monitor-stat__value">#encodeForHTML( data.server.jvm.vmVendor )#</span>
+							</div>
+							<div class="c-monitor-stat">
+								<span class="c-monitor-stat__label">VM version</span>
+								<span class="c-monitor-stat__value">#encodeForHTML( data.server.jvm.vmVersion )#</span>
+							</div>
+							<div class="c-monitor-stat">
+								<span class="c-monitor-stat__label">Spec version</span>
+								<span class="c-monitor-stat__value">#encodeForHTML( data.server.jvm.specVersion )#</span>
+							</div>
+							<div class="c-monitor-stat">
+								<span class="c-monitor-stat__label">Started</span>
+								<span class="c-monitor-stat__value">#encodeForHTML( data.server.jvm.startTime )#</span>
+							</div>
+							<div class="c-monitor-stat">
+								<span class="c-monitor-stat__label">Uptime</span>
+								<span class="c-monitor-stat__value">#encodeForHTML( data.server.jvm.uptime )#</span>
+							</div>
+							<div class="c-monitor-stat">
+								<span class="c-monitor-stat__label">Loaded classes</span>
+								<span class="c-monitor-stat__value">#encodeForHTML( data.server.jvm.loadedClassCount )#</span>
+							</div>
+							<div class="c-monitor-stat">
+								<span class="c-monitor-stat__label">Total loaded (cumulative)</span>
+								<span class="c-monitor-stat__value">#encodeForHTML( data.server.jvm.totalLoadedClassCount )#</span>
+							</div>
+							<div class="c-monitor-stat">
+								<span class="c-monitor-stat__label">Unloaded classes</span>
+								<span class="c-monitor-stat__value">#encodeForHTML( data.server.jvm.unloadedClassCount )#</span>
+							</div>
+						</div>
+					</div>
+				</section>
+
+				<!--- Garbage collection --->
+				<section class="c-manage-section">
+					<header class="c-manage-section__head">
+						<h2>Garbage collection</h2>
+						<p>One row per collector this JVM is running.</p>
+					</header>
+					<bx:if !data.server.gc.len()>
+						<div class="c-manage-panel__empty c-manage-panel__empty--inline">
+							<p>No collectors reported.</p>
+						</div>
+					<bx:else>
+						<div class="c-manage-panel">
+							<div class="c-manage-table-wrap">
+								<table class="c-manage-table">
+									<thead>
+										<tr>
+											<th>Collector</th>
+											<th>Collections</th>
+											<th>Total time</th>
+										</tr>
+									</thead>
+									<tbody>
+										<bx:loop array="#data.server.gc#" item="row">
+											<tr>
+												<td>#encodeForHTML( row.name )#</td>
+												<td>#encodeForHTML( row.collectionCount )#</td>
+												<td class="c-manage-table__cell-muted">#encodeForHTML( row.collectionTime )#</td>
+											</tr>
+										</bx:loop>
+									</tbody>
+								</table>
+							</div>
+						</div>
+					</bx:if>
+				</section>
+
+				<!--- Threads --->
+				<section class="c-manage-section">
+					<header class="c-manage-section__head">
+						<h2>Threads</h2>
+					</header>
+					<div class="c-manage-panel">
+						<div class="c-monitor-stats">
+							<div class="c-monitor-stat">
+								<span class="c-monitor-stat__label">Live</span>
+								<span class="c-monitor-stat__value">#encodeForHTML( data.server.threads.liveCount )#</span>
+							</div>
+							<div class="c-monitor-stat">
+								<span class="c-monitor-stat__label">Peak</span>
+								<span class="c-monitor-stat__value">#encodeForHTML( data.server.threads.peakCount )#</span>
+							</div>
+							<div class="c-monitor-stat">
+								<span class="c-monitor-stat__label">Daemon</span>
+								<span class="c-monitor-stat__value">#encodeForHTML( data.server.threads.daemonCount )#</span>
+							</div>
+							<div class="c-monitor-stat">
+								<span class="c-monitor-stat__label">Total started</span>
+								<span class="c-monitor-stat__value">#encodeForHTML( data.server.threads.totalStartedCount )#</span>
+							</div>
+						</div>
+					</div>
+				</section>
+
+				<!--- Process --->
+				<section class="c-manage-section">
+					<header class="c-manage-section__head">
+						<h2>Process</h2>
+					</header>
+					<div class="c-manage-panel">
+						<div class="c-monitor-stats">
+							<div class="c-monitor-stat">
+								<span class="c-monitor-stat__label">PID</span>
+								<span class="c-monitor-stat__value">#encodeForHTML( data.server.process.pid )#</span>
+							</div>
+							<div class="c-monitor-stat">
+								<span class="c-monitor-stat__label">OS</span>
+								<span class="c-monitor-stat__value">#encodeForHTML( data.server.process.osName )# #encodeForHTML( data.server.process.osVersion )#</span>
+							</div>
+							<div class="c-monitor-stat">
+								<span class="c-monitor-stat__label">Architecture</span>
+								<span class="c-monitor-stat__value">#encodeForHTML( data.server.process.osArch )#</span>
+							</div>
+							<div class="c-monitor-stat">
+								<span class="c-monitor-stat__label">Java version</span>
+								<span class="c-monitor-stat__value">#encodeForHTML( data.server.process.javaVersion )#</span>
+							</div>
+							<div class="c-monitor-stat">
+								<span class="c-monitor-stat__label">Working directory</span>
+								<span class="c-monitor-stat__value">#encodeForHTML( data.server.process.userDir )#</span>
+							</div>
+						</div>
+					</div>
+				</section>
+
+			</bx:if>
+
+		</div>
+
+	</main>
+</div>
+</bx:output>
+<bx:include template="../../partials/_foot.bxm">

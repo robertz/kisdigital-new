@@ -29,8 +29,9 @@ class {
 	variables.insightsService = "";
 	variables.securityService = "";
 	variables.hostnameResolver = "";
+	variables.serverMonitor = "";
 
-	function init( required authService, required postService, required authorService, required settingsService, required postRenderer, required r2Client, r2UploadPrefix = "posts", required insightsService, required securityService, required hostnameResolver ){
+	function init( required authService, required postService, required authorService, required settingsService, required postRenderer, required r2Client, r2UploadPrefix = "posts", required insightsService, required securityService, required hostnameResolver, required serverMonitor ){
 		variables.authService     = arguments.authService;
 		variables.postService     = arguments.postService;
 		variables.authorService   = arguments.authorService;
@@ -41,6 +42,7 @@ class {
 		variables.insightsService = arguments.insightsService;
 		variables.securityService = arguments.securityService;
 		variables.hostnameResolver = arguments.hostnameResolver;
+		variables.serverMonitor = arguments.serverMonitor;
 
 		// Bare method references passed as route handlers lose their binding to
 		// this instance (BoxLang's Router ends up calling them unbound), so every
@@ -92,6 +94,7 @@ class {
 		this.router.get( "/manage/insights", admin, ( req, res ) => insightsIndex( req, res ) );
 		this.router.get( "/manage/logs", admin, ( req, res ) => logsIndex( req, res ) );
 		this.router.get( "/manage/security", admin, ( req, res ) => securityIndex( req, res ) );
+		this.router.get( "/manage/server", admin, ( req, res ) => serverIndex( req, res ) );
 
 		return this;
 	}
@@ -248,6 +251,8 @@ class {
 
 	// GET /manage
 	function dashboard( req, res ){
+		var serverSnapshot = serverFetch( () => variables.serverMonitor.getSnapshot() );
+
 		res.render( "manage/index", {
 			pageTitle       : "Dashboard",
 			manageSection   : "dashboard",
@@ -256,7 +261,8 @@ class {
 			zeroResultSearches : variables.postService.getZeroResultSearches( 30 ),
 			recentActivity     : variables.postService.getRecentActivity( 8 ),
 			contentHealth      : variables.postService.getContentHealth(),
-			insightsTotal      : insightsFetch( () => variables.insightsService.getTotal( 30 ) )
+			insightsTotal      : insightsFetch( () => variables.insightsService.getTotal( 30 ) ),
+			server             : isNull( serverSnapshot ) ? javacast( "null", "" ) : _formatServerSnapshot( serverSnapshot )
 		} );
 	}
 
@@ -914,6 +920,137 @@ class {
 				"userAgent"  : row.user_agent
 			};
 		} );
+	}
+
+	// ── Server monitor (JVM/OS metrics) ─────────────────────────────────────
+
+	// GET /manage/server — full detail behind ServerMonitor.getSnapshot();
+	// see _formatServerSnapshot() for how the raw byte/ms/ratio values below
+	// become the display-ready struct the view renders.
+	function serverIndex( req, res ){
+		var snapshot = serverFetch( () => variables.serverMonitor.getSnapshot() );
+		res.render( "manage/server/index", {
+			pageTitle    : "Server",
+			manageSection: "server",
+			server       : isNull( snapshot ) ? javacast( "null", "" ) : _formatServerSnapshot( snapshot )
+		} );
+	}
+
+	private function serverFetch( required fetchFn ){
+		try {
+			return arguments.fetchFn();
+		} catch ( any e ) {
+			println( "[error] Server metrics fetch failed: " & e.message );
+			return javacast( "null", "" );
+		}
+	}
+
+	/**
+	 * Turns ServerMonitor.getSnapshot()'s raw struct (bytes, milliseconds,
+	 * 0-1 ratios, epoch millis) into display-ready strings/percentages, so
+	 * the view (both this page and the dashboard summary card) only ever
+	 * interpolates, never computes.
+	 */
+	private function _formatServerSnapshot( required struct snapshot ){
+		var mem = arguments.snapshot.memory;
+		var cpu = arguments.snapshot.cpu;
+
+		var display = {
+			"memory": {
+				"heapUsed"        : _formatBytes( mem.heapUsed ),
+				"heapCommitted"   : _formatBytes( mem.heapCommitted ),
+				"heapMax"         : mem.heapMax <= 0 ? "unbounded" : _formatBytes( mem.heapMax ),
+				"heapPercent"     : mem.heapMax > 0 ? round( mem.heapUsed / mem.heapMax * 100 ) : 0,
+				"nonHeapUsed"     : _formatBytes( mem.nonHeapUsed ),
+				"nonHeapCommitted": _formatBytes( mem.nonHeapCommitted ),
+				"runtimeTotal"    : _formatBytes( mem.runtimeTotal ),
+				"runtimeFree"     : _formatBytes( mem.runtimeFree ),
+				"runtimeMax"      : _formatBytes( mem.runtimeMax )
+			},
+			"cpu": {
+				"availableProcessors": cpu.availableProcessors,
+				"systemLoadAverage"  : cpu.systemLoadAverage >= 0 ? numberFormat( cpu.systemLoadAverage, "0.00" ) : "n/a",
+				"processCpuLoad"     : structKeyExists( cpu, "processCpuLoad" ) && cpu.processCpuLoad >= 0 ? _formatPercent( cpu.processCpuLoad ) : "n/a",
+				"systemCpuLoad"      : structKeyExists( cpu, "systemCpuLoad" ) && cpu.systemCpuLoad >= 0 ? _formatPercent( cpu.systemCpuLoad ) : "n/a",
+				"totalPhysicalMemory": structKeyExists( cpu, "totalPhysicalMemory" ) ? _formatBytes( cpu.totalPhysicalMemory ) : "n/a",
+				"freePhysicalMemory" : structKeyExists( cpu, "freePhysicalMemory" ) ? _formatBytes( cpu.freePhysicalMemory ) : "n/a",
+				"totalSwap"          : structKeyExists( cpu, "totalSwap" ) ? _formatBytes( cpu.totalSwap ) : "n/a",
+				"freeSwap"           : structKeyExists( cpu, "freeSwap" ) ? _formatBytes( cpu.freeSwap ) : "n/a"
+			},
+			"disk": {
+				"totalSpace" : _formatBytes( arguments.snapshot.disk.totalSpace ),
+				"freeSpace"  : _formatBytes( arguments.snapshot.disk.freeSpace ),
+				"usableSpace": _formatBytes( arguments.snapshot.disk.usableSpace ),
+				"usedPercent": arguments.snapshot.disk.totalSpace > 0
+					? round( ( arguments.snapshot.disk.totalSpace - arguments.snapshot.disk.freeSpace ) / arguments.snapshot.disk.totalSpace * 100 )
+					: 0
+			},
+			"jvm": {
+				"vmName"               : arguments.snapshot.jvm.vmName,
+				"vmVendor"             : arguments.snapshot.jvm.vmVendor,
+				"vmVersion"            : arguments.snapshot.jvm.vmVersion,
+				"specVersion"          : arguments.snapshot.jvm.specVersion,
+				"startTime"            : dateTimeFormat( _epochMillisToDate( arguments.snapshot.jvm.startTime ), "mmm d, h:nn:ss tt" ),
+				"uptime"               : _formatDuration( arguments.snapshot.jvm.uptimeMs ),
+				"loadedClassCount"     : numberFormat( arguments.snapshot.jvm.loadedClassCount ),
+				"totalLoadedClassCount": numberFormat( arguments.snapshot.jvm.totalLoadedClassCount ),
+				"unloadedClassCount"   : numberFormat( arguments.snapshot.jvm.unloadedClassCount )
+			},
+			"gc": arguments.snapshot.gc.map( ( row ) => {
+				return {
+					"name"           : row.name,
+					"collectionCount": numberFormat( row.collectionCount ),
+					"collectionTime" : _formatDuration( row.collectionTime )
+				};
+			} ),
+			"threads": {
+				"liveCount"        : numberFormat( arguments.snapshot.threads.liveCount ),
+				"peakCount"        : numberFormat( arguments.snapshot.threads.peakCount ),
+				"daemonCount"      : numberFormat( arguments.snapshot.threads.daemonCount ),
+				"totalStartedCount": numberFormat( arguments.snapshot.threads.totalStartedCount )
+			},
+			"process": {
+				"pid"        : structKeyExists( arguments.snapshot.process, "pid" ) ? arguments.snapshot.process.pid : "n/a",
+				"osName"     : arguments.snapshot.process.osName,
+				"osVersion"  : arguments.snapshot.process.osVersion,
+				"osArch"     : arguments.snapshot.process.osArch,
+				"javaVersion": arguments.snapshot.process.javaVersion,
+				"userDir"    : arguments.snapshot.process.userDir
+			}
+		};
+
+		return display;
+	}
+
+	// dateTimeFormat() doesn't treat a raw number as Unix epoch millis (it
+	// overflows into a nonsense date), so RuntimeMXBean.getStartTime()'s
+	// epoch-millis value needs converting to a real Date first.
+	private function _epochMillisToDate( required numeric epochMillis ){
+		return createObject( "java", "java.util.Date" ).init( javaCast( "long", arguments.epochMillis ) );
+	}
+
+	private function _formatBytes( required numeric bytes ){
+		if ( arguments.bytes < 1024 ) return arguments.bytes & " B";
+		if ( arguments.bytes < 1024 * 1024 ) return numberFormat( arguments.bytes / 1024, "0.0" ) & " KB";
+		if ( arguments.bytes < 1024 * 1024 * 1024 ) return numberFormat( arguments.bytes / 1024 / 1024, "0.0" ) & " MB";
+		return numberFormat( arguments.bytes / 1024 / 1024 / 1024, "0.00" ) & " GB";
+	}
+
+	private function _formatDuration( required numeric ms ){
+		var totalSeconds = int( arguments.ms / 1000 );
+		var days    = int( totalSeconds / 86400 );
+		var hours   = int( ( totalSeconds % 86400 ) / 3600 );
+		var minutes = int( ( totalSeconds % 3600 ) / 60 );
+		var seconds = totalSeconds % 60;
+
+		if ( days > 0 ) return days & "d " & hours & "h " & minutes & "m";
+		if ( hours > 0 ) return hours & "h " & minutes & "m";
+		if ( minutes > 0 ) return minutes & "m " & seconds & "s";
+		return seconds & "s";
+	}
+
+	private function _formatPercent( required numeric ratio ){
+		return numberFormat( arguments.ratio * 100, "0.0" ) & "%";
 	}
 
 }
