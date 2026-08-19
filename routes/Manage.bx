@@ -95,6 +95,7 @@ class {
 		this.router.get( "/manage/logs", admin, ( req, res ) => logsIndex( req, res ) );
 		this.router.get( "/manage/security", admin, ( req, res ) => securityIndex( req, res ) );
 		this.router.get( "/manage/server", admin, ( req, res ) => serverIndex( req, res ) );
+		this.router.get( "/manage/server/data", admin, ( req, res ) => serverData( req, res ) );
 
 		return this;
 	}
@@ -934,6 +935,17 @@ class {
 			manageSection: "server",
 			server       : isNull( snapshot ) ? javacast( "null", "" ) : _formatServerSnapshot( snapshot )
 		} );
+	}
+
+	// GET /manage/server/data — same snapshot as serverIndex(), as JSON, for
+	// the page's own polling loop (see the script at the bottom of
+	// manage/server/index.bxm) rather than a full page reload every tick.
+	function serverData( req, res ){
+		var snapshot = serverFetch( () => variables.serverMonitor.getSnapshot() );
+		if ( isNull( snapshot ) ){
+			return res.status( 502 ).json( { success: false, error: "Couldn't read server metrics." } );
+		}
+		res.json( { success: true, server: _formatServerSnapshot( snapshot ) } );
 	}
 
 	private function serverFetch( required fetchFn ){

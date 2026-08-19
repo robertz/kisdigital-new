@@ -18,6 +18,11 @@
 						"Disk" is this container's own filesystem, not the host's.
 					</p>
 				</div>
+				<bx:if !isNull( data.server )>
+					<span class="c-monitor-live" id="monitor-live-indicator">
+						<span class="c-monitor-live__dot"></span> Live &mdash; updated <span id="monitor-last-updated">just now</span>
+					</span>
+				</bx:if>
 			</div>
 
 			<bx:if isNull( data.server )>
@@ -39,35 +44,35 @@
 							<div class="c-usage-bar">
 								<div class="c-usage-bar__label">
 									<span>Heap used</span>
-									<strong>#encodeForHTML( data.server.memory.heapUsed )# / #encodeForHTML( data.server.memory.heapMax )# (#data.server.memory.heapPercent#%)</strong>
+									<strong id="mem-heap-label">#encodeForHTML( data.server.memory.heapUsed )# / #encodeForHTML( data.server.memory.heapMax )# (#data.server.memory.heapPercent#%)</strong>
 								</div>
 								<div class="c-usage-bar__track">
-									<div class="c-usage-bar__fill #( data.server.memory.heapPercent >= 90 ? 'c-usage-bar__fill--danger' : ( data.server.memory.heapPercent >= 75 ? 'c-usage-bar__fill--warn' : '' ) )#" style="width: #min( data.server.memory.heapPercent, 100 )#%"></div>
+									<div id="mem-heap-fill" class="c-usage-bar__fill #( data.server.memory.heapPercent >= 90 ? 'c-usage-bar__fill--danger' : ( data.server.memory.heapPercent >= 75 ? 'c-usage-bar__fill--warn' : '' ) )#" style="width: #min( data.server.memory.heapPercent, 100 )#%"></div>
 								</div>
 							</div>
 							<div class="c-monitor-stat">
 								<span class="c-monitor-stat__label">Heap committed</span>
-								<span class="c-monitor-stat__value">#encodeForHTML( data.server.memory.heapCommitted )#</span>
+								<span class="c-monitor-stat__value" id="stat-heapCommitted">#encodeForHTML( data.server.memory.heapCommitted )#</span>
 							</div>
 							<div class="c-monitor-stat">
 								<span class="c-monitor-stat__label">Non-heap used</span>
-								<span class="c-monitor-stat__value">#encodeForHTML( data.server.memory.nonHeapUsed )#</span>
+								<span class="c-monitor-stat__value" id="stat-nonHeapUsed">#encodeForHTML( data.server.memory.nonHeapUsed )#</span>
 							</div>
 							<div class="c-monitor-stat">
 								<span class="c-monitor-stat__label">Non-heap committed</span>
-								<span class="c-monitor-stat__value">#encodeForHTML( data.server.memory.nonHeapCommitted )#</span>
+								<span class="c-monitor-stat__value" id="stat-nonHeapCommitted">#encodeForHTML( data.server.memory.nonHeapCommitted )#</span>
 							</div>
 							<div class="c-monitor-stat">
 								<span class="c-monitor-stat__label">Runtime total</span>
-								<span class="c-monitor-stat__value">#encodeForHTML( data.server.memory.runtimeTotal )#</span>
+								<span class="c-monitor-stat__value" id="stat-runtimeTotal">#encodeForHTML( data.server.memory.runtimeTotal )#</span>
 							</div>
 							<div class="c-monitor-stat">
 								<span class="c-monitor-stat__label">Runtime free</span>
-								<span class="c-monitor-stat__value">#encodeForHTML( data.server.memory.runtimeFree )#</span>
+								<span class="c-monitor-stat__value" id="stat-runtimeFree">#encodeForHTML( data.server.memory.runtimeFree )#</span>
 							</div>
 							<div class="c-monitor-stat">
 								<span class="c-monitor-stat__label">Runtime max</span>
-								<span class="c-monitor-stat__value">#encodeForHTML( data.server.memory.runtimeMax )#</span>
+								<span class="c-monitor-stat__value" id="stat-runtimeMax">#encodeForHTML( data.server.memory.runtimeMax )#</span>
 							</div>
 						</div>
 					</div>
@@ -87,31 +92,31 @@
 							</div>
 							<div class="c-monitor-stat">
 								<span class="c-monitor-stat__label">System load average</span>
-								<span class="c-monitor-stat__value">#encodeForHTML( data.server.cpu.systemLoadAverage )#</span>
+								<span class="c-monitor-stat__value" id="stat-systemLoadAverage">#encodeForHTML( data.server.cpu.systemLoadAverage )#</span>
 							</div>
 							<div class="c-monitor-stat">
 								<span class="c-monitor-stat__label">Process CPU load</span>
-								<span class="c-monitor-stat__value">#encodeForHTML( data.server.cpu.processCpuLoad )#</span>
+								<span class="c-monitor-stat__value" id="stat-processCpuLoad">#encodeForHTML( data.server.cpu.processCpuLoad )#</span>
 							</div>
 							<div class="c-monitor-stat">
 								<span class="c-monitor-stat__label">System CPU load</span>
-								<span class="c-monitor-stat__value">#encodeForHTML( data.server.cpu.systemCpuLoad )#</span>
+								<span class="c-monitor-stat__value" id="stat-systemCpuLoad">#encodeForHTML( data.server.cpu.systemCpuLoad )#</span>
 							</div>
 							<div class="c-monitor-stat">
 								<span class="c-monitor-stat__label">Total physical memory</span>
-								<span class="c-monitor-stat__value">#encodeForHTML( data.server.cpu.totalPhysicalMemory )#</span>
+								<span class="c-monitor-stat__value" id="stat-totalPhysicalMemory">#encodeForHTML( data.server.cpu.totalPhysicalMemory )#</span>
 							</div>
 							<div class="c-monitor-stat">
 								<span class="c-monitor-stat__label">Free physical memory</span>
-								<span class="c-monitor-stat__value">#encodeForHTML( data.server.cpu.freePhysicalMemory )#</span>
+								<span class="c-monitor-stat__value" id="stat-freePhysicalMemory">#encodeForHTML( data.server.cpu.freePhysicalMemory )#</span>
 							</div>
 							<div class="c-monitor-stat">
 								<span class="c-monitor-stat__label">Total swap</span>
-								<span class="c-monitor-stat__value">#encodeForHTML( data.server.cpu.totalSwap )#</span>
+								<span class="c-monitor-stat__value" id="stat-totalSwap">#encodeForHTML( data.server.cpu.totalSwap )#</span>
 							</div>
 							<div class="c-monitor-stat">
 								<span class="c-monitor-stat__label">Free swap</span>
-								<span class="c-monitor-stat__value">#encodeForHTML( data.server.cpu.freeSwap )#</span>
+								<span class="c-monitor-stat__value" id="stat-freeSwap">#encodeForHTML( data.server.cpu.freeSwap )#</span>
 							</div>
 						</div>
 					</div>
@@ -128,19 +133,19 @@
 							<div class="c-usage-bar">
 								<div class="c-usage-bar__label">
 									<span>Used</span>
-									<strong>#data.server.disk.usedPercent#% of #encodeForHTML( data.server.disk.totalSpace )#</strong>
+									<strong id="disk-usage-label">#data.server.disk.usedPercent#% of #encodeForHTML( data.server.disk.totalSpace )#</strong>
 								</div>
 								<div class="c-usage-bar__track">
-									<div class="c-usage-bar__fill #( data.server.disk.usedPercent >= 90 ? 'c-usage-bar__fill--danger' : ( data.server.disk.usedPercent >= 75 ? 'c-usage-bar__fill--warn' : '' ) )#" style="width: #min( data.server.disk.usedPercent, 100 )#%"></div>
+									<div id="disk-usage-fill" class="c-usage-bar__fill #( data.server.disk.usedPercent >= 90 ? 'c-usage-bar__fill--danger' : ( data.server.disk.usedPercent >= 75 ? 'c-usage-bar__fill--warn' : '' ) )#" style="width: #min( data.server.disk.usedPercent, 100 )#%"></div>
 								</div>
 							</div>
 							<div class="c-monitor-stat">
 								<span class="c-monitor-stat__label">Free space</span>
-								<span class="c-monitor-stat__value">#encodeForHTML( data.server.disk.freeSpace )#</span>
+								<span class="c-monitor-stat__value" id="stat-freeSpace">#encodeForHTML( data.server.disk.freeSpace )#</span>
 							</div>
 							<div class="c-monitor-stat">
 								<span class="c-monitor-stat__label">Usable space</span>
-								<span class="c-monitor-stat__value">#encodeForHTML( data.server.disk.usableSpace )#</span>
+								<span class="c-monitor-stat__value" id="stat-usableSpace">#encodeForHTML( data.server.disk.usableSpace )#</span>
 							</div>
 						</div>
 					</div>
@@ -176,19 +181,19 @@
 							</div>
 							<div class="c-monitor-stat">
 								<span class="c-monitor-stat__label">Uptime</span>
-								<span class="c-monitor-stat__value">#encodeForHTML( data.server.jvm.uptime )#</span>
+								<span class="c-monitor-stat__value" id="stat-uptime">#encodeForHTML( data.server.jvm.uptime )#</span>
 							</div>
 							<div class="c-monitor-stat">
 								<span class="c-monitor-stat__label">Loaded classes</span>
-								<span class="c-monitor-stat__value">#encodeForHTML( data.server.jvm.loadedClassCount )#</span>
+								<span class="c-monitor-stat__value" id="stat-loadedClassCount">#encodeForHTML( data.server.jvm.loadedClassCount )#</span>
 							</div>
 							<div class="c-monitor-stat">
 								<span class="c-monitor-stat__label">Total loaded (cumulative)</span>
-								<span class="c-monitor-stat__value">#encodeForHTML( data.server.jvm.totalLoadedClassCount )#</span>
+								<span class="c-monitor-stat__value" id="stat-totalLoadedClassCount">#encodeForHTML( data.server.jvm.totalLoadedClassCount )#</span>
 							</div>
 							<div class="c-monitor-stat">
 								<span class="c-monitor-stat__label">Unloaded classes</span>
-								<span class="c-monitor-stat__value">#encodeForHTML( data.server.jvm.unloadedClassCount )#</span>
+								<span class="c-monitor-stat__value" id="stat-unloadedClassCount">#encodeForHTML( data.server.jvm.unloadedClassCount )#</span>
 							</div>
 						</div>
 					</div>
@@ -215,12 +220,12 @@
 											<th>Total time</th>
 										</tr>
 									</thead>
-									<tbody>
+									<tbody id="gc-tbody">
 										<bx:loop array="#data.server.gc#" item="row">
-											<tr>
+											<tr data-collector="#encodeForHTMLAttribute( row.name )#">
 												<td>#encodeForHTML( row.name )#</td>
-												<td>#encodeForHTML( row.collectionCount )#</td>
-												<td class="c-manage-table__cell-muted">#encodeForHTML( row.collectionTime )#</td>
+												<td data-gc-count>#encodeForHTML( row.collectionCount )#</td>
+												<td class="c-manage-table__cell-muted" data-gc-time>#encodeForHTML( row.collectionTime )#</td>
 											</tr>
 										</bx:loop>
 									</tbody>
@@ -239,19 +244,19 @@
 						<div class="c-monitor-stats">
 							<div class="c-monitor-stat">
 								<span class="c-monitor-stat__label">Live</span>
-								<span class="c-monitor-stat__value">#encodeForHTML( data.server.threads.liveCount )#</span>
+								<span class="c-monitor-stat__value" id="stat-liveCount">#encodeForHTML( data.server.threads.liveCount )#</span>
 							</div>
 							<div class="c-monitor-stat">
 								<span class="c-monitor-stat__label">Peak</span>
-								<span class="c-monitor-stat__value">#encodeForHTML( data.server.threads.peakCount )#</span>
+								<span class="c-monitor-stat__value" id="stat-peakCount">#encodeForHTML( data.server.threads.peakCount )#</span>
 							</div>
 							<div class="c-monitor-stat">
 								<span class="c-monitor-stat__label">Daemon</span>
-								<span class="c-monitor-stat__value">#encodeForHTML( data.server.threads.daemonCount )#</span>
+								<span class="c-monitor-stat__value" id="stat-daemonCount">#encodeForHTML( data.server.threads.daemonCount )#</span>
 							</div>
 							<div class="c-monitor-stat">
 								<span class="c-monitor-stat__label">Total started</span>
-								<span class="c-monitor-stat__value">#encodeForHTML( data.server.threads.totalStartedCount )#</span>
+								<span class="c-monitor-stat__value" id="stat-totalStartedCount">#encodeForHTML( data.server.threads.totalStartedCount )#</span>
 							</div>
 						</div>
 					</div>
@@ -294,5 +299,110 @@
 
 	</main>
 </div>
+
+<script>
+(function(){
+	var fillEl = document.getElementById('mem-heap-fill');
+	if (!fillEl) return; // metrics failed to load on the initial render — nothing to poll
+
+	var POLL_MS = 5000;
+	var lastUpdatedEl = document.getElementById('monitor-last-updated');
+	var indicatorEl   = document.getElementById('monitor-live-indicator');
+	var lastUpdated   = Date.now();
+
+	function setText(id, value){
+		var el = document.getElementById(id);
+		if (el && value !== undefined) el.textContent = value;
+	}
+
+	function usageBarClass(percent){
+		if (percent >= 90) return 'c-usage-bar__fill--danger';
+		if (percent >= 75) return 'c-usage-bar__fill--warn';
+		return '';
+	}
+
+	function applyUsageBar(fillId, percent){
+		var fill = document.getElementById(fillId);
+		if (!fill) return;
+		fill.style.width = Math.min(percent, 100) + '%';
+		fill.className = 'c-usage-bar__fill ' + usageBarClass(percent);
+	}
+
+	function render(server){
+		setText('stat-heapCommitted', server.memory.heapCommitted);
+		setText('stat-nonHeapUsed', server.memory.nonHeapUsed);
+		setText('stat-nonHeapCommitted', server.memory.nonHeapCommitted);
+		setText('stat-runtimeTotal', server.memory.runtimeTotal);
+		setText('stat-runtimeFree', server.memory.runtimeFree);
+		setText('stat-runtimeMax', server.memory.runtimeMax);
+		setText('mem-heap-label', server.memory.heapUsed + ' / ' + server.memory.heapMax + ' (' + server.memory.heapPercent + '%)');
+		applyUsageBar('mem-heap-fill', server.memory.heapPercent);
+
+		setText('stat-systemLoadAverage', server.cpu.systemLoadAverage);
+		setText('stat-processCpuLoad', server.cpu.processCpuLoad);
+		setText('stat-systemCpuLoad', server.cpu.systemCpuLoad);
+		setText('stat-totalPhysicalMemory', server.cpu.totalPhysicalMemory);
+		setText('stat-freePhysicalMemory', server.cpu.freePhysicalMemory);
+		setText('stat-totalSwap', server.cpu.totalSwap);
+		setText('stat-freeSwap', server.cpu.freeSwap);
+
+		setText('stat-freeSpace', server.disk.freeSpace);
+		setText('stat-usableSpace', server.disk.usableSpace);
+		setText('disk-usage-label', server.disk.usedPercent + '% of ' + server.disk.totalSpace);
+		applyUsageBar('disk-usage-fill', server.disk.usedPercent);
+
+		setText('stat-uptime', server.jvm.uptime);
+		setText('stat-loadedClassCount', server.jvm.loadedClassCount);
+		setText('stat-totalLoadedClassCount', server.jvm.totalLoadedClassCount);
+		setText('stat-unloadedClassCount', server.jvm.unloadedClassCount);
+
+		(server.gc || []).forEach(function(row){
+			var tr = document.querySelector('##gc-tbody tr[data-collector="' + CSS.escape(row.name) + '"]');
+			if (!tr) return; // a collector JMX didn't report at startup but does now — rare, skip rather than insert a row live
+			var countCell = tr.querySelector('[data-gc-count]');
+			var timeCell  = tr.querySelector('[data-gc-time]');
+			if (countCell) countCell.textContent = row.collectionCount;
+			if (timeCell) timeCell.textContent = row.collectionTime;
+		});
+
+		setText('stat-liveCount', server.threads.liveCount);
+		setText('stat-peakCount', server.threads.peakCount);
+		setText('stat-daemonCount', server.threads.daemonCount);
+		setText('stat-totalStartedCount', server.threads.totalStartedCount);
+	}
+
+	function tickLastUpdatedLabel(){
+		if (!lastUpdatedEl) return;
+		var seconds = Math.round((Date.now() - lastUpdated) / 1000);
+		lastUpdatedEl.textContent = seconds < 2 ? 'just now' : seconds + 's ago';
+	}
+
+	function poll(){
+		fetch('/manage/server/data', { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+		.then(function(res){ return res.json(); })
+		.then(function(data){
+			if (!data.success) return Promise.reject(data.error);
+			render(data.server);
+			lastUpdated = Date.now();
+			if (indicatorEl) indicatorEl.classList.remove('c-monitor-live--stale');
+		})
+		.catch(function(){
+			// A miss here just means the next tick's numbers stay stale for
+			// a beat — mark it visually rather than interrupting polling.
+			if (indicatorEl) indicatorEl.classList.add('c-monitor-live--stale');
+		});
+	}
+
+	// Skips ticks while the tab isn't visible instead of polling into the
+	// background forever — the numbers just pick back up next time the tab
+	// is looked at.
+	setInterval(function(){
+		tickLastUpdatedLabel();
+		if (document.hidden) return;
+		poll();
+	}, POLL_MS);
+	setInterval(tickLastUpdatedLabel, 1000);
+})();
+</script>
 </bx:output>
 <bx:include template="../../partials/_foot.bxm">

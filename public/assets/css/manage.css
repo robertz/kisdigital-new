@@ -472,6 +472,37 @@
 	background: #ef4444;
 }
 
+.c-monitor-live {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	flex-shrink: 0;
+	font-size: 0.8125rem;
+	color: var(--text-secondary);
+	white-space: nowrap;
+}
+
+.c-monitor-live__dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: #22c55e;
+	box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.5);
+	animation: c-monitor-live-pulse 2s ease-out infinite;
+}
+
+.c-monitor-live--stale .c-monitor-live__dot {
+	background: var(--text-secondary);
+	animation: none;
+	box-shadow: none;
+}
+
+@keyframes c-monitor-live-pulse {
+	0%   { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.5); }
+	70%  { box-shadow: 0 0 0 6px rgba(34, 197, 94, 0); }
+	100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+}
+
 .c-security-hostname {
 	display: inline-block;
 	color: var(--text-secondary);
