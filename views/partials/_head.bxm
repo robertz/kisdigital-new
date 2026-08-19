@@ -24,7 +24,8 @@
 <!--- Favicons --->
 <link rel="icon" type="image/svg+xml" href="/assets/images/kisdigital-brand.svg">
 <link rel="icon" type="image/x-icon" href="/favicon.ico">
-<link rel="apple-touch-icon" href="/assets/images/kisdigital-brand.svg">
+<!--- iOS ignores SVG here — needs a real PNG, no transparency (iOS applies its own corner rounding/shine). --->
+<link rel="apple-touch-icon" href="/assets/images/apple-touch-icon.png">
 
 <!--- Resource hints --->
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
