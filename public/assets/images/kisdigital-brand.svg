@@ -1,11 +1,15 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 52" width="280" height="52">
-  <text
-    x="0" y="40"
-    font-family="'Noto Sans', Arial, sans-serif"
-    font-size="42"
-    font-weight="800"
-    letter-spacing="-1"
-  >
-    <tspan fill="#ffffff">KIS</tspan><tspan fill="#4FBCFF">Digital</tspan>
-  </text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <style>
+    .bg { fill: #6366f1; }
+    .mark { fill: #ffffff; stroke: #ffffff; }
+    @media (prefers-color-scheme: dark) {
+      .bg { fill: #1a1a1b; }
+      .mark { fill: #7c83fd; stroke: #7c83fd; }
+    }
+  </style>
+  <rect class="bg" width="64" height="64" rx="14"/>
+  <line class="mark" x1="22" y1="14" x2="22" y2="50" stroke-width="7" stroke-linecap="round"/>
+  <line class="mark" x1="24" y1="32" x2="44" y2="14" stroke-width="7" stroke-linecap="round"/>
+  <line class="mark" x1="24" y1="32" x2="44" y2="50" stroke-width="7" stroke-linecap="round"/>
+  <rect class="mark" x="48" y="18" width="7" height="28" rx="3.5"/>
 </svg>
