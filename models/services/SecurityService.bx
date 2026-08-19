@@ -107,11 +107,15 @@ class {
 	 * @return {array} of RequestLog rows plus a signalType column.
 	 */
 	function getPayloadSignatures( numeric limit = 100 ){
-		// Union of all four CASE branches below — command_injection's
-		// (;|\||\$\(|`) is included here too (the WHERE clause as originally
-		// given omitted it, which meant that branch could never actually
-		// fire: nothing reaches the CASE without matching WHERE first).
-		var pattern = "(union.{1,20}select|select.+from|or 1=1|--|;--|/\*|<script|onerror=|onload=|javascript:|\.\./|%2e%2e|/etc/passwd|/proc/self|;|\||\$\(|`)";
+		// sqli is checked against query_string only, never path — path
+		// segments routinely contain "--" as an ordinary word separator in
+		// slugs (e.g. /posts/2026/03/cbwire--computed-vs-data-properties),
+		// which the sqli pattern's bare "--" alternative would otherwise
+		// flag on every such post. The other three categories don't have
+		// that problem (a real path never legitimately contains "<script",
+		// "../", or a backtick), so they still check both columns.
+		var sqliPattern   = "(union.{1,20}select|select.+from|or 1=1|--|;--|/\*)";
+		var nonSqliPattern = "(<script|onerror=|onload=|javascript:|\.\./|%2e%2e|/etc/passwd|/proc/self|;|\||\$\(|`)";
 
 		return queryExecute(
 			"SELECT
@@ -123,8 +127,7 @@ class {
 				query_string,
 				status_code,
 				CASE
-					WHEN path REGEXP '(union.{1,20}select|select.+from|or 1=1|--|;--|/\\*)'
-						OR query_string REGEXP '(union.{1,20}select|select.+from|or 1=1|--|;--|/\\*)'
+					WHEN query_string REGEXP '(union.{1,20}select|select.+from|or 1=1|--|;--|/\\*)'
 						THEN 'sqli'
 					WHEN path REGEXP '(<script|onerror=|onload=|javascript:)'
 						OR query_string REGEXP '(<script|onerror=|onload=|javascript:)'
@@ -137,13 +140,15 @@ class {
 						THEN 'command_injection'
 					END AS signal_type
 			FROM RequestLog
-			WHERE path REGEXP :pattern
-			   OR query_string REGEXP :pattern
+			WHERE query_string REGEXP :sqliPattern
+			   OR path REGEXP :nonSqliPattern
+			   OR query_string REGEXP :nonSqliPattern
 			ORDER BY requested_at DESC
 			LIMIT :lim",
 			{
-				"pattern": { value: pattern, cfsqltype: "cf_sql_varchar" },
-				"lim"    : { value: arguments.limit, cfsqltype: "cf_sql_integer" }
+				"sqliPattern"   : { value: sqliPattern, cfsqltype: "cf_sql_varchar" },
+				"nonSqliPattern": { value: nonSqliPattern, cfsqltype: "cf_sql_varchar" },
+				"lim"           : { value: arguments.limit, cfsqltype: "cf_sql_integer" }
 			},
 			{ returnType: "array" }
 		);
