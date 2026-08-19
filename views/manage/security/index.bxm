@@ -51,7 +51,11 @@
 								<tbody>
 									<bx:loop array="#data.volumeAnomalies#" item="row">
 										<tr>
-											<td class="c-manage-table__cell-muted">#encodeForHTML( row.ip_address )#</td>
+											<td class="c-manage-table__cell-muted">
+											#encodeForHTML( row.ip_address )#
+											<bx:set hostname = data.hostnames[ row.ip_address ] ?: "">
+											<bx:if len( hostname )><br><span class="c-security-hostname">#encodeForHTML( hostname )#</span></bx:if>
+										</td>
 											<td>#numberFormat( row.total_requests )#</td>
 											<td>#numberFormat( row.distinct_paths )#</td>
 											<td class="c-manage-table__cell-muted">#dateTimeFormat( row.first_seen, "mmm d, h:nn tt" )#</td>
@@ -93,7 +97,11 @@
 								<tbody>
 									<bx:loop array="#data.burstDetection#" item="row">
 										<tr>
-											<td class="c-manage-table__cell-muted">#encodeForHTML( row.ip_address )#</td>
+											<td class="c-manage-table__cell-muted">
+											#encodeForHTML( row.ip_address )#
+											<bx:set hostname = data.hostnames[ row.ip_address ] ?: "">
+											<bx:if len( hostname )><br><span class="c-security-hostname">#encodeForHTML( hostname )#</span></bx:if>
+										</td>
 											<td class="c-manage-table__cell-muted">#encodeForHTML( row.minute_bucket )#</td>
 											<td>#numberFormat( row.requests_in_minute )#</td>
 										</tr>
@@ -135,7 +143,11 @@
 								<tbody>
 									<bx:loop array="#data.enumerationScanning#" item="row">
 										<tr>
-											<td class="c-manage-table__cell-muted">#encodeForHTML( row.ip_address )#</td>
+											<td class="c-manage-table__cell-muted">
+											#encodeForHTML( row.ip_address )#
+											<bx:set hostname = data.hostnames[ row.ip_address ] ?: "">
+											<bx:if len( hostname )><br><span class="c-security-hostname">#encodeForHTML( hostname )#</span></bx:if>
+										</td>
 											<td>#numberFormat( row.total_requests )#</td>
 											<td>#numberFormat( row.distinct_paths )#</td>
 											<td>#numberFormat( row.error_hits )#</td>
@@ -185,7 +197,11 @@
 										<tr>
 											<td class="c-manage-table__cell-muted">#dateTimeFormat( row.requested_at, "mmm d, h:nn:ss tt" )#</td>
 											<td><span class="c-signal-badge c-signal-badge--#encodeForHTMLAttribute( row.signal_type ?: 'unknown' )#">#encodeForHTML( row.signal_type ?: 'unknown' )#</span></td>
-											<td class="c-manage-table__cell-muted">#encodeForHTML( row.ip_address )#</td>
+											<td class="c-manage-table__cell-muted">
+											#encodeForHTML( row.ip_address )#
+											<bx:set hostname = data.hostnames[ row.ip_address ] ?: "">
+											<bx:if len( hostname )><br><span class="c-security-hostname">#encodeForHTML( hostname )#</span></bx:if>
+										</td>
 											<td><span class="c-log-method c-log-method--#encodeForHTMLAttribute( lCase( row.method ) )#">#encodeForHTML( row.method )#</span></td>
 											<td class="c-manage-table__cell-muted" title="#encodeForHTMLAttribute( row.path )#">#encodeForHTML( left( row.path, 60 ) )##( len( row.path ) > 60 ? '…' : '' )#</td>
 											<td class="c-manage-table__cell-muted" title="#encodeForHTMLAttribute( row.query_string )#">#encodeForHTML( left( row.query_string, 40 ) )##( len( row.query_string ) > 40 ? '…' : '' )#</td>
@@ -228,7 +244,11 @@
 								<tbody>
 									<bx:loop array="#data.suspiciousUserAgents#" item="row">
 										<tr>
-											<td class="c-manage-table__cell-muted">#encodeForHTML( row.ip_address )#</td>
+											<td class="c-manage-table__cell-muted">
+											#encodeForHTML( row.ip_address )#
+											<bx:set hostname = data.hostnames[ row.ip_address ] ?: "">
+											<bx:if len( hostname )><br><span class="c-security-hostname">#encodeForHTML( hostname )#</span></bx:if>
+										</td>
 											<td class="c-manage-table__cell-muted" title="#encodeForHTMLAttribute( row.user_agent )#">#len( row.user_agent ) ? encodeForHTML( left( row.user_agent, 60 ) ) & ( len( row.user_agent ) > 60 ? '…' : '' ) : '(empty)'#</td>
 											<td>#numberFormat( row.hits )#</td>
 											<td>#numberFormat( row.distinct_paths )#</td>
@@ -275,7 +295,11 @@
 										<bx:set statusClass = !len( statusCode ) ? "unknown" : ( statusCode < 300 ? "2xx" : ( statusCode < 400 ? "3xx" : ( statusCode < 500 ? "4xx" : "5xx" ) ) )>
 										<tr>
 											<td class="c-manage-table__cell-muted">#dateTimeFormat( row.requested_at, "mmm d, h:nn:ss tt" )#</td>
-											<td class="c-manage-table__cell-muted">#encodeForHTML( row.ip_address )#</td>
+											<td class="c-manage-table__cell-muted">
+											#encodeForHTML( row.ip_address )#
+											<bx:set hostname = data.hostnames[ row.ip_address ] ?: "">
+											<bx:if len( hostname )><br><span class="c-security-hostname">#encodeForHTML( hostname )#</span></bx:if>
+										</td>
 											<td><span class="c-log-method c-log-method--#encodeForHTMLAttribute( lCase( row.method ) )#">#encodeForHTML( row.method )#</span></td>
 											<td class="c-manage-table__cell-muted" title="#encodeForHTMLAttribute( row.path )#">#encodeForHTML( left( row.path, 70 ) )##( len( row.path ) > 70 ? '…' : '' )#</td>
 											<td><span class="c-status-badge c-status-badge--#statusClass#">#len( statusCode ) ? statusCode : '—'#</span></td>
@@ -320,7 +344,11 @@
 									<bx:loop array="#data.unusualMethods#" item="row">
 										<tr>
 											<td><span class="c-log-method">#encodeForHTML( row.method )#</span></td>
-											<td class="c-manage-table__cell-muted">#encodeForHTML( row.ip_address )#</td>
+											<td class="c-manage-table__cell-muted">
+											#encodeForHTML( row.ip_address )#
+											<bx:set hostname = data.hostnames[ row.ip_address ] ?: "">
+											<bx:if len( hostname )><br><span class="c-security-hostname">#encodeForHTML( hostname )#</span></bx:if>
+										</td>
 											<td>#numberFormat( row.hits )#</td>
 											<td class="c-manage-table__cell-muted">#dateTimeFormat( row.first_seen, "mmm d, h:nn tt" )#</td>
 											<td class="c-manage-table__cell-muted">#dateTimeFormat( row.last_seen, "mmm d, h:nn tt" )#</td>

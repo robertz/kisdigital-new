@@ -1,0 +1,19 @@
+/**
+ * Adapts a BoxLang closure to java.util.concurrent.Callable — same pattern
+ * as Runnable.bx (createDynamicProxy needs a class instance whose method
+ * matches the target interface, not a bare closure), except Callable
+ * returns a value instead of just running. Used by HostnameResolver.bx to
+ * run a bounded-timeout DNS lookup on a background thread.
+ */
+class {
+
+	function init( fn ) {
+		variables.fn = fn
+		return this
+	}
+
+	function call() {
+		return variables.fn()
+	}
+
+}

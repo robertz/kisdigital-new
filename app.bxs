@@ -49,7 +49,8 @@ insightsService = new models.services.InsightsService(
 
 // /manage/security — heuristic scans over the same RequestLog table, aimed
 // at attack patterns rather than visitor analytics. See SecurityService.bx.
-securityService = new models.services.SecurityService()
+securityService   = new models.services.SecurityService()
+hostnameResolver  = new models.util.HostnameResolver()
 
 // ── Middleware ───────────────────────────────────────────────────────────
 // requestLogger goes first, ahead of everything else, so its next() wraps
@@ -137,7 +138,7 @@ app.use( new routes.Main( postService, authorService, siteDefaults ).router )
 app.use( new routes.Posts( postService, postRenderer, siteDefaults ).router )
 app.use( new routes.Tags( postService, siteDefaults ).router )
 app.use( new routes.Feeds( sitemapService ).router )
-app.use( new routes.Manage( authService, postService, authorService, settingsService, postRenderer, r2Client, getSystemSetting( "R2_UPLOAD_PREFIX", "posts" ), insightsService, securityService ).router )
+app.use( new routes.Manage( authService, postService, authorService, settingsService, postRenderer, r2Client, getSystemSetting( "R2_UPLOAD_PREFIX", "posts" ), insightsService, securityService, hostnameResolver ).router )
 
 // ── 404 / 500 (themed, matching the site's own look) ────────────────────
 app.use( ( req, res ) => {
