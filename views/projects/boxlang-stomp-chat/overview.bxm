@@ -94,11 +94,6 @@
 		<p>Things worth knowing if you extend this:</p>
 
 		<div class="bx-callout bx-warn">
-			<strong>A multi-byte character in a message body drops the frame</strong>
-			SocketBox's <code class="bx-inline">MessageParser.readBody()</code> loops <code class="bx-inline">content-length</code> times over <code class="bx-inline">charAt()</code>, but content-length counts bytes and <code class="bx-inline">charAt()</code> walks UTF-16 chars — so a body holding an em dash, an accent, CJK or an emoji overruns the frame and is discarded. Inbound only; <code class="bx-inline">serialize()</code> sets the outgoing header in real bytes, so it can look like a client bug. <strong>Not a charset setting</strong> — the string is already correct UTF-8, which is why you get a length mismatch and not mojibake. Patched locally in <code class="bx-inline">modules/socketbox/models/STOMP/MessageParser.cfc</code> by slicing the byte window and decoding it back; <code class="bx-inline">modules/</code> is gitignored, so <code class="bx-inline">box install</code> will undo that and it needs to go upstream.
-		</div>
-
-		<div class="bx-callout bx-warn">
 			<strong>Frames from one socket are not handled in order</strong>
 			The broker dispatches them across worker threads, so a reply the server pushes in response to frame N can be sent before frame N-1's subscription is registered. This ate DM history on every reconnect: <code class="bx-inline">private.&lt;session&gt;</code> and the DM's <code class="bx-inline">chat.</code> subscribe went out in the same burst, and the backlog was sent into a destination nobody was listening to yet. The client now puts a <code class="bx-inline">receipt</code> on the private subscribe and waits for the broker's RECEIPT before subscribing to any DM. The presence replay in <code class="bx-inline">onSubscribe()</code> is a workaround for the same underlying thing.
 		</div>
@@ -113,9 +108,6 @@
 			<li><strong>A SEND can arrive before the connection is registered.</strong> <code class="bx-inline">getConnectionDetails()</code> comes back empty for a frame that races CONNECT, which would leave the client's raw body un-stamped. <code class="bx-inline">onSend()</code> drops chat/typing frames with no login rather than forwarding them.</li>
 			<li><strong>A model cached in the application scope keeps its old class.</strong> Editing <code class="bx-inline">ChatStore.bx</code> while the server is running gets you <code class="bx-inline">Method 'x' not found</code> from the instance already sitting in <code class="bx-inline">application.chatStore</code>. Restart after changing a cached model; only the unversioned frontend assets pick up edits live.</li>
 			<li><strong>Media queries add no specificity.</strong> The responsive block lives at the bottom of <code class="bx-inline">app.css</code> on purpose — put a <code class="bx-inline">@media</code> override before the base rule it undoes and the base rule wins.</li>
-			<li><strong>BoxLang has no <code class="bx-inline">chr()</code> or <code class="bx-inline">header()</code>.</strong> Use <code class="bx-inline">char()</code> and the <code class="bx-inline">&lt;bx:header&gt;</code> tag — calling it in function form inside a <code class="bx-inline">&lt;bx:script&gt;</code> block in a <code class="bx-inline">.bxm</code> breaks the template lexer outright.</li>
-			<li><strong><code class="bx-inline">url</code> is a scope.</strong> A method named <code class="bx-inline">url()</code> on a component resolves to the URL scope struct instead, hence <code class="bx-inline">Assets.versioned()</code>.</li>
-			<li><strong><code class="bx-inline">.bx</code> files run in BoxLang mode</strong>, so it's <code class="bx-inline">jsonSerialize()</code>, not <code class="bx-inline">serializeJSON()</code>. SocketBox's own <code class="bx-inline">.cfc</code> files run in CF-compat mode where both exist — don't copy BIF names across the boundary.</li>
 			<li>Cluster mode is off. SocketBox supports it if you ever run more than one node.</li>
 		</ul>
 
