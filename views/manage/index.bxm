@@ -25,19 +25,20 @@
 			<section class="c-manage-dashboard__card c-manage-dashboard__card--traffic">
 				<div class="c-manage-dashboard__card-head">
 					<span class="c-manage-dashboard__icon"><i class="bi bi-graph-up"></i></span>
-					<span class="c-manage-dashboard__eyebrow">Traffic &mdash; last #data.traffic.days# days</span>
+					<span class="c-manage-dashboard__eyebrow">Traffic &mdash; last 30 days</span>
 				</div>
-				<div class="c-dashboard-sparkline">
+				<div class="c-dashboard-sparkline is-loading" id="traffic-widget">
 					<div class="c-dashboard-sparkline__chart">
-						<canvas id="traffic-chart" aria-label="Site traffic over the last #data.traffic.days# days" role="img"></canvas>
+						<canvas id="traffic-chart" aria-label="Site traffic over the last 30 days" role="img"></canvas>
+						<div class="c-dashboard-sparkline__chart-skeleton" aria-hidden="true"></div>
 					</div>
 					<div class="c-dashboard-sparkline__stats">
 						<div class="c-dashboard-sparkline__stat">
-							<span class="c-dashboard-sparkline__stat-value">#numberFormat( data.traffic.total )#</span>
+							<span class="c-dashboard-sparkline__stat-value" id="traffic-total-views"><span class="c-dashboard-skeleton-text" aria-hidden="true"></span></span>
 							<span class="c-dashboard-sparkline__stat-label">total views</span>
 						</div>
 						<div class="c-dashboard-sparkline__stat">
-							<span class="c-dashboard-sparkline__stat-value">#numberFormat( data.traffic.maxViews )#</span>
+							<span class="c-dashboard-sparkline__stat-value" id="traffic-peak-day"><span class="c-dashboard-skeleton-text" aria-hidden="true"></span></span>
 							<span class="c-dashboard-sparkline__stat-label">peak day</span>
 						</div>
 					</div>
@@ -45,36 +46,52 @@
 				<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.0/chart.umd.min.js" integrity="sha512-Y51n9mtKTVBh3Jbx5pZSJNDDMyY+yGe77DGtBPzRlgsf/YLCh13kSZ3JmfHGzYFCmOndraf0sQgfM654b7dJ3w==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 				<script>
 				(function(){
-					var labels = #jsonSerialize( data.traffic.labels )#;
-					var values = #jsonSerialize( data.traffic.values )#;
+					var widget  = document.getElementById('traffic-widget');
+					var totalEl = document.getElementById('traffic-total-views');
+					var peakEl  = document.getElementById('traffic-peak-day');
 
-					var styles = getComputedStyle(document.documentElement);
-					var lineColor = styles.getPropertyValue('--post-link-text').trim() || '##7c83fd';
+					fetch('/manage/dashboard/traffic-data', { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+						.then(function(res){ return res.json(); })
+						.then(function(data){
+							if (!data.success) return Promise.reject();
+							var traffic = data.traffic;
 
-					new Chart(document.getElementById('traffic-chart'), {
-						type: 'line',
-						data: {
-							labels: labels,
-							datasets: [{
-								data: values,
-								borderColor: lineColor,
-								backgroundColor: lineColor + '33',
-								fill: true,
-								tension: 0.3,
-								pointRadius: 0,
-								borderWidth: 2
-							}]
-						},
-						options: {
-							responsive: true,
-							maintainAspectRatio: false,
-							plugins: { legend: { display: false } },
-							scales: {
-								x: { ticks: { maxTicksLimit: 8 }, grid: { display: false } },
-								y: { beginAtZero: true, ticks: { precision: 0 } }
-							}
-						}
-					});
+							var styles = getComputedStyle(document.documentElement);
+							var lineColor = styles.getPropertyValue('--post-link-text').trim() || '##7c83fd';
+
+							new Chart(document.getElementById('traffic-chart'), {
+								type: 'line',
+								data: {
+									labels: traffic.labels,
+									datasets: [{
+										data: traffic.values,
+										borderColor: lineColor,
+										backgroundColor: lineColor + '33',
+										fill: true,
+										tension: 0.3,
+										pointRadius: 0,
+										borderWidth: 2
+									}]
+								},
+								options: {
+									responsive: true,
+									maintainAspectRatio: false,
+									plugins: { legend: { display: false } },
+									scales: {
+										x: { ticks: { maxTicksLimit: 8 }, grid: { display: false } },
+										y: { beginAtZero: true, ticks: { precision: 0 } }
+									}
+								}
+							});
+
+							totalEl.textContent = traffic.total.toLocaleString();
+							peakEl.textContent = traffic.maxViews.toLocaleString();
+							widget.classList.remove('is-loading');
+						})
+						.catch(function(){
+							widget.classList.remove('is-loading');
+							widget.innerHTML = '<p class="c-manage-dashboard__meta">Couldn\'t load traffic &mdash; see server logs.</p>';
+						});
 				})();
 				</script>
 			</section>

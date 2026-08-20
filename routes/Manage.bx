@@ -59,6 +59,7 @@ class {
 		this.router.get( "/manage/logout", ( req, res ) => logout( req, res ) );
 
 		this.router.get( "/manage", auth, ( req, res ) => dashboard( req, res ) );
+		this.router.get( "/manage/dashboard/traffic-data", auth, ( req, res ) => trafficData( req, res ) );
 
 		this.router.get( "/manage/posts", auth, ( req, res ) => postsList( req, res ) );
 		this.router.post( "/manage/posts/:id/toggle-featured", admin, ( req, res ) => toggleFeatured( req, res ) );
@@ -258,13 +259,22 @@ class {
 			pageTitle       : "Dashboard",
 			manageSection   : "dashboard",
 			manageUser      : req.session.manage_user,
-			traffic         : buildTrafficChartData( insightsFetch( () => variables.insightsService.getDailyTotals( 30 ), [] ) ),
 			zeroResultSearches : variables.postService.getZeroResultSearches( 30 ),
 			recentActivity     : variables.postService.getRecentActivity( 8 ),
 			contentHealth      : variables.postService.getContentHealth(),
 			insightsTotal      : insightsFetch( () => variables.insightsService.getTotal( 30 ) ),
 			server             : isNull( serverSnapshot ) ? javacast( "null", "" ) : _formatServerSnapshot( serverSnapshot )
 		} );
+	}
+
+	// GET /manage/dashboard/traffic-data — the traffic card's own chart data,
+	// fetched over AJAX after the dashboard shell renders rather than
+	// blocking the initial page load on a 30-day recursive CTE against
+	// RequestLog (cached via InsightsService, but still not free on a cold
+	// cache) — the card shows a loading skeleton until this resolves.
+	function trafficData( req, res ){
+		var traffic = buildTrafficChartData( insightsFetch( () => variables.insightsService.getDailyTotals( 30 ), [] ) );
+		res.json( { success: true, traffic: traffic } );
 	}
 
 	/**

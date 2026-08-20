@@ -2562,6 +2562,41 @@
 	white-space: nowrap;
 }
 
+.c-dashboard-sparkline__chart-skeleton {
+	position: absolute;
+	inset: 0;
+	border-radius: var(--ui-radius-sm);
+	display: none;
+	background: linear-gradient(
+		90deg,
+		var(--ui-surface-1) 0%,
+		var(--ui-surface-2) 40%,
+		var(--ui-surface-1) 80%
+	);
+	background-size: 300% 100%;
+	animation: c-textarea-shimmer 1.6s ease-in-out infinite;
+}
+
+.c-dashboard-sparkline.is-loading .c-dashboard-sparkline__chart-skeleton {
+	display: block;
+}
+
+.c-dashboard-skeleton-text {
+	display: inline-block;
+	width: 2.5em;
+	height: 1em;
+	border-radius: var(--ui-radius-sm);
+	vertical-align: middle;
+	background: linear-gradient(
+		90deg,
+		var(--ui-surface-1) 0%,
+		var(--ui-surface-2) 40%,
+		var(--ui-surface-1) 80%
+	);
+	background-size: 300% 100%;
+	animation: c-textarea-shimmer 1.6s ease-in-out infinite;
+}
+
 @media (max-width: 575.98px) {
 	.c-dashboard-sparkline {
 		flex-direction: column;
