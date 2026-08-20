@@ -15,7 +15,7 @@
   <tr><td><code class="bx-inline">req.headers</code></td><td>Struct of request headers</td></tr>
   <tr><td><code class="bx-inline">req.get(name)</code></td><td>Read a single header by name — returns null if absent</td></tr>
   <tr><td><code class="bx-inline">req.cookies</code></td><td>Struct of parsed cookies</td></tr>
-  <tr><td><code class="bx-inline">req.ip</code></td><td>Direct TCP peer address by default; prefers <code class="bx-inline">X-Forwarded-For</code> when <code class="bx-inline">app.set("trust proxy", true)</code> — see <a href="/projects/boxlang-express/docs/config">Configuration</a></td></tr>
+  <tr><td><code class="bx-inline">req.ip</code></td><td>Direct TCP peer address by default; prefers an edge-set header named via <code class="bx-inline">"trust proxy header"</code>, else <code class="bx-inline">X-Forwarded-For</code> when <code class="bx-inline">app.set("trust proxy", true)</code> — see <a href="/projects/boxlang-express/docs/config">Configuration</a></td></tr>
   <tr><td><code class="bx-inline">req.protocol</code> / <code class="bx-inline">req.secure</code></td><td>Always <code class="bx-inline">"http"</code> / <code class="bx-inline">false</code> — BoxExpress's own <code class="bx-inline">HttpServer</code> never terminates TLS — unless <code class="bx-inline">trust proxy</code> is on and the request carries <code class="bx-inline">X-Forwarded-Proto: https</code></td></tr>
   <tr><td><code class="bx-inline">req.hostname</code></td><td>The <code class="bx-inline">Host</code> header (or <code class="bx-inline">X-Forwarded-Host</code> with <code class="bx-inline">trust proxy</code> on) with any <code class="bx-inline">:port</code> stripped</td></tr>
   <tr><td><code class="bx-inline">req.session</code> / <code class="bx-inline">req.sessionID</code></td><td>Populated by <code class="bx-inline">boxExpressSession()</code> — see <a href="/projects/boxlang-express/docs/sessions">Sessions</a></td></tr>
@@ -40,6 +40,9 @@
   <tr><td><code class="bx-inline">res.download(path, filename)</code></td><td><code class="bx-inline">sendFile()</code> that forces <code class="bx-inline">Content-Disposition: attachment</code></td></tr>
   <tr><td><code class="bx-inline">res.render(view, data)</code></td><td>Renders a view — see <a href="/projects/boxlang-express/docs/views">Views &amp; Templates</a></td></tr>
   <tr><td><code class="bx-inline">res.dump(data)</code></td><td>Sends BoxLang's rich, collapsible <code class="bx-inline">dump()</code> HTML view of a variable as the response — useful for quick debugging routes</td></tr>
+  <tr><td><code class="bx-inline">res.getStatusCode()</code></td><td>Returns the eventual status code — reflects the real outcome even when a route never called <code class="bx-inline">status()</code> directly, since every non-<code class="bx-inline">200</code> terminal method routes through it internally. For request-logging middleware registered first via <code class="bx-inline">app.use()</code>, which otherwise can't observe a request's outcome</td></tr>
+  <tr><td><code class="bx-inline">res.getBytesWritten()</code></td><td>Returns the body byte count sent so far; <code class="bx-inline">0</code> for a response still in flight</td></tr>
+  <tr><td><code class="bx-inline">res.onBeforeSend(callback)</code></td><td>Registers a callback that runs once, synchronously, the instant before headers are flushed — the last point guaranteed to run after every downstream handler but still early enough to add a header</td></tr>
 </table>
 
 <h2>Examples</h2>

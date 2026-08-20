@@ -70,9 +70,16 @@ MYSQL_PASSWORD=super-secret</code></pre>
   <tr><td><code class="bx-inline">"view engine"</code></td><td>Default extension appended to a view name with no extension (defaults to <code class="bx-inline">"bxm"</code>).</td></tr>
   <tr><td><code class="bx-inline">"env"</code></td><td>When set to <code class="bx-inline">"development"</code>, the default 500 handler exposes the real error message instead of a generic one. Custom error middleware can read this the same way — see <a href="/projects/boxlang-express/docs/errors">Error Handling</a>.</td></tr>
   <tr><td><code class="bx-inline">"trust proxy"</code></td><td>When <code class="bx-inline">true</code>, <code class="bx-inline">req.ip</code> prefers the first address in <code class="bx-inline">X-Forwarded-For</code> over the direct TCP peer. Off by default — an untrusted client could otherwise forge that header to spoof its IP.</td></tr>
+  <tr><td><code class="bx-inline">"trust proxy header"</code></td><td>A header name, or an ordered array of candidates, checked before <code class="bx-inline">X-Forwarded-For</code> and independent of the <code class="bx-inline">"trust proxy"</code> boolean — see below.</td></tr>
   <tr><td><code class="bx-inline">"reloadOnChange"</code></td><td>Dev-mode auto-restart on file change. See <a href="/projects/boxlang-express/docs/lifecycle">Process Lifecycle</a>.</td></tr>
 </table>
 <pre class="bx-code"><span class="bx-code-label">bxs</span><code>app.set( "env", "development" )
 app.set( "trust proxy", true )
 app.set( "views", expandPath( "./views" ) )</code></pre>
+
+<h3>"trust proxy header" — for platforms where X-Forwarded-For can be forged</h3>
+<p><code class="bx-inline">X-Forwarded-For</code> isn't safe to trust on every platform, even with <code class="bx-inline">"trust proxy"</code> on. Confirmed directly against DigitalOcean App Platform (with Cloudflare in front of that): both hops <em>append</em> to <code class="bx-inline">X-Forwarded-For</code> rather than replacing it, so a client can prepend a forged entry and have it survive to the app — making <code class="bx-inline">req.ip</code> attacker-controlled, not just wrong.</p>
+<p>Platforms like this typically also inject their own edge-set header carrying the real client IP — set from the connection the edge itself observed, not anything the client sent. <code class="bx-inline">"trust proxy header"</code> checks one or more of those by name, in order, and uses the first one present:</p>
+<pre class="bx-code"><span class="bx-code-label">bxs</span><code>app.set( "trust proxy header", [ "DO-Connecting-IP", "CF-Connecting-IP" ] )</code></pre>
+<p>This is what this site itself runs behind (DO App Platform, Cloudflare-proxied) — see <code class="bx-inline">app.bxs</code>. Other platforms set their own equivalent (<code class="bx-inline">Fastly-Client-IP</code>, etc.) — check with your host.</p>
 </bx:output>
