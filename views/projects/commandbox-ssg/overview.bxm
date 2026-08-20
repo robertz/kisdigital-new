@@ -1,0 +1,79 @@
+<bx:include template="../../partials/_head.bxm">
+<bx:output>
+<div class="container py-5">
+	<div class="c-project-hero">
+		<p class="c-project-hero__eyebrow">Project</p>
+		<h1 class="c-project-hero__title">commandbox-ssg</h1>
+		<p class="c-project-hero__tagline">A static site generator implemented as a <a href="https://commandbox.ortusbooks.com/" target="_blank" rel="noopener" class="c-post-link">CommandBox</a> module — Markdown and CFML templates, layouts, pagination, and a small build pipeline, all driven from the CLI. The predecessor to <a href="/projects/boxlang-ssg" class="c-post-link">boxlang-ssg</a>, its pure-BoxLang rewrite.</p>
+		<div class="c-project-hero__actions">
+			<a href="https://github.com/robertz/commandbox-ssg" target="_blank" rel="noopener" class="btn btn-primary-custom">View on GitHub</a>
+		</div>
+	</div>
+
+	<div class="c-project-features">
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-terminal"></i> CLI-native</p>
+			<p class="c-project-feature__body">Four commands — <code>ssg init</code>, <code>ssg build</code>, <code>ssg watch</code>, <code>ssg serve</code> — installed as an ordinary CommandBox module via <code>box install</code>.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-magic"></i> Tidy output</p>
+			<p class="c-project-feature__body">HTML output is run through jSoup to clean up markup before it's written, based on detected content type rather than a manual flag.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-plug"></i> Build hooks</p>
+			<p class="c-project-feature__body"><code>onBuildReady()</code>, <code>beforeProcessCollections()</code>, and <code>beforeGenerate()</code> — optional lifecycle hooks in <code>applicationHelper.cfm</code> for custom build logic.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-eye"></i> Live rebuild</p>
+			<p class="c-project-feature__body"><code>ssg watch</code> monitors <code>.cfm</code>, <code>.md</code>, <code>.css</code>, <code>.js</code>, and <code>.json</code> files and triggers a rebuild on change.</p>
+		</div>
+	</div>
+
+	<div class="c-post__body c-docs-body">
+
+		<h2>Installation &amp; quick start</h2>
+		<pre class="bx-code"><span class="bx-code-label">bash</span><code>box install commandbox-ssg</code></pre>
+		<pre class="bx-code"><span class="bx-code-label">bash</span><code>box
+mkdir my-test-site --cd
+echo "###### Hello from commandbox-ssg" > index.md
+ssg build</code></pre>
+
+		<h2>Commands</h2>
+		<table class="bx-table">
+			<tr><th>Command</th><th>What it does</th></tr>
+			<tr><td><code class="bx-inline">ssg init</code></td><td>Scaffolds the current (empty) directory with the <code class="bx-inline">commandbox-ssg-skeleton</code> starter app.</td></tr>
+			<tr><td><code class="bx-inline">ssg build</code></td><td>Runs the full pipeline: loads <code class="bx-inline">ssg-config.json</code>, includes, and global <code class="bx-inline">_data/</code>, processes collections and pagination, then generates static output. Pass <code class="bx-inline">--showconfig</code> to print the resolved process/config instead of building, or <code class="bx-inline">--verbose</code> for extra build logging.</td></tr>
+			<tr><td><code class="bx-inline">ssg watch</code></td><td>Watches the current directory for <code class="bx-inline">.cfm</code>/<code class="bx-inline">.md</code>/<code class="bx-inline">.css</code>/<code class="bx-inline">.js</code>/<code class="bx-inline">.json</code> changes (500ms debounce) and runs <code class="bx-inline">ssg build</code> automatically.</td></tr>
+			<tr><td><code class="bx-inline">ssg serve</code></td><td>Writes a <code class="bx-inline">.htaccess</code> and <code class="bx-inline">server.json</code> for serving <code class="bx-inline">_site/</code> as clean-URL static content (if they don't already exist), then starts a CommandBox static web server.</td></tr>
+		</table>
+
+		<h2>Build lifecycle hooks</h2>
+		<p>Defining these functions in <code class="bx-inline">applicationHelper.cfm</code> lets you run custom code at specific points in the build, and makes any functions you define there available when rendering pages:</p>
+		<table class="bx-table">
+			<tr><th>Hook</th><th>Fires</th></tr>
+			<tr><td><code class="bx-inline">onBuildReady()</code></td><td>Once configuration has been loaded.</td></tr>
+			<tr><td><code class="bx-inline">beforeProcessCollections()</code></td><td>Once template data has been loaded, before collections are processed.</td></tr>
+			<tr><td><code class="bx-inline">beforeGenerate()</code></td><td>After collections and pagination have been processed, before static files are written.</td></tr>
+		</table>
+
+		<div class="bx-callout">
+			<strong>Looking for the BoxLang version?</strong>
+			<a href="/projects/boxlang-ssg">boxlang-ssg</a> is a from-scratch rewrite of the same idea — Markdown/<code class="bx-inline">.bxm</code> templates, layouts, collections, pagination — running on the BoxLang CLI directly instead of as a CommandBox module.
+		</div>
+
+		<h2>Changelog highlights</h2>
+		<p>Selected entries — see the <a href="https://github.com/robertz/commandbox-ssg" target="_blank" rel="noopener">repository</a> for the complete history back to <code class="bx-inline">0.0.5</code>.</p>
+		<table class="bx-table">
+			<tr><th>Version</th><th>Change</th></tr>
+			<tr><td><code class="bx-inline">0.2.2</code></td><td>Removed the <code class="bx-inline">skip_beautify</code> flag in favor of content-type detection — only HTML files are run through jSoup now.</td></tr>
+			<tr><td><code class="bx-inline">0.2.0</code></td><td>Adopted jSoup to tidy generated output.</td></tr>
+			<tr><td><code class="bx-inline">0.1.3</code></td><td>Excluded <code class="bx-inline">_site/</code> by default (was breaking passthrough folders containing markdown); fixed pagination parent-template leakage into output; render now uses the <code class="bx-inline">template</code> cache so <code class="bx-inline">excludeFromCollections</code> works correctly.</td></tr>
+			<tr><td><code class="bx-inline">0.1.1</code>–<code class="bx-inline">0.1.2</code></td><td>Added <code class="bx-inline">applicationHelper.cfm</code> support and the three build lifecycle hooks above.</td></tr>
+			<tr><td><code class="bx-inline">0.1.0</code></td><td><code class="bx-inline">build</code> command rewritten; <code class="bx-inline">publishDate</code> renamed to <code class="bx-inline">date</code> (defaults to the file's last-modified time); nested global <code class="bx-inline">_data/**.json</code>; new <code class="bx-inline">--showconfig</code> flag.</td></tr>
+			<tr><td><code class="bx-inline">0.0.6</code>–<code class="bx-inline">0.0.16</code></td><td>Windows compatibility fixes, <code class="bx-inline">ssg serve</code> added, <code class="bx-inline">ssg watch</code> added, automatic <code class="bx-inline">_includes/</code> exclusion.</td></tr>
+		</table>
+
+	</div>
+</div>
+</bx:output>
+<bx:include template="../../partials/_foot.bxm">

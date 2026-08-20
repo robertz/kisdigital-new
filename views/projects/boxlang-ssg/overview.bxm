@@ -1,0 +1,43 @@
+<bx:include template="../../partials/_head.bxm">
+<bx:output>
+<div class="container py-5">
+	<div class="c-project-hero">
+		<p class="c-project-hero__eyebrow">Project</p>
+		<h1 class="c-project-hero__title">boxlang-ssg</h1>
+		<p class="c-project-hero__tagline">A lightweight static site generator written in pure <a href="https://boxlang.io" target="_blank" rel="noopener" class="c-post-link">BoxLang</a>. It converts Markdown and BoxLang markup (<code>.bxm</code>) files into a static website, with layouts, views, collections, tags, and pagination — a from-scratch rewrite of <a href="/projects/commandbox-ssg" class="c-post-link">commandbox-ssg</a> that drops CommandBox entirely in favor of the BoxLang CLI directly.</p>
+		<div class="c-project-hero__actions">
+			<a href="/projects/boxlang-ssg/docs/getting-started" class="btn btn-primary-custom">Read the Docs</a>
+			<a href="https://github.com/robertz/boxlang-ssg" target="_blank" rel="noopener" class="btn btn-outline-custom">View on GitHub</a>
+		</div>
+	</div>
+
+	<div class="c-project-features">
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-lightning"></i> Fast, simple builds</p>
+			<p class="c-project-feature__body">A three-command CLI — <code>build</code>, <code>list</code>, <code>help</code> — with no framework to learn beyond front matter and a folder convention.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-file-earmark-text"></i> Markdown and .bxm</p>
+			<p class="c-project-feature__body">Author content as Markdown or native BoxLang markup, both with YAML front matter — mix and match freely across a site.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-collection"></i> Collections &amp; tags</p>
+			<p class="c-project-feature__body">Posts, tags, and arbitrary global JSON data from <code>_data/</code> are all queryable as plain BoxLang collections inside your templates.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-layout-split"></i> Layouts &amp; pagination</p>
+			<p class="c-project-feature__body">Shared layouts/views/partials in <code>_includes/</code>, plus front-matter-driven pagination that expands one template into many output pages.</p>
+		</div>
+	</div>
+
+	<p class="c-post-sidebar__label mb-3">Quick start</p>
+	<div class="c-post__body c-docs-body">
+<pre class="bx-code"><span class="bx-code-label">bash</span><code>git clone https://github.com/robertz/boxlang-ssg.git
+cd boxlang-ssg
+boxlang setup.bx
+boxlang ssg.bx build</code></pre>
+	</div>
+	<p class="mt-3"><a href="/projects/boxlang-ssg/docs/getting-started" class="c-post-link">Full setup and project structure &rarr;</a></p>
+</div>
+</bx:output>
+<bx:include template="../../partials/_foot.bxm">

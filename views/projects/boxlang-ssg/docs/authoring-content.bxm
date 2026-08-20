@@ -1,0 +1,55 @@
+<bx:output>
+<h1>Authoring Content</h1>
+<p class="bx-docs-lede">Front matter markers, the common keys every template supports, and worked examples of both file types.</p>
+
+<h2>Two file types, one front matter system</h2>
+<p>boxlang-ssg reads both <code class="bx-inline">.md</code> and <code class="bx-inline">.bxm</code> files. Each file may include YAML front matter to control metadata and output behavior. The marker syntax differs by file type:</p>
+<table class="bx-table">
+	<tr><th>Type</th><th>Front matter markers</th></tr>
+	<tr><td>Markdown</td><td>Start and end with <code class="bx-inline">---</code></td></tr>
+	<tr><td>BoxLang markup</td><td>Start with <code class="bx-inline">&lt;!---</code> and end with <code class="bx-inline">---&gt;</code></td></tr>
+</table>
+
+<h2>Common front matter keys</h2>
+<table class="bx-table">
+	<tr><th>Key</th><th>Meaning</th></tr>
+	<tr><td><code class="bx-inline">title</code></td><td>Page title</td></tr>
+	<tr><td><code class="bx-inline">description</code></td><td>Short description</td></tr>
+	<tr><td><code class="bx-inline">type</code></td><td>Content type (e.g. <code class="bx-inline">page</code>, <code class="bx-inline">post</code>) — used for view fallback and collections</td></tr>
+	<tr><td><code class="bx-inline">layout</code></td><td>Layout file in <code class="bx-inline">_includes/layouts</code> without extension (defaults to <code class="bx-inline">main</code>)</td></tr>
+	<tr><td><code class="bx-inline">view</code></td><td>View/partial in <code class="bx-inline">_includes/</code> without extension; falls back to <code class="bx-inline">type</code></td></tr>
+	<tr><td><code class="bx-inline">slug</code></td><td>Override file slug (used for posts)</td></tr>
+	<tr><td><code class="bx-inline">tags</code></td><td>Array of tags; builds <code class="bx-inline">collections.tags</code> and <code class="bx-inline">collections.byTag</code></td></tr>
+	<tr><td><code class="bx-inline">date</code></td><td>Date the content refers to</td></tr>
+	<tr><td><code class="bx-inline">permalink</code></td><td>Override output path, e.g. <code class="bx-inline">/tag/{{tag}}.html</code></td></tr>
+	<tr><td><code class="bx-inline">fileExt</code></td><td>Override output extension, e.g. <code class="bx-inline">xml</code></td></tr>
+	<tr><td><code class="bx-inline">published</code></td><td>Boolean to include/exclude from output</td></tr>
+	<tr><td><code class="bx-inline">excludeFromCollections</code></td><td>Boolean to skip the item from collections</td></tr>
+</table>
+
+<h2>Example page (index.bxm)</h2>
+<pre class="bx-code"><span class="bx-code-label">html — index.bxm</span><code>&lt;!---
+type: page
+layout: main
+---&gt;
+&lt;bx:output&gt;
+&lt;bx:loop array="##collections.post##" item="post"&gt;
+  &lt;a href="##post.permalink##"&gt;##post.title##&lt;/a&gt;&lt;br /&gt;
+&lt;/bx:loop&gt;
+&lt;/bx:output&gt;</code></pre>
+
+<h2>Example post (posts/example.md)</h2>
+<pre class="bx-code"><span class="bx-code-label">markdown — posts/example.md</span><code>---
+layout: main
+type: post
+slug: my-first-post
+title: My First Post
+description: A short summary
+tags:
+- misc
+published: true
+---
+
+## Hello
+This is my first post.</code></pre>
+</bx:output>

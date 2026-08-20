@@ -1,0 +1,22 @@
+<bx:output>
+<h1>Pagination</h1>
+<p class="bx-docs-lede">Expanding one template into many output pages, driven from front matter.</p>
+
+<h2>How it works</h2>
+<p>Add a <code class="bx-inline">pagination</code> key to a template's front matter with an <code class="bx-inline">alias</code> and a <code class="bx-inline">data</code> source (a dotted path to a collection). The template's <code class="bx-inline">permalink</code> should include <code class="bx-inline">{{alias}}</code> so it expands to a distinct output path per page. This is exactly how the example <code class="bx-inline">tags.bxm</code> template builds one page per tag:</p>
+<pre class="bx-code"><span class="bx-code-label">html — tags.bxm</span><code>&lt;!---
+layout: main
+view: page
+permalink: /tag/{{tag}}.html
+pagination:
+  alias: tag
+  data: collections.tags
+---&gt;</code></pre>
+<p>In the view, the current page's alias value is available as <code class="bx-inline">prc.tag</code>, and you'd typically use it to look up that tag's posts:</p>
+<pre class="bx-code"><span class="bx-code-label">html</span><code>&lt;bx:output&gt;
+&lt;bx:loop array="##collections.byTag[ slugify( prc.tag ) ]##" item="post"&gt;
+  &lt;a href="##post.permalink##"&gt;##post.title##&lt;/a&gt;&lt;br /&gt;
+&lt;/bx:loop&gt;
+&lt;/bx:output&gt;</code></pre>
+<p>One template file, one entry per item in <code class="bx-inline">collections.tags</code> — no manual loop over pages required at the file-system level.</p>
+</bx:output>

@@ -1,0 +1,18 @@
+<bx:output>
+<h1>Configuration</h1>
+<p class="bx-docs-lede">ssg-config.json — output directory, passthrough files, and what to ignore.</p>
+
+<h2>ssg-config.json</h2>
+<pre class="bx-code"><span class="bx-code-label">json</span><code>{
+  "outputDir": "_site",
+  "passthru": ["router.bxs", "assets"],
+  "ignore": []
+}</code></pre>
+<table class="bx-table">
+	<tr><th>Key</th><th>Meaning</th></tr>
+	<tr><td><code class="bx-inline">outputDir</code></td><td>Build output directory — auto-cleaned at the start of every build.</td></tr>
+	<tr><td><code class="bx-inline">passthru</code></td><td>Files/directories copied verbatim into <code class="bx-inline">outputDir</code>, unprocessed.</td></tr>
+	<tr><td><code class="bx-inline">ignore</code></td><td>Additional paths to skip entirely when discovering documents.</td></tr>
+</table>
+<p><code class="bx-inline">_includes/</code> is always excluded from document discovery automatically — no need to list it under <code class="bx-inline">ignore</code>.</p>
+</bx:output>
