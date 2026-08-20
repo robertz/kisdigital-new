@@ -175,6 +175,12 @@
 				</bx:if>
 			</section>
 
+		</div>
+
+		<p class="section-label mt-5 mb-4">Quick links</p>
+
+		<div class="c-manage-dashboard__grid">
+
 			<!--- Account card --->
 			<section class="c-manage-dashboard__card c-manage-dashboard__card--account">
 				<div class="c-manage-dashboard__card-head">
