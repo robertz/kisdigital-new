@@ -117,6 +117,44 @@
 
 				</article>
 
+				<section class="c-comments">
+					<p class="section-label mb-4">Comments</p>
+					<div class="giscus"></div>
+					<script>
+						(function () {
+							var theme = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+							var s = document.createElement('script');
+							s.src = 'https://giscus.app/client.js';
+							s.setAttribute('data-repo', 'robertz/kdfe-ssg');
+							s.setAttribute('data-repo-id', 'R_kgDOK8F-Yw');
+							s.setAttribute('data-category', 'Comments');
+							s.setAttribute('data-category-id', 'DIC_kwDOK8F-Y84CcVjP');
+							s.setAttribute('data-mapping', 'pathname');
+							s.setAttribute('data-strict', '0');
+							s.setAttribute('data-reactions-enabled', '1');
+							s.setAttribute('data-emit-metadata', '0');
+							s.setAttribute('data-input-position', 'bottom');
+							s.setAttribute('data-theme', theme);
+							s.setAttribute('data-lang', 'en');
+							s.setAttribute('crossorigin', 'anonymous');
+							s.async = true;
+							document.currentScript.parentNode.appendChild(s);
+
+							// Update giscus when the site theme changes
+							new MutationObserver(function () {
+								var newTheme = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+								var iframe = document.querySelector('iframe.giscus-frame');
+								if (iframe) {
+									iframe.contentWindow.postMessage(
+										{ giscus: { setConfig: { theme: newTheme } } },
+										'https://giscus.app'
+									);
+								}
+							}).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+						})();
+					</script>
+				</section>
+
 				<bx:if data.relatedPosts.len()>
 				<section class="c-related-posts">
 					<p class="section-label mb-4">Related Articles</p>
@@ -127,41 +165,6 @@
 					</div>
 				</section>
 				</bx:if>
-
-				<div class="giscus"></div>
-				<script>
-					(function () {
-						var theme = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
-						var s = document.createElement('script');
-						s.src = 'https://giscus.app/client.js';
-						s.setAttribute('data-repo', 'robertz/kdfe-ssg');
-						s.setAttribute('data-repo-id', 'R_kgDOK8F-Yw');
-						s.setAttribute('data-category', 'Comments');
-						s.setAttribute('data-category-id', 'DIC_kwDOK8F-Y84CcVjP');
-						s.setAttribute('data-mapping', 'pathname');
-						s.setAttribute('data-strict', '0');
-						s.setAttribute('data-reactions-enabled', '1');
-						s.setAttribute('data-emit-metadata', '0');
-						s.setAttribute('data-input-position', 'bottom');
-						s.setAttribute('data-theme', theme);
-						s.setAttribute('data-lang', 'en');
-						s.setAttribute('crossorigin', 'anonymous');
-						s.async = true;
-						document.currentScript.parentNode.appendChild(s);
-
-						// Update giscus when the site theme changes
-						new MutationObserver(function () {
-							var newTheme = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
-							var iframe = document.querySelector('iframe.giscus-frame');
-							if (iframe) {
-								iframe.contentWindow.postMessage(
-									{ giscus: { setConfig: { theme: newTheme } } },
-									'https://giscus.app'
-								);
-							}
-						}).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-					})();
-				</script>
 
 			</div>
 

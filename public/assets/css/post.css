@@ -297,6 +297,14 @@
 	flex-shrink: 0;
 }
 
+/* ── Comments ── */
+
+.c-comments {
+	margin-top: var(--space-8);
+	padding-top: var(--space-7);
+	border-top: 1px solid var(--ui-border-subtle);
+}
+
 /* ── Related articles ── */
 
 .c-related-posts {
