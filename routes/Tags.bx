@@ -33,6 +33,14 @@ class {
 			return;
 		}
 
+		// A page past this tag's last real one — redirect to the actual
+		// last page instead of rendering silently empty at a URL that
+		// doesn't match what's shown.
+		if ( currentPage > paging.totalPages ){
+			res.redirect( paging.totalPages > 1 ? req.path & "?page=" & paging.totalPages : req.path );
+			return;
+		}
+
 		res.render( "tags/index", {
 			pageTitle     : "Tagged: " & currentTag,
 			canonicalUrl  : variables.siteDefaults.canonicalUrl( req.path ),

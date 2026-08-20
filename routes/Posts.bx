@@ -31,11 +31,21 @@ class {
 		var currentPage = isNumeric( rawPage ) && rawPage > 0 ? int( rawPage ) : 1;
 		currentPage     = min( currentPage, 1000 );
 
+		var paging = variables.postService.getPosts( page = currentPage );
+
+		// A page past the last real one (stale bookmark, hand-edited URL)
+		// would otherwise render silently empty at a URL that doesn't match
+		// what's shown — redirect to the actual last page instead.
+		if ( paging.totalPages > 0 && currentPage > paging.totalPages ){
+			res.redirect( paging.totalPages > 1 ? req.path & "?page=" & paging.totalPages : req.path );
+			return;
+		}
+
 		res.render( "posts/index", {
 			pageTitle     : "Articles",
 			canonicalUrl  : variables.siteDefaults.canonicalUrl( req.path ),
 			meta          : variables.siteDefaults.defaultMeta( req.path ),
-			paging        : variables.postService.getPosts( page = currentPage ),
+			paging        : paging,
 			trendingPosts : variables.postService.getTrendingPosts(),
 			allTags       : variables.postService.getAllTags()
 		} );
@@ -118,12 +128,25 @@ class {
 		var currentPage = isNumeric( rawPage ) && rawPage > 0 ? int( rawPage ) : 1;
 		currentPage     = min( currentPage, 1000 );
 
+		var paging = variables.postService.searchPosts( q, currentPage );
+
+		// Same redirect-to-last-page fix as /posts and /tag/:tag, preserving
+		// the search term in the redirect target.
+		if ( paging.totalPages > 0 && currentPage > paging.totalPages ){
+			var queryParts = [
+				len( q ) ? "q=" & encodeForURL( q ) : "",
+				paging.totalPages > 1 ? "page=" & paging.totalPages : ""
+			].filter( ( part ) => len( part ) );
+			res.redirect( queryParts.len() ? req.path & "?" & queryParts.toList( "&" ) : req.path );
+			return;
+		}
+
 		res.render( "search/index", {
 			pageTitle     : len( q ) ? "Search: " & q : "Search",
 			canonicalUrl  : variables.siteDefaults.canonicalUrl( req.path ),
 			meta          : variables.siteDefaults.defaultMeta( req.path ),
 			q             : q,
-			paging        : variables.postService.searchPosts( q, currentPage ),
+			paging        : paging,
 			trendingPosts : variables.postService.getTrendingPosts(),
 			allTags       : variables.postService.getAllTags()
 		} );
