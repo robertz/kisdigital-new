@@ -3,7 +3,7 @@
 <p class="bx-docs-lede">boxlang.json, the --bx-config flag, environment variable interpolation, and app-level settings.</p>
 
 <h2>boxlang.json: global vs. project</h2>
-<p>BoxLang's CLI only auto-loads one config file: <code class="bx-inline">~/.boxlang/config/boxlang.json</code>, the machine-wide config. A <code class="bx-inline">boxlang.json</code> placed next to your entry script is <strong>not</strong> discovered automatically — this was confirmed directly by dumping <code class="bx-inline">getBoxRuntime().getConfiguration()</code> from inside a project with its own <code class="bx-inline">boxlang.json</code>: the project file's settings were absent until passed explicitly.</p>
+<p>BoxLang's CLI only auto-loads one config file: <code class="bx-inline">~/.boxlang/config/boxlang.json</code>, the machine-wide config. A <code class="bx-inline">boxlang.json</code> placed next to your entry script is <strong>not</strong> discovered automatically.</p>
 <table class="bx-table">
   <tr><th>Location</th><th>Auto-loaded?</th><th>Scope</th></tr>
   <tr><td><code class="bx-inline">~/.boxlang/config/boxlang.json</code></td><td>Yes, always</td><td>Every BoxLang process on the machine</td></tr>
