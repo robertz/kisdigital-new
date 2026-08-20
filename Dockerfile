@@ -96,6 +96,13 @@ EXPOSE 3005
 # lower-overhead collection is a better fit than the default (G1, tuned for
 # multi-core hosts with room to spare) and a bounded max heap keeps the JVM
 # from growing to fill however much RAM the instance happens to have.
-ENV JAVA_OPTS="-Xmx400m -Xms128m -XX:+UseSerialGC"
+#
+# ActiveProcessorCount=1: this instance is provisioned as apps-s-1vcpu-1gb
+# (see .do/app.yaml), but Runtime.availableProcessors() has been observed
+# reporting 8 — the host's full core count, not this container's actual
+# allocation. Pinning it avoids any 8-core-assuming thread pool (e.g. a
+# default ForkJoinPool) over-provisioning against a single real core.
+# SerialGC itself is unaffected either way — it's single-threaded already.
+ENV JAVA_OPTS="-Xmx400m -Xms128m -XX:+UseSerialGC -XX:ActiveProcessorCount=1"
 
 CMD ["boxlang", "--bx-config", "boxlang.json", "app.bxs"]
