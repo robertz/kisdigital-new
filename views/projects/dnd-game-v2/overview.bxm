@@ -1,0 +1,127 @@
+<bx:include template="../../partials/_head.bxm">
+<bx:output>
+<div class="container py-5">
+	<div class="c-project-hero">
+		<p class="c-project-hero__eyebrow">Project — "The Adventure Begins"</p>
+		<h1 class="c-project-hero__title">dnd-game-v2</h1>
+		<p class="c-project-hero__tagline">A browser-based, D&amp;D 5e-inspired dungeon crawler. Create a character, explore hand-built and procedurally-populated dungeons, and fight turn-based combat in real time over WebSockets — all served by a single <a href="https://boxlang.io" target="_blank" rel="noopener" class="c-post-link">BoxLang</a> backend with no frontend build step.</p>
+		<div class="c-project-hero__actions">
+			<a href="https://github.com/robertz/dnd-game-v2" target="_blank" rel="noopener" class="btn btn-primary-custom">View on GitHub</a>
+		</div>
+	</div>
+
+	<div class="c-project-features">
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-person-badge"></i> Character creation &amp; sheet</p>
+			<p class="c-project-feature__body">Species, class, background, alignment, standard-array ability scores, starting spells, fighting styles, multiclassing, inventory, and spell management.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-lightning-charge"></i> Turn-based combat</p>
+			<p class="c-project-feature__body">Grid-based movement and line-of-sight, attacks, spellcasting, rage, smite, breath weapons, short/long rests, and death saves — synced live per encounter over WebSockets.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-map"></i> Map editor</p>
+			<p class="c-project-feature__body">Paint tile-based dungeon/outdoor maps, place spawn points, loot, and transitions between maps and modules. Desktop-only — grid painting doesn't translate to a phone.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-people"></i> Standing party &amp; accounts</p>
+			<p class="c-project-feature__body">A persistent, server-side roster of up to 4 characters managed from a header toolbar; username/password accounts (PBKDF2-hashed) scope characters and maps to their owner.</p>
+		</div>
+	</div>
+
+	<div class="c-post__body c-docs-body">
+
+		<h2>Tech stack</h2>
+		<table class="bx-table">
+			<tr><th>Layer</th><th>What</th></tr>
+			<tr><td>Backend</td><td><a href="https://boxlang.io/" target="_blank" rel="noopener">BoxLang</a> (<code class="bx-inline">.bx</code> classes, <code class="bx-inline">.bxm</code> templates) running on <a href="https://www.ortussolutions.com/products/commandbox" target="_blank" rel="noopener">CommandBox</a> — no separate compile/build step for backend code.</td></tr>
+			<tr><td>Realtime</td><td>SocketBox (bundled BoxLang WebSocket module).</td></tr>
+			<tr><td>Database</td><td>MySQL.</td></tr>
+			<tr><td>Frontend</td><td><a href="https://vuejs.org/" target="_blank" rel="noopener">Vue 3</a> + Vue Router 4, loaded via CDN <code class="bx-inline">&lt;script&gt;</code> tags — plain JS components, no bundler/npm build.</td></tr>
+			<tr><td>Styling</td><td>Hand-written CSS (<code class="bx-inline">public/assets/game.css</code>), no framework.</td></tr>
+		</table>
+
+		<h2>Project layout</h2>
+		<pre class="bx-code"><code>models/                  BoxLang service classes (business logic + SQL)
+  AuthService.bx          Login/register, password hashing, ownership checks
+  CharacterService.bx      Character creation, inventory, sheet data
+  CombatService.bx        Facade over the combat engine — delegates to models/combat/
+  MapService.bx           Map/tile storage, editor persistence, geometry decode
+  combat/                  Combat engine, split into focused services:
+    DiceService.bx           Dice notation parsing and rolling
+    RulesService.bx          Ability/proficiency math, skills, species traits
+    GridService.bx           Pathfinding, line of sight, walkability
+    MonsterLibrary.bx        Stat-block parsing, rosters, spawn building
+    SpellcastingService.bx   Caster classes, spell slots, spell lookups
+    ProgressionService.bx    XP/level-ups, ASI, feats, multiclassing
+    CharacterStateService.bx Character load/save, short/long rests
+    CombatActionsService.bx  Attack resolution, action economy, conditions
+    EnemyAIService.bx        Enemy turns, aggro, legendary actions
+
+public/
+  Application.bx           App-level config (session, datasource, cache-busting)
+  WebSocket.bx              Combat WebSocket message handler
+  index.bxm                 SPA shell (loads Vue + all component scripts)
+  api/                       JSON endpoints consumed by the frontend (*.bxm)
+  assets/
+    app.js                   Router, root layout/nav, shared game state
+    components/*.js          Vue components (one per screen)
+    game.css                 All styling
+
+db/                       Schema + reference-data dump
+runtime/boxlang.json      BoxLang engine config (datasource, caches, logging)
+server.json               CommandBox server config (webroot, WebSocket wiring)</code></pre>
+
+		<h2>Setup</h2>
+		<h3>Prerequisites</h3>
+		<ul>
+			<li><a href="https://commandbox.ortusbooks.com/setup/installation" target="_blank" rel="noopener">CommandBox</a> (installs BoxLang automatically via <code class="bx-inline">server.json</code>'s <code class="bx-inline">cfengine</code> setting)</li>
+			<li>MySQL reachable at the host/port configured below</li>
+		</ul>
+
+		<h3>1. Database</h3>
+		<p>Load the schema and reference data into a fresh <code class="bx-inline">gameserver</code> database:</p>
+		<pre class="bx-code"><span class="bx-code-label">bash</span><code>mysql -u root gameserver &lt; db/schema.sql
+mysql -u root gameserver &lt; db/seed.sql</code></pre>
+
+		<h3>2. Configure the datasource (optional)</h3>
+		<p>Defaults assume MySQL on <code class="bx-inline">127.0.0.1:3306</code> with user <code class="bx-inline">root</code> and no password, database <code class="bx-inline">gameserver</code>. Override via environment variables before starting the server:</p>
+		<pre class="bx-code"><span class="bx-code-label">bash</span><code>export DB_HOST=127.0.0.1
+export DB_PORT=3306
+export DB_DATABASE=gameserver
+export DB_USER=root
+export DB_DRIVER=MySQL   ## or MSSQL, Postgres, etc.</code></pre>
+
+		<h3>3. Start the server</h3>
+		<pre class="bx-code"><span class="bx-code-label">bash</span><code>box server start</code></pre>
+		<p>First run installs the <code class="bx-inline">bx-mysql</code> module automatically. The app is then served at the URL CommandBox prints (defaults to a random free port — pin one with <code class="bx-inline">box server start port=8080</code> if you want it fixed).</p>
+
+		<h3>4. Create an account</h3>
+		<p>Visit the app and register; there's no seeded admin user. The seeded modules (The Arena, Starter Dungeon) have no owner, so they're playable immediately but not editable via the map editor until claimed:</p>
+		<pre class="bx-code"><span class="bx-code-label">sql</span><code>UPDATE adventure_modules SET owner_user_id = &lt;your-user-id&gt; WHERE owner_user_id IS NULL;</code></pre>
+		<p>If you're restoring an existing populated database rather than a fresh seed, the same applies to any <code class="bx-inline">characters</code> rows with no owner.</p>
+
+		<h2>Development notes</h2>
+		<p><strong>No frontend build step.</strong> Edit <code class="bx-inline">public/assets/**/*.js</code> or <code class="bx-inline">game.css</code> directly and reload — nothing to compile.</p>
+		<p><strong>Cache-busting</strong>: every asset <code class="bx-inline">&lt;script&gt;</code>/<code class="bx-inline">&lt;link&gt;</code> tag in <code class="bx-inline">index.bxm</code> carries a <code class="bx-inline">?v=</code> query string set once at server start (<code class="bx-inline">Application.bx</code>). Restarting the server (<code class="bx-inline">box server restart</code>) forces browsers to pick up frontend changes instead of serving stale cached JS/CSS — or, without a restart, load any page while logged in with <code class="bx-inline">?resetassets=1</code> appended to regenerate the token immediately. Ignored for a logged-out visitor, so it can't be used to force cache invalidation for other users.</p>
+		<p><strong>Formatting</strong>: <code class="bx-inline">box run-script format</code> (or <code class="bx-inline">format:check</code> for CI) formats <code class="bx-inline">models/</code> and root <code class="bx-inline">.bx</code> files via <code class="bx-inline">boxlang format</code>.</p>
+		<div class="bx-callout">
+			<strong>Exposing it externally (e.g. via ngrok)</strong>
+			Works out of the box — <code class="bx-inline">new WebSocket("/ws")</code> resolves to <code class="bx-inline">wss://</code> automatically over HTTPS, no config changes needed. Just remember sessions are per-origin, so you'll need to log in again on the tunnel's URL even if you're already logged in on <code class="bx-inline">localhost</code>.
+		</div>
+
+		<h2>Testing</h2>
+		<p>All submissions must include corresponding test specs (<code class="bx-inline">tests/specs/</code>) covering the change. Tests run via <a href="https://testbox.ortusbooks.com/" target="_blank" rel="noopener">TestBox</a>'s HTTP runner (<code class="bx-inline">tests/runner.bxm</code>), not a CommandBox CLI module. With the server running:</p>
+		<ul>
+			<li><strong>Browser</strong> — visit <code class="bx-inline">/tests/runner.bxm</code> for TestBox's visual HTML report.</li>
+			<li><strong>CLI/CI</strong> — <code class="bx-inline">curl -s "http://127.0.0.1:PORT/tests/runner.bxm?reporter=json"</code> for a JSON summary (<code class="bx-inline">totalSpecs</code>, <code class="bx-inline">totalPass</code>, <code class="bx-inline">totalFail</code>, <code class="bx-inline">totalError</code>).</li>
+		</ul>
+		<p>Useful query params: <code class="bx-inline">reporter</code> (<code class="bx-inline">simple</code> default, <code class="bx-inline">json</code>, <code class="bx-inline">text</code>, <code class="bx-inline">dot</code>), <code class="bx-inline">bundles</code> (restrict to one spec — needs the fully-qualified dotted path, e.g. <code class="bx-inline">?bundles=tests.specs.unit.CombatServiceSpec</code>), <code class="bx-inline">labels</code> (restrict to labeled tests).</p>
+
+		<h2>Credits</h2>
+		<p>Dungeon/tile art from Kenney's <a href="https://kenney.nl/assets/tiny-dungeon" target="_blank" rel="noopener">Tiny Dungeon</a> and <a href="https://kenney.nl/assets/roguelike-rpg-pack" target="_blank" rel="noopener">Roguelike/RPG</a> packs (CC0 1.0).</p>
+
+	</div>
+</div>
+</bx:output>
+<bx:include template="../../partials/_foot.bxm">

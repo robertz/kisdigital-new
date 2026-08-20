@@ -25,6 +25,12 @@ class {
 			name    : "coldbox-graphql",
 			icon    : "bi-diagram-3",
 			tagline : "A schema-agnostic ColdBox module that serves a GraphQL API from SDL files you supply."
+		},
+		{
+			slug    : "dnd-game-v2",
+			name    : "dnd-game-v2",
+			icon    : "bi-dice-5",
+			tagline : '"The Adventure Begins" — a browser-based, D&D 5e-inspired dungeon crawler with real-time WebSocket combat, no frontend build step.'
 		}
 	];
 
