@@ -39,7 +39,6 @@
 <p>See <a href="/projects/boxlang-express/docs/config">Configuration</a> for the full datasource block. Two <em>separate</em> things worth knowing, found by actually running it against a real database rather than trusting the docs:</p>
 <ul>
   <li>Keep <code class="bx-inline">"default"</code> in the <code class="bx-inline">caches</code> block alongside your own entry — overriding <code class="bx-inline">caches</code> replaces it wholesale, and BoxLang's own query engine depends on a <code class="bx-inline">"default"</code> cache existing somewhere in it.</li>
-  <li><strong>Declaring <code class="bx-inline">"default"</code> does not fix <code class="bx-inline">autoCreate: true</code></strong> — that's a separate, still-broken problem. <code class="bx-inline">autoCreate: true</code> can throw <code class="bx-inline">Cache [default] does not exist</code> at BoxLang startup regardless of whether <code class="bx-inline">"default"</code> is declared or where it sits in the JSON, since <code class="bx-inline">JDBCStore</code>'s own table-creation check isn't ordered relative to <code class="bx-inline">"default"</code>'s registration. Create the table once yourself and leave <code class="bx-inline">autoCreate: false</code> — that's the only workaround confirmed to actually work.</li>
 </ul>
 
 <h2>The session cookie</h2>

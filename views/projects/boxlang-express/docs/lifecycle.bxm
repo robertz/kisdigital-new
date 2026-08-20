@@ -10,10 +10,6 @@
 
 <h2>Graceful shutdown (Ctrl-C / SIGTERM)</h2>
 <p>The server registers a JVM shutdown hook when it starts, so <code class="bx-inline">Ctrl-C</code> or <code class="bx-inline">SIGTERM</code> always triggers a clean <code class="bx-inline">close()</code> — the listening socket is released and the dev-mode file watcher (if enabled) is stopped, whichever way the process ends. <code class="bx-inline">close()</code> itself is safe to call more than once.</p>
-<div class="bx-callout">
-  <strong>Why this exists</strong>
-  Without the shutdown hook, the JVM could tear the process down without ever calling <code class="bx-inline">close()</code> — the process would exit, but the port could be left in a state where restarting the server immediately afterward failed, and the dev-mode watcher thread wasn't guaranteed to stop cleanly either.
-</div>
 
 <h2>Port already in use</h2>
 <p>If the requested port is already bound, the server exits with a short, readable message instead of a raw Java stack trace:</p>
@@ -33,18 +29,4 @@
 
 <p>Watching <code class="bx-inline">.bxm</code> alongside <code class="bx-inline">.bx</code>/<code class="bx-inline">.bxs</code> is broader than a restart actually requires. A restart is only <em>necessary</em> for <code class="bx-inline">app.bxs</code> itself (or any other <code class="bx-inline">.bx</code> class file it loads) — that code runs once at process start, so editing <code class="bx-inline">app.get(...)</code> registrations or anything else at the top level does nothing until the script re-executes. A <code class="bx-inline">.bxm</code> view is different: <code class="bx-inline">res.render()</code> runs it via <code class="bx-inline">include</code>, which re-reads the file from disk on every request as long as <code class="bx-inline">trustedCache</code> is off (the default) — confirmed directly, editing a view and requesting it again immediately picked up the change with no restart at all, even with <code class="bx-inline">reloadOnChange</code> turned off entirely. Restarting on a view-only edit isn't wrong, just redundant work the file already didn't need.</p>
 
-<div class="bx-callout">
-  <strong>A failed restart doesn't take the server down with it</strong>
-  Launching the replacement is attempted before the current server is closed, not after. If it fails for any reason — a bad reconstructed command, a transient OS resource limit — that's caught and logged (<code class="bx-inline">[reloadOnChange] Failed to restart: ...</code>) instead of crashing, and the current server is left running rather than dying with nothing left to replace it.
-</div>
-
-<div class="bx-callout bx-warn">
-  <strong>Orphaned processes from before graceful shutdown was hardened</strong>
-  A process that never received the shutdown hook fix could survive a Ctrl-C entirely — still holding resources, invisible unless you went looking (<code class="bx-inline">ps aux | grep boxlang</code>, or checking whether a supposedly-free port responds). If a "phantom" dev server ever behaves this way, sending <code class="bx-inline">SIGTERM</code> directly (<code class="bx-inline">kill -TERM &lt;pid&gt;</code>) is the reliable fallback.
-</div>
-
-<div class="bx-callout bx-warn">
-  <strong>reloadOnChange doesn't survive being PID 1 in a container</strong>
-  Step 4 above — close the current server, let the old process exit — is exactly what breaks when that process <em>is</em> the container's PID 1 (e.g. an entrypoint that ends in <code class="bx-inline">exec boxlang app.bxs</code>). The replacement is a <em>child</em> process, not a true exec-replacement, so when the old PID 1 exits, Docker tears down the whole container immediately — regardless of whether the replacement had already started successfully. Editing any bind-mounted file (not just <code class="bx-inline">app.bxs</code> — the watcher covers the whole working directory) kills the container outright in this setup. <code class="bx-inline">init: true</code> (Docker's built-in tini) does <em>not</em> fix this either — tini only waits on its one direct child and exits right along with it, rather than adopting the orphaned replacement. What actually works is <code class="bx-inline">restart: unless-stopped</code> on the container: Compose notices the exit and boots a fresh container through the same entrypoint. It gets you the same end result — the edit shows up — but by fully restarting the container (and re-running any boot-time module install) rather than the fast in-process handoff described above.
-</div>
 </bx:output>

@@ -3,18 +3,10 @@
 <p class="bx-docs-lede">Install BoxLang Express, write a minimal server, and run it.</p>
 
 <h2>Prerequisites</h2>
-<p>You need the BoxLang CLI itself installed (e.g. via <a href="https://bx.dev" target="_blank" rel="noopener">bvm</a>, the BoxLang version manager). Once installed, <code class="bx-inline">boxlang</code> and <code class="bx-inline">bx</code> are available on your PATH.</p>
+<p>You need the BoxLang CLI itself installed (e.g. via <a href="https://bx.dev" target="_blank" rel="noopener">bvm</a>, the BoxLang version manager).</p>
 
 <h2>Installing BoxLang Express</h2>
-<p>BoxLang Express is a BoxLang module (<code class="bx-inline">box.json</code> declares <code class="bx-inline">moduleName: "boxexpress"</code>). BoxLang resolves modules from two places, in this order per its config:</p>
-<ol>
-  <li><code class="bx-inline">boxlang_modules/</code> next to your entry script (a project-local install)</li>
-  <li><code class="bx-inline">~/.boxlang/modules/</code> (a machine-wide install)</li>
-</ol>
-<div class="bx-callout bx-warn">
-  <strong>Gotcha: the global install can win over a project-local one</strong>
-  In testing, when a module of the same name exists in <em>both</em> places, the module actually loaded was the one in <code class="bx-inline">~/.boxlang/modules/</code> — not the project-local <code class="bx-inline">boxlang_modules/</code> copy, even though the runtime's own <code class="bx-inline">modulesDirectory</code> config lists the project-local path first. If a code change doesn't seem to take effect, check whether a global copy is shadowing your local one.
-</div>
+<p><code class="bx-inline">box install boxlang-express</code> or <code class="bx-inline">install-bx-module boxlang-express</code></p>
 
 <h2>Your first server</h2>
 <p>Once the module resolves, <code class="bx-inline">boxExpress()</code> and its companion middleware BIFs (<code class="bx-inline">boxExpressJSON()</code>, <code class="bx-inline">boxExpressStatic()</code>, etc.) are available globally — no <code class="bx-inline">import</code> needed. Save this as <code class="bx-inline">app.bxs</code>:</p>

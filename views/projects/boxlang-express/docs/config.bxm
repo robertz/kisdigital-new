@@ -61,18 +61,6 @@ MYSQL_PASSWORD=super-secret</code></pre>
 <p>Unlike a typical CommandBox package, a BoxLang module installs into <code class="bx-inline">~/.boxlang/modules/</code> — <strong>global, machine-wide</strong> — by default, since that's where the BoxLang runtime itself looks. Pass <code class="bx-inline">--local</code> to install it at the project level instead:</p>
 <pre class="bx-code"><span class="bx-code-label">bash</span><code>box install bx-mysql --local</code></pre>
 <p>A local install lands in <code class="bx-inline">boxlang_modules/</code>, and if there's no <code class="bx-inline">box.json</code> yet, <code class="bx-inline">box install</code> creates one and records the dependency — so a teammate (or CI) cloning the project can run <code class="bx-inline">box install</code> with no arguments to fetch everything it depends on.</p>
-<div class="bx-callout bx-warn">
-  <strong>Same resolution rules as boxlang-express itself</strong>
-  A module installed this way is subject to the same <code class="bx-inline">boxlang_modules/</code> vs. <code class="bx-inline">~/.boxlang/modules/</code> lookup — and the same gotcha where a global copy of the same name can silently win. See <a href="/projects/boxlang-express/docs/getting-started">Getting Started</a> for the details.
-</div>
-
-<h3>Working against a cloned copy of a module</h3>
-<p>When you're actively developing a module yourself rather than installing a released version from ForgeBox, a symlink is the most reliable option — either project-local:</p>
-<pre class="bx-code"><span class="bx-code-label">bash</span><code>mkdir -p boxlang_modules
-ln -s /path/to/the-module boxlang_modules/the-module</code></pre>
-<p>...or machine-wide, so every project on your machine picks up the same working copy (this is what a global "npm link"-style workflow looks like for BoxLang):</p>
-<pre class="bx-code"><span class="bx-code-label">bash</span><code>ln -s /path/to/the-module ~/.boxlang/modules/the-module</code></pre>
-<p>Either way, the same global-wins-over-local resolution above still applies — a machine-wide symlink is what actually resolves if both exist for the same module name.</p>
 
 <h2>App-level settings</h2>
 <p>Separate from the CLI/runtime config above, BoxLang Express has its own small settings bag on the <code class="bx-inline">app</code> object, set with <code class="bx-inline">app.set(name, value)</code> and read back with <code class="bx-inline">app.getSetting(name)</code>:</p>
