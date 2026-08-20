@@ -1,0 +1,125 @@
+<bx:include template="../../partials/_head.bxm">
+<bx:output>
+<div class="container py-5">
+	<div class="c-project-hero">
+		<p class="c-project-hero__eyebrow">Project</p>
+		<h1 class="c-project-hero__title">boxlang-stomp-chat</h1>
+		<p class="c-project-hero__tagline">A Slack-like multi-channel chat app built on <a href="https://boxlang.io" target="_blank" rel="noopener" class="c-post-link">BoxLang</a> (via CommandBox) using SocketBox's STOMP broker for realtime messaging, with a Vue 3 frontend that needs no build step. No auth — pick a display name and go.</p>
+		<div class="c-project-hero__actions">
+			<a href="https://github.com/robertz/boxlang-stomp-chat" target="_blank" rel="noopener" class="btn btn-primary-custom">View on GitHub</a>
+		</div>
+	</div>
+
+	<div class="c-project-features">
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-broadcast"></i> Channels &amp; DMs</p>
+			<p class="c-project-feature__body">Create channels and join/leave at runtime; direct messages, presence lists, join/leave system messages, and typing indicators, all over one STOMP broker.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-lightning-charge"></i> No build step</p>
+			<p class="c-project-feature__body">Vue 3 loaded via plain <code>&lt;script&gt;</code> tags, with a per-page-load asset fingerprint and generated import map instead of a bundler.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-shield-lock"></i> Server-enforced auth</p>
+			<p class="c-project-feature__body">A single destination table, enforced in <code>authorize()</code>, decides what any connection can SEND or SUBSCRIBE to — including DM privacy.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-palette"></i> One-property theming</p>
+			<p class="c-project-feature__body">Every color is a single <code>light-dark()</code> custom property — no duplicated <code>prefers-color-scheme</code> override block.</p>
+		</div>
+	</div>
+
+	<div class="c-post__body c-docs-body">
+
+		<h2>Running it</h2>
+		<pre class="bx-code"><span class="bx-code-label">bash</span><code>box install && box server start</code></pre>
+		<p>Then open <code class="bx-inline">http://localhost:8080</code>. Append <code class="bx-inline">?debug</code> to the URL for STOMP frame logging in the console, plus <code class="bx-inline">window.__chat</code> (reactive state) and <code class="bx-inline">window.__chatClient</code> (the STOMP client) for poking at things.</p>
+
+		<h2>Features</h2>
+		<ul>
+			<li>Create channels and join/leave them; <code class="bx-inline">General</code> is the default and can't be left</li>
+			<li>Message history (last 100 per channel, in memory — cleared on server restart)</li>
+			<li>Per-channel presence list, showing who is in the channel you're viewing</li>
+			<li>Direct messages — click anyone in the member list to start one</li>
+			<li>Join/leave system messages</li>
+			<li>Typing indicators</li>
+			<li>Per-channel unread badges</li>
+		</ul>
+
+		<h2>How it works</h2>
+		<p>The whole server side is <code class="bx-inline">WebSocket.bx</code>, which extends <code class="bx-inline">modules.socketbox.models.WebSocketSTOMP</code>. <code class="bx-inline">server.json</code> points CommandBox's WebSocket listener at it, exposing the broker at <code class="bx-inline">/ws</code>.</p>
+		<p>State lives in <code class="bx-inline">models/ChatStore.bx</code>, a single instance cached in the application scope and shared by the WebSocket listener and HTTP requests.</p>
+
+		<h3>Asset versioning</h3>
+		<p><code class="bx-inline">models/Assets.bx</code> fingerprints every file under <code class="bx-inline">assets/</code> (path, size, mtime) and hands <code class="bx-inline">index.bxm</code> a <code class="bx-inline">?v=&lt;hash&gt;</code> for the stylesheet and entry script. Because a JS module's own relative imports (<code class="bx-inline">./useChat.js</code>) are static text nobody can rewrite, the generated <strong>import map</strong> carries one entry per local module mapping <code class="bx-inline">/assets/x.js</code> to <code class="bx-inline">/assets/x.js?v=&lt;hash&gt;</code> — import map keys match the <em>resolved</em> URL, so nested imports get the same query string and every importer still lands on a single module instance. <code class="bx-inline">index.bxm</code> itself is served <code class="bx-inline">Cache-Control: no-cache</code>, since it's the only thing that knows the current fingerprint.</p>
+		<p>The scan runs per page load, so editing a file busts it immediately; no restart needed.</p>
+
+		<h3>Direct messages</h3>
+		<p>A conversation between two people is just a channel with a reserved slug: <code class="bx-inline">dm-&lt;hexA&gt;--&lt;hexB&gt;</code>, the two lowercased usernames hex-encoded and sorted. Both ends compute it independently, so no lookup is needed, and history, typing indicators, unread counts and presence all come along for free.</p>
+		<p>Hex rather than the plain names because a username may contain spaces and dots — any lossier flattening could map two different people onto the same conversation, which would leak messages between them. <code class="bx-inline">WebSocket.bx</code> and <code class="bx-inline">assets/useChat.js</code> each carry the same encoder; they have to agree.</p>
+		<p>Since the slug is derivable from two public usernames, the only thing keeping a conversation private is the guard at the top of <code class="bx-inline">authorize()</code>, which rejects any <code class="bx-inline">chat.</code>, <code class="bx-inline">typing.</code> or <code class="bx-inline">presence.</code> destination whose slug is a DM the connection isn't part of. For the same reason DM history is <em>not</em> served by <code class="bx-inline">api.bxm</code> — that endpoint has no identity behind it — and arrives over the socket instead, pushed to <code class="bx-inline">private.&lt;session&gt;</code> when a participant subscribes.</p>
+		<p>A DM has nowhere to appear in the recipient's sidebar until they subscribe to it, so <code class="bx-inline">onSend</code> also notifies every live connection of both participants. It re-sends on every message; the client only treats it as unread for a conversation it wasn't already in, which is what stops a message being counted twice.</p>
+		<p>Closing a conversation is local only. The history survives on the server, so the next message reopens it where you left off.</p>
+
+		<h3>Theming</h3>
+		<p>Every colour is one <code class="bx-inline">light-dark( light, dark )</code> custom property in <code class="bx-inline">:root</code>, so there is a single token list rather than a base block plus a duplicated <code class="bx-inline">prefers-color-scheme</code> override. <code class="bx-inline">light-dark()</code> resolves against the element's used <code class="bx-inline">color-scheme</code>, which means a manual override only has to change that one property:</p>
+		<pre class="bx-code"><span class="bx-code-label">css</span><code>:root[data-theme='dark'] { color-scheme: dark; }</code></pre>
+		<p><code class="bx-inline">assets/useTheme.js</code> cycles auto &rarr; light &rarr; dark and stores the choice in <code class="bx-inline">localStorage</code> under <code class="bx-inline">stomp.theme</code>; auto (the default) stores nothing and lets <code class="bx-inline">prefers-color-scheme</code> decide. An inline script in <code class="bx-inline">index.bxm</code> reads the same key before first paint so an explicit choice doesn't flash the wrong theme — the key is deliberately duplicated there, since nothing behind the import map has loaded that early.</p>
+		<p>Setting <code class="bx-inline">color-scheme</code> also fixes the UA-rendered parts (scrollbars, the textarea, focus rings) that no amount of custom properties would reach.</p>
+		<p>Baseline: Chrome 123, Safari 17.5, Firefox 120.</p>
+
+		<h3>Layout</h3>
+		<p>Three columns above 1024px. Between 1024 and 760 the presence panel becomes a right-hand drawer behind a member-count button in the header; below 760 the channel sidebar becomes a left-hand drawer behind a hamburger that carries the combined unread count for the channels you aren't looking at. Drawers close on scrim tap, on their own &times;, and on any channel switch.</p>
+
+		<h3>Destinations</h3>
+		<p>Everything runs on SocketBox's default <code class="bx-inline">direct</code> exchange, which routes a SEND to whatever subscriptions exist at that exact destination. That's why channels can be created at runtime with no configuration.</p>
+		<table class="bx-table">
+			<tr><th>Destination</th><th>SEND</th><th>SUBSCRIBE</th><th>Purpose</th></tr>
+			<tr><td><code class="bx-inline">chat.&lt;slug&gt;</code></td><td>yes</td><td>yes</td><td>Chat and system messages for one channel</td></tr>
+			<tr><td><code class="bx-inline">typing.&lt;slug&gt;</code></td><td>yes</td><td>yes</td><td>Transient typing pings, never stored</td></tr>
+			<tr><td><code class="bx-inline">channels</code></td><td>no</td><td>yes</td><td>Channel directory broadcasts</td></tr>
+			<tr><td><code class="bx-inline">channels.create</code></td><td>yes</td><td>no</td><td>Request creation of a new channel</td></tr>
+			<tr><td><code class="bx-inline">presence.&lt;slug&gt;</code></td><td>no</td><td>yes</td><td>Who is currently in one channel</td></tr>
+			<tr><td><code class="bx-inline">private.&lt;session&gt;</code></td><td>no</td><td>yes</td><td>Targeted replies to one connection</td></tr>
+		</table>
+		<p>Direct messages reuse the <code class="bx-inline">chat.</code>, <code class="bx-inline">typing.</code> and <code class="bx-inline">presence.</code> rows above with a <code class="bx-inline">dm-</code> slug rather than adding destinations of their own.</p>
+		<p><code class="bx-inline">authorize()</code> in <code class="bx-inline">WebSocket.bx</code> enforces that table. A connection may only read its own <code class="bx-inline">private.</code> destination, and <code class="bx-inline">channels</code>/<code class="bx-inline">presence.*</code> are broadcast-only so a client can't forge a directory or presence update.</p>
+		<p>Channel membership is <strong>derived</strong> from the live <code class="bx-inline">chat.&lt;slug&gt;</code> subscriptions (<code class="bx-inline">getChannelMembers()</code>) rather than tracked in a parallel structure, so it can't drift out of sync — a dropped connection disappears from presence for free, and a user with two tabs open still appears once.</p>
+		<p>The username arrives in the STOMP CONNECT frame's <code class="bx-inline">login</code> header. <code class="bx-inline">onSend()</code> overwrites the message body server-side, stamping <code class="bx-inline">from</code> from the connection record, so a client can't spoof authorship.</p>
+
+		<h3>api.bxm</h3>
+		<p>Two read-only JSON actions used to hydrate a freshly loaded page: <code class="bx-inline">?action=channels</code> and <code class="bx-inline">?action=history&amp;channel=&lt;slug&gt;</code>. Everything after load comes over STOMP.</p>
+
+		<h2>Notes and gotchas</h2>
+		<p>Things worth knowing if you extend this:</p>
+
+		<div class="bx-callout bx-warn">
+			<strong>A multi-byte character in a message body drops the frame</strong>
+			SocketBox's <code class="bx-inline">MessageParser.readBody()</code> loops <code class="bx-inline">content-length</code> times over <code class="bx-inline">charAt()</code>, but content-length counts bytes and <code class="bx-inline">charAt()</code> walks UTF-16 chars — so a body holding an em dash, an accent, CJK or an emoji overruns the frame and is discarded. Inbound only; <code class="bx-inline">serialize()</code> sets the outgoing header in real bytes, so it can look like a client bug. <strong>Not a charset setting</strong> — the string is already correct UTF-8, which is why you get a length mismatch and not mojibake. Patched locally in <code class="bx-inline">modules/socketbox/models/STOMP/MessageParser.cfc</code> by slicing the byte window and decoding it back; <code class="bx-inline">modules/</code> is gitignored, so <code class="bx-inline">box install</code> will undo that and it needs to go upstream.
+		</div>
+
+		<div class="bx-callout bx-warn">
+			<strong>Frames from one socket are not handled in order</strong>
+			The broker dispatches them across worker threads, so a reply the server pushes in response to frame N can be sent before frame N-1's subscription is registered. This ate DM history on every reconnect: <code class="bx-inline">private.&lt;session&gt;</code> and the DM's <code class="bx-inline">chat.</code> subscribe went out in the same burst, and the backlog was sent into a destination nobody was listening to yet. The client now puts a <code class="bx-inline">receipt</code> on the private subscribe and waits for the broker's RECEIPT before subscribing to any DM. The presence replay in <code class="bx-inline">onSubscribe()</code> is a workaround for the same underlying thing.
+		</div>
+
+		<ul>
+			<li><strong><code class="bx-inline">sendError()</code> closes the channel.</strong> Per the STOMP spec, SocketBox terminates the connection after an ERROR frame. Recoverable errors (a bad channel name) are sent to the client's <code class="bx-inline">private.&lt;session&gt;</code> destination instead.</li>
+			<li><strong>The ERROR frame's <code class="bx-inline">message</code> header is hardcoded</strong> to "Invalid login". Your real reason from <code class="bx-inline">authenticate()</code> lands in the frame <em>body</em>, which is why the client prefers <code class="bx-inline">frame.body</code>.</li>
+			<li><strong><code class="bx-inline">onClose()</code> and <code class="bx-inline">onSTOMPDisconnect()</code> delete the connection record</strong> before returning, so capture the login and subscriptions <em>before</em> calling <code class="bx-inline">super</code>.</li>
+			<li><strong>UNSUBSCRIBE frames carry only an <code class="bx-inline">id</code></strong>, no destination. It has to be resolved from the subscription registry before <code class="bx-inline">super</code> removes it.</li>
+			<li><strong>Presence needs a replay on subscribe.</strong> A client subscribes to <code class="bx-inline">chat.&lt;slug&gt;</code> and <code class="bx-inline">presence.&lt;slug&gt;</code> as two separate frames, so the broadcast triggered by the first can land before the second exists. <code class="bx-inline">onSubscribe()</code> re-sends a snapshot when someone subscribes to a <code class="bx-inline">presence.</code> destination.</li>
+			<li><strong>Never pass <code class="bx-inline">debug: undefined</code> to the stompjs <code class="bx-inline">Client</code>.</strong> It configures itself with <code class="bx-inline">Object.assign( this, conf )</code>, so an explicit <code class="bx-inline">undefined</code> overwrites the class's default no-op <code class="bx-inline">debug</code> method — the first internal call then throws, the socket is never created, and reconnection never fires. Pass <code class="bx-inline">() => {}</code> instead.</li>
+			<li><strong>A SEND can arrive before the connection is registered.</strong> <code class="bx-inline">getConnectionDetails()</code> comes back empty for a frame that races CONNECT, which would leave the client's raw body un-stamped. <code class="bx-inline">onSend()</code> drops chat/typing frames with no login rather than forwarding them.</li>
+			<li><strong>A model cached in the application scope keeps its old class.</strong> Editing <code class="bx-inline">ChatStore.bx</code> while the server is running gets you <code class="bx-inline">Method 'x' not found</code> from the instance already sitting in <code class="bx-inline">application.chatStore</code>. Restart after changing a cached model; only the unversioned frontend assets pick up edits live.</li>
+			<li><strong>Media queries add no specificity.</strong> The responsive block lives at the bottom of <code class="bx-inline">app.css</code> on purpose — put a <code class="bx-inline">@media</code> override before the base rule it undoes and the base rule wins.</li>
+			<li><strong>BoxLang has no <code class="bx-inline">chr()</code> or <code class="bx-inline">header()</code>.</strong> Use <code class="bx-inline">char()</code> and the <code class="bx-inline">&lt;bx:header&gt;</code> tag — calling it in function form inside a <code class="bx-inline">&lt;bx:script&gt;</code> block in a <code class="bx-inline">.bxm</code> breaks the template lexer outright.</li>
+			<li><strong><code class="bx-inline">url</code> is a scope.</strong> A method named <code class="bx-inline">url()</code> on a component resolves to the URL scope struct instead, hence <code class="bx-inline">Assets.versioned()</code>.</li>
+			<li><strong><code class="bx-inline">.bx</code> files run in BoxLang mode</strong>, so it's <code class="bx-inline">jsonSerialize()</code>, not <code class="bx-inline">serializeJSON()</code>. SocketBox's own <code class="bx-inline">.cfc</code> files run in CF-compat mode where both exist — don't copy BIF names across the boundary.</li>
+			<li>Cluster mode is off. SocketBox supports it if you ever run more than one node.</li>
+		</ul>
+
+	</div>
+</div>
+</bx:output>
+<bx:include template="../../partials/_foot.bxm">

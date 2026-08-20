@@ -43,6 +43,12 @@ class {
 			name    : "boxlang-ssg",
 			icon    : "bi-file-earmark-richtext",
 			tagline : "A lightweight static site generator written in pure BoxLang — Markdown/.bxm, layouts, collections, and pagination."
+		},
+		{
+			slug    : "boxlang-stomp-chat",
+			name    : "boxlang-stomp-chat",
+			icon    : "bi-chat-dots",
+			tagline : "A Slack-like multi-channel chat app on BoxLang + SocketBox STOMP, with a no-build-step Vue 3 frontend."
 		}
 	];
 
