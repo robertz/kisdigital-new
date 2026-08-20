@@ -131,6 +131,53 @@ class {
 	}
 
 	/**
+	 * Site-wide daily request totals (same visitor-traffic filter as every
+	 * other method here) for the admin dashboard's traffic chart — the
+	 * full-site equivalent of PostService.getDailyViewTotals(), which only
+	 * ever counted individual post-page views. Same recursive-CTE
+	 * date-series trick as that method, so a quiet day still gets a zero
+	 * row instead of silently vanishing from the chart.
+	 *
+	 * Cached in cache("default") for 5 minutes: the underlying data only
+	 * moves at RequestLogger.bx's flush granularity (every 5s) anyway, and
+	 * this is a 30-day recursive CTE against the full table — not something
+	 * to re-run on every dashboard load.
+	 *
+	 * @return {array} Array of structs with keys: view_date, total_views. Ordered oldest to newest.
+	 */
+	function getDailyTotals( numeric daysBack = 30 ){
+		var cacheKey = "insights:dailyTotals:" & arguments.daysBack;
+		var cached   = cache( "default" ).get( cacheKey );
+		if ( cached.isPresent() ){
+			return cached.get();
+		}
+
+		var days   = arguments.daysBack;
+		var result = queryExecute(
+			"WITH RECURSIVE date_series AS (
+				SELECT DATE_SUB(CURDATE(), INTERVAL :days DAY) AS d
+				UNION ALL
+				SELECT DATE_ADD(d, INTERVAL 1 DAY) FROM date_series WHERE d < CURDATE()
+			)
+			SELECT
+				ds.d AS view_date,
+				COALESCE(COUNT(rl.id), 0) AS total_views
+			FROM date_series ds
+			LEFT JOIN RequestLog rl
+				ON DATE(rl.requested_at) = ds.d
+				AND " & _where() & "
+				AND " & _excluding404() & "
+			GROUP BY ds.d
+			ORDER BY ds.d ASC",
+			_params( days ),
+			{ returnType: "array" }
+		);
+
+		cache( "default" ).set( cacheKey, result, 300 );
+		return result;
+	}
+
+	/**
 	 * Paginated, mostly-unfiltered raw log rows for the /manage/logs browser
 	 * — every request this server handled, newest first, none of the
 	 * bot/asset/admin filtering the aggregate methods above apply. That

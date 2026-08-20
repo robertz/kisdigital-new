@@ -258,7 +258,7 @@ class {
 			pageTitle       : "Dashboard",
 			manageSection   : "dashboard",
 			manageUser      : req.session.manage_user,
-			traffic         : buildTrafficChartData( variables.postService.getDailyViewTotals( 30 ) ),
+			traffic         : buildTrafficChartData( insightsFetch( () => variables.insightsService.getDailyTotals( 30 ), [] ) ),
 			zeroResultSearches : variables.postService.getZeroResultSearches( 30 ),
 			recentActivity     : variables.postService.getRecentActivity( 8 ),
 			contentHealth      : variables.postService.getContentHealth(),
