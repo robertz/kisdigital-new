@@ -643,6 +643,25 @@
 	color: var(--text-placeholder);
 }
 
+/* Safari/Chrome's built-in calendar/clock icon on datetime-local, date, and
+   time inputs — color-scheme (see root.css) already fixes the picker
+   popover itself, this just dims the icon to match the input's own muted
+   styling instead of full-opacity black/white. */
+.c-manage-form__input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+.c-manage-form__input[type="date"]::-webkit-calendar-picker-indicator,
+.c-manage-form__input[type="time"]::-webkit-calendar-picker-indicator {
+	opacity: 0.55;
+	cursor: pointer;
+	border-radius: 4px;
+	transition: opacity 120ms ease;
+}
+
+.c-manage-form__input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover,
+.c-manage-form__input[type="date"]::-webkit-calendar-picker-indicator:hover,
+.c-manage-form__input[type="time"]::-webkit-calendar-picker-indicator:hover {
+	opacity: 0.9;
+}
+
 .c-manage-form__textarea {
 	display: block;
 	width: 100%;

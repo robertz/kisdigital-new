@@ -1,4 +1,11 @@
 :root {
+	/* Tells Safari (and other browsers) which palette native controls —
+	   datetime-local's picker popover, scrollbars, etc — should render in.
+	   Without this, a native control ignores the theme entirely and shows
+	   the browser's plain default appearance, mismatched against the rest
+	   of the page. */
+	color-scheme: light;
+
 	--site-background-color: #f4f4f8;
 	--site-padding-top: 56px;
 	--site-font-size: 0.9375rem;
@@ -70,6 +77,7 @@
 
 @media (prefers-color-scheme: dark) {
 	:root:not([data-theme="light"]) {
+		color-scheme: dark;
 		--site-background-color: #1a1a1b;
 		--ui-shadow-sm: 0 1px 0 rgba(255,255,255,0.03), 0 4px 16px rgba(0,0,0,0.45);
 
@@ -113,6 +121,7 @@
 }
 
 [data-theme="dark"] {
+	color-scheme: dark;
 	--site-background-color: #1a1a1b;
 	--ui-shadow-sm: 0 1px 0 rgba(255,255,255,0.03), 0 4px 16px rgba(0,0,0,0.45);
 
