@@ -1,0 +1,116 @@
+<bx:include template="../../partials/_head.bxm">
+<bx:output>
+<div class="c-manage">
+
+	<!--- Sidebar nav --->
+	<bx:include template="../../partials/manageNav.bxm">
+
+	<!--- Main content --->
+	<main class="c-manage-main">
+
+		<bx:if len( data.success )>
+			<div class="c-manage-alert c-manage-alert--success">
+				<i class="bi bi-check-circle-fill"></i>
+				#encodeForHTML( data.success )#
+			</div>
+		</bx:if>
+
+		<div class="c-manage-posts">
+
+			<div class="c-manage-header">
+				<div class="c-manage-header__lead">
+					<span class="c-manage-header__eyebrow">Configuration</span>
+					<h1 class="c-manage-header__title">Project Docs</h1>
+					<p class="c-manage-header__sub">Edit project documentation pages directly — no deploy needed.</p>
+				</div>
+				<a href="/manage/project-docs/new" class="c-manage-posts__new">
+					<i class="bi bi-plus-lg"></i> New page
+				</a>
+			</div>
+
+			<bx:loop array="#data.projects#" item="project">
+				<bx:set projectDocs = data.grouped[ project.slug ] ?: []>
+
+				<section class="c-manage-section">
+					<header class="c-manage-section__head c-manage-section__head--with-action">
+						<h2><i class="bi #encodeForHTML( project.icon )#"></i> #encodeForHTML( project.name )#</h2>
+						<a href="/manage/project-docs/new?project=#encodeForURL( project.slug )#" class="c-manage-dashboard__link">
+							<i class="bi bi-plus-lg"></i> Add page
+						</a>
+					</header>
+
+					<bx:if !projectDocs.len()>
+						<div class="c-manage-panel__empty c-manage-panel__empty--inline">
+							<p>No doc pages yet.</p>
+						</div>
+					<bx:else>
+						<div class="c-manage-panel">
+							<div class="c-manage-table-wrap">
+								<table class="c-manage-table">
+									<thead>
+										<tr>
+											<th>Title</th>
+											<th>Slug</th>
+											<th>Updated</th>
+											<th></th>
+										</tr>
+									</thead>
+									<tbody>
+										<bx:loop array="#projectDocs#" item="doc" index="docIndex">
+											<tr>
+												<td>
+													<a href="/manage/project-docs/#encodeForURL( doc.id )#/edit" class="c-manage-table__title">
+														#encodeForHTML( doc.title )#
+													</a>
+												</td>
+												<td class="c-manage-table__cell-muted">#encodeForHTML( doc.page_slug )#</td>
+												<td class="c-manage-table__cell-muted">
+													<bx:if len( doc.last_updated ) && isDate( doc.last_updated )>
+														#dateFormat( doc.last_updated, "d mmm yyyy" )#
+													<bx:else>
+														—
+													</bx:if>
+												</td>
+												<td>
+													<div class="c-manage-table__actions">
+														<form method="post" action="/manage/project-docs/#encodeForURL( doc.id )#/move">
+															<input type="hidden" name="_csrf" value="#encodeForHTMLAttribute( data.csrfToken )#">
+															<input type="hidden" name="direction" value="up">
+															<button type="submit" class="c-manage-table__icon-btn" title="Move up" #( docIndex == 1 ? "disabled" : "" )#>
+																<i class="bi bi-arrow-up"></i>
+															</button>
+														</form>
+														<form method="post" action="/manage/project-docs/#encodeForURL( doc.id )#/move">
+															<input type="hidden" name="_csrf" value="#encodeForHTMLAttribute( data.csrfToken )#">
+															<input type="hidden" name="direction" value="down">
+															<button type="submit" class="c-manage-table__icon-btn" title="Move down" #( docIndex == projectDocs.len() ? "disabled" : "" )#>
+																<i class="bi bi-arrow-down"></i>
+															</button>
+														</form>
+														<a href="/manage/project-docs/#encodeForURL( doc.id )#/edit" class="c-manage-posts__edit">
+															<i class="bi bi-pencil"></i> Edit
+														</a>
+														<form method="post" action="/manage/project-docs/#encodeForURL( doc.id )#/delete" onsubmit="return confirm('Delete this doc page? This can\'t be undone.');">
+															<input type="hidden" name="_csrf" value="#encodeForHTMLAttribute( data.csrfToken )#">
+															<button type="submit" class="c-manage-table__icon-btn" title="Delete">
+																<i class="bi bi-trash text-danger"></i>
+															</button>
+														</form>
+													</div>
+												</td>
+											</tr>
+										</bx:loop>
+									</tbody>
+								</table>
+							</div>
+						</div>
+					</bx:if>
+				</section>
+			</bx:loop>
+
+		</div>
+
+	</main>
+</div>
+</bx:output>
+<bx:include template="../../partials/_foot.bxm">

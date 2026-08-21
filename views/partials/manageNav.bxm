@@ -16,6 +16,11 @@
 	<a href="/manage/insights" class="c-manage-nav__link #( ( data.manageSection ?: '' ) == 'insights' ? 'c-manage-nav__link--active' : '' )#">
 		<i class="bi bi-bar-chart"></i> Insights
 	</a>
+	<bx:if ( data.manageUser.role ?: "" ) == "admin">
+	<a href="/manage/project-docs" class="c-manage-nav__link #( ( data.manageSection ?: '' ) == 'projectDocs' ? 'c-manage-nav__link--active' : '' )#">
+		<i class="bi bi-journal-code"></i> Project Docs
+	</a>
+	</bx:if>
 	<a href="/manage/logs" class="c-manage-nav__link #( ( data.manageSection ?: '' ) == 'logs' ? 'c-manage-nav__link--active' : '' )#">
 		<i class="bi bi-list-ul"></i> Request Log
 	</a>

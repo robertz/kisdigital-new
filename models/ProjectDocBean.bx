@@ -1,0 +1,142 @@
+/**
+ * Represents a single project documentation page (/projects/:slug/docs/:page).
+ *
+ * Hydration options:
+ *  - populate(struct)                    — hydrate from a query-result struct
+ *  - loadById(id)                        — query by UUID (admin edit)
+ *  - loadBySlug(projectSlug, pageSlug)   — query by project + page slug (public/admin)
+ *
+ * Use toStruct() to produce a snake_case struct for ProjectDocService.saveDoc().
+ * Use exists() to check whether the bean holds a real row after a load call.
+ */
+class accessors="true" {
+
+	property name="id"          type="string"  default="";
+	property name="projectSlug" type="string"  default="";
+	property name="pageSlug"    type="string"  default="";
+	property name="title"       type="string"  default="";
+	property name="body"        type="string"  default="";
+	property name="sortOrder"   type="numeric" default=0;
+	property name="created"     type="any"     default="";
+	property name="lastUpdated" type="any"     default="";
+
+	/**
+	 * Resets all properties to their defaults.
+	 * Called before every load so a failed lookup leaves the bean empty (exists() → false).
+	 */
+	function init(){
+		setId(          "" );
+		setProjectSlug( "" );
+		setPageSlug(    "" );
+		setTitle(       "" );
+		setBody(        "" );
+		setSortOrder(   0 );
+		setCreated(     "" );
+		setLastUpdated( "" );
+		return this;
+	}
+
+	/**
+	 * Populates this bean from a query-result struct.
+	 *
+	 * @param {struct} data - Query row struct or hand-built struct with matching keys.
+	 * @return {ProjectDocBean} this, for chaining.
+	 */
+	function populate( required struct data ){
+		setId(          data["id"]           ?: "" );
+		setProjectSlug( data["project_slug"] ?: "" );
+		setPageSlug(    data["page_slug"]    ?: "" );
+		setTitle(       data["title"]        ?: "" );
+		setBody(        data["body"]         ?: "" );
+		setSortOrder(   data["sort_order"]   ?: 0 );
+		setCreated(     data["created"]      ?: "" );
+		setLastUpdated( data["last_updated"] ?: "" );
+		return this;
+	}
+
+	/**
+	 * Returns true when the bean holds a real row (i.e. has a non-empty id).
+	 *
+	 * @return {boolean}
+	 */
+	function exists(){
+		return len( getId() ) > 0;
+	}
+
+	/**
+	 * Returns the canonical URL path for this doc page.
+	 *
+	 * @return {string}
+	 */
+	function getDocUrl(){
+		return "/projects/#encodeForURL( getProjectSlug() )#/docs/#encodeForURL( getPageSlug() )#";
+	}
+
+	/**
+	 * Loads a doc page by UUID, for admin edit use.
+	 *
+	 * @param {string} docId - The row UUID.
+	 * @return {ProjectDocBean} this, for chaining.
+	 */
+	function loadById( required string docId ){
+		init();
+
+		var rows = queryExecute(
+			"SELECT id, project_slug, page_slug, title, body, sort_order, created, last_updated
+			FROM ProjectDoc
+			WHERE id = :id
+			LIMIT 1",
+			{ "id": { value: arguments.docId, cfsqltype: "cf_sql_varchar" } },
+			{ returnType: "array" }
+		);
+
+		if ( !rows.len() ) return this;
+
+		return populate( rows[ 1 ] );
+	}
+
+	/**
+	 * Loads a doc page by project + page slug, for public display or admin edit.
+	 *
+	 * @param {string} projectSlug - The project's slug.
+	 * @param {string} pageSlug    - The doc page's slug within that project.
+	 * @return {ProjectDocBean} this, for chaining.
+	 */
+	function loadBySlug( required string projectSlug, required string pageSlug ){
+		init();
+
+		var rows = queryExecute(
+			"SELECT id, project_slug, page_slug, title, body, sort_order, created, last_updated
+			FROM ProjectDoc
+			WHERE project_slug = :project_slug
+				AND page_slug = :page_slug
+			LIMIT 1",
+			{
+				"project_slug": { value: arguments.projectSlug, cfsqltype: "cf_sql_varchar" },
+				"page_slug"   : { value: arguments.pageSlug,    cfsqltype: "cf_sql_varchar" }
+			},
+			{ returnType: "array" }
+		);
+
+		if ( !rows.len() ) return this;
+
+		return populate( rows[ 1 ] );
+	}
+
+	/**
+	 * Returns a snake_case struct suitable for ProjectDocService.saveDoc().
+	 *
+	 * @return {struct}
+	 */
+	function toStruct(){
+		return {
+			"id"          : getId(),
+			"project_slug": getProjectSlug(),
+			"page_slug"   : getPageSlug(),
+			"title"       : getTitle(),
+			"body"        : getBody(),
+			"sort_order"  : getSortOrder()
+		};
+	}
+
+}

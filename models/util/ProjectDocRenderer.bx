@@ -1,0 +1,199 @@
+/**
+ * Renders a project doc page's markdown body to display-ready HTML.
+ * Reuses PostRenderer's enhanceImages() (docs want the same image
+ * treatment as blog posts, if a page ever adds one), but *not*
+ * enhanceLinks() — docs pages cross-reference each other constantly
+ * (see() links between topics), and blindly forcing target="_blank" +
+ * blog-link styling onto every link, same-site included, is wrong here in
+ * a way it isn't for a blog post. enhanceExternalLinks() below only
+ * touches absolute http(s) links, leaving relative same-site links (the
+ * common case in docs) exactly as authored.
+ *
+ * Doc-specific passes give plain markdown() output the site's existing
+ * bx-* doc styling (public/assets/css/projects.css) without requiring
+ * editors to hand-write HTML:
+ *
+ *   - enhanceInlineCode(): bare <code> (backtick spans) -> class="bx-inline"
+ *   - enhanceCodeBlocks(): flexmark's <pre><code class="language-X"> ->
+ *     this site's <pre class="bx-code"><span class="bx-code-label">X</span><code>
+ *   - enhanceCallouts(): GitHub-style alert blockquotes
+ *     (> [!NOTE] Title / > [!WARNING] Title) -> <div class="bx-callout">
+ *     Raw HTML in the markdown source still passes through unchanged
+ *     (confirmed empirically against the vendored bx-markdown module), so
+ *     this convention is sugar on top of an escape hatch that already
+ *     exists for anything it doesn't cover.
+ *   - enhanceLede(): the first <p> right after a leading <h1> ->
+ *     class="bx-docs-lede"
+ *
+ * Order matters: enhanceInlineCode() has to run before enhanceCodeBlocks(),
+ * since it distinguishes an inline span from a code block's own <code> by
+ * checking it isn't immediately preceded by <pre> — true only until
+ * enhanceCodeBlocks() rewrites that shape.
+ */
+class {
+
+	variables.postRenderer = "";
+
+	function init( required postRenderer ){
+		variables.postRenderer = arguments.postRenderer;
+		return this;
+	}
+
+	function render( required string body ){
+		var html = markdown( arguments.body );
+		html = enhanceLede( html );
+		html = enhanceInlineCode( html );
+		html = enhanceCodeBlocks( html );
+		html = enhanceCallouts( html );
+		html = enhanceExternalLinks( html );
+		html = variables.postRenderer.enhanceImages( html );
+		return html;
+	}
+
+	/**
+	 * Same target/class treatment as PostRenderer.enhanceLinks(), but only
+	 * for links whose href is an absolute http(s) URL — a relative link
+	 * (starting with "/" or "#") is left completely untouched, since that's
+	 * how docs pages cross-reference each other and should stay in the
+	 * same tab with the page's own default link styling.
+	 */
+	function enhanceExternalLinks( required string html ) {
+		var Pattern  = createObject( "java", "java.util.regex.Pattern" );
+		var JMatcher = createObject( "java", "java.util.regex.Matcher" );
+
+		var hrefRegex = Pattern.compile( "href\s*=\s*[""']https?://", Pattern.CASE_INSENSITIVE );
+
+		var notQuot = char(91) & "^" & char(34) & char(39) & char(93);
+		var quot    = char(91) & char(34) & char(39) & char(93);
+		var classRegex = "class\s*=\s*" & quot & "(" & notQuot & "*)" & quot;
+
+		var tagPattern = Pattern.compile( "(<a\b)([^>]*)(>)", Pattern.CASE_INSENSITIVE );
+		var matcher    = tagPattern.matcher( arguments.html );
+		var sb         = createObject( "java", "java.lang.StringBuffer" ).init();
+
+		while ( matcher.find() ) {
+			var attrs = matcher.group( 2 );
+
+			if ( !hrefRegex.matcher( attrs ).find() ) {
+				matcher.appendReplacement( sb, JMatcher.quoteReplacement( matcher.group( 0 ) ) );
+				continue;
+			}
+
+			if ( !findNoCase( "target=", attrs ) ) {
+				attrs &= ' target="_blank"';
+			}
+
+			var classMatcher = Pattern.compile( classRegex, Pattern.CASE_INSENSITIVE ).matcher( attrs );
+			if ( classMatcher.find() ) {
+				var existingClass = classMatcher.group( 1 );
+				if ( !findNoCase( "c-post-link", existingClass ) ) {
+					attrs = classMatcher.replaceFirst( JMatcher.quoteReplacement( 'class="' & trim( existingClass ) & ' c-post-link"' ) );
+				}
+			} else {
+				attrs &= ' class="c-post-link"';
+			}
+
+			matcher.appendReplacement( sb, JMatcher.quoteReplacement( "<a" & attrs & ">" ) );
+		}
+
+		matcher.appendTail( sb );
+		return sb.toString();
+	}
+
+	/**
+	 * Tags bare <code>text</code> spans (markdown backtick spans) with
+	 * class="bx-inline" — only public/assets/css/projects.css's .bx-inline
+	 * rule is styled, not bare <code>. Skips a <code> immediately preceded
+	 * by <pre> (a fenced code block's own inner tag, handled separately by
+	 * enhanceCodeBlocks() instead) via a negative lookbehind.
+	 */
+	function enhanceInlineCode( required string html ) {
+		var Pattern = createObject( "java", "java.util.regex.Pattern" );
+		var pattern = Pattern.compile( "(?<!<pre>)<code>" );
+		var matcher = pattern.matcher( arguments.html );
+		return matcher.replaceAll( '<code class="bx-inline">' );
+	}
+
+	/**
+	 * Rewrites flexmark's fenced-code output into this site's labeled
+	 * bx-code shape:
+	 *   <pre><code class="language-bxs">...</code></pre>
+	 *   -> <pre class="bx-code"><span class="bx-code-label">bxs</span><code>...</code></pre>
+	 * A fence with no language info (```) has no class at all on <code> —
+	 * that case is wrapped the same way, just without a label span.
+	 */
+	function enhanceCodeBlocks( required string html ) {
+		var Pattern  = createObject( "java", "java.util.regex.Pattern" );
+		var JMatcher = createObject( "java", "java.util.regex.Matcher" );
+
+		var blockPattern = Pattern.compile(
+			"<pre><code(?:\s+class=""language-([a-zA-Z0-9_+-]*)"")?>([\s\S]*?)</code></pre>"
+		);
+		var matcher = blockPattern.matcher( arguments.html );
+		var sb      = createObject( "java", "java.lang.StringBuffer" ).init();
+
+		while ( matcher.find() ) {
+			var lang = matcher.group( 1 );
+			var code = matcher.group( 2 );
+			var label = ( !isNull( lang ) && len( lang ) ) ? '<span class="bx-code-label">' & lang & '</span>' : '';
+
+			matcher.appendReplacement(
+				sb,
+				JMatcher.quoteReplacement( '<pre class="bx-code">' & label & '<code>' & code & '</code></pre>' )
+			);
+		}
+
+		matcher.appendTail( sb );
+		return sb.toString();
+	}
+
+	/**
+	 * Converts a GitHub-style alert blockquote into a bx-callout div:
+	 *   > [!NOTE] Title text
+	 *   > Body text, more body text.
+	 * becomes
+	 *   <div class="bx-callout"><strong>Title text</strong>Body text, more body text.</div>
+	 * [!WARNING] maps to class="bx-callout bx-warn" instead of plain
+	 * bx-callout — the only two variants currently in use across the docs
+	 * being migrated. flexmark collapses the whole blockquote into one
+	 * <p>, first line as the marker+title, the rest as the body.
+	 */
+	function enhanceCallouts( required string html ) {
+		var Pattern  = createObject( "java", "java.util.regex.Pattern" );
+		var JMatcher = createObject( "java", "java.util.regex.Matcher" );
+
+		var calloutPattern = Pattern.compile(
+			"<blockquote>\s*<p>\[!(WARNING|NOTE)\]\s*([^\n]*)\n([\s\S]*?)</p>\s*</blockquote>"
+		);
+		var matcher = calloutPattern.matcher( arguments.html );
+		var sb      = createObject( "java", "java.lang.StringBuffer" ).init();
+
+		while ( matcher.find() ) {
+			var kind  = matcher.group( 1 );
+			var title = matcher.group( 2 );
+			var body  = matcher.group( 3 );
+			var cssClass = kind == "WARNING" ? "bx-callout bx-warn" : "bx-callout";
+
+			matcher.appendReplacement(
+				sb,
+				JMatcher.quoteReplacement( '<div class="' & cssClass & '"><strong>' & title & '</strong>' & body & '</div>' )
+			);
+		}
+
+		matcher.appendTail( sb );
+		return sb.toString();
+	}
+
+	/**
+	 * Tags the first <p> right after a leading <h1> with class="bx-docs-lede"
+	 * — every existing doc page opens with an <h1> title immediately
+	 * followed by a one-line intro paragraph styled larger/muted.
+	 */
+	function enhanceLede( required string html ) {
+		var Pattern = createObject( "java", "java.util.regex.Pattern" );
+		var pattern = Pattern.compile( "(</h1>\s*)<p>" );
+		var matcher = pattern.matcher( arguments.html );
+		return matcher.replaceFirst( '$1<p class="bx-docs-lede">' );
+	}
+
+}

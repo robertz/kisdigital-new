@@ -5,21 +5,21 @@
 		<nav class="c-docs-nav">
 			<span class="c-docs-nav__heading">#encodeForHTML( data.projectName )# Docs</span>
 			<bx:loop array="#data.docs#" item="doc">
-				<a href="/projects/#data.projectSlug#/docs/#doc.slug#" class="c-docs-nav__link #( doc.slug == data.currentSlug ? 'c-docs-nav__link--active' : '' )#">#encodeForHTML( doc.title )#</a>
+				<a href="/projects/#data.projectSlug#/docs/#doc.page_slug#" class="c-docs-nav__link #( doc.page_slug == data.currentSlug ? 'c-docs-nav__link--active' : '' )#">#encodeForHTML( doc.title )#</a>
 			</bx:loop>
 		</nav>
 		<div class="c-docs-content">
 			<div class="c-post__body c-docs-body">
-				<bx:include template="#data.contentView#.bxm">
+				#data.docBodyHtml#
 			</div>
 			<div class="c-docs-pager">
-				<bx:if isStruct( data.prevDoc ) && data.prevDoc.keyExists( "slug" )>
-				<a href="/projects/#data.projectSlug#/docs/#data.prevDoc.slug#">&larr; #encodeForHTML( data.prevDoc.title )#</a>
+				<bx:if isStruct( data.prevDoc ) && data.prevDoc.keyExists( "page_slug" )>
+				<a href="/projects/#data.projectSlug#/docs/#data.prevDoc.page_slug#">&larr; #encodeForHTML( data.prevDoc.title )#</a>
 				<bx:else>
 				<span></span>
 				</bx:if>
-				<bx:if isStruct( data.nextDoc ) && data.nextDoc.keyExists( "slug" )>
-				<a href="/projects/#data.projectSlug#/docs/#data.nextDoc.slug#" class="c-docs-pager__next">#encodeForHTML( data.nextDoc.title )# &rarr;</a>
+				<bx:if isStruct( data.nextDoc ) && data.nextDoc.keyExists( "page_slug" )>
+				<a href="/projects/#data.projectSlug#/docs/#data.nextDoc.page_slug#" class="c-docs-pager__next">#encodeForHTML( data.nextDoc.title )# &rarr;</a>
 				</bx:if>
 			</div>
 		</div>

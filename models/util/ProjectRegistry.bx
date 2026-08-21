@@ -1,0 +1,76 @@
+/**
+ * The registered /projects showcase entries (slug/name/icon/tagline).
+ * Extracted out of routes/Projects.bx so routes/Manage.bx's project-docs
+ * admin UI can also read it (for the "which project" picker) without one
+ * route class reaching into another. Intentionally still hardcoded, not
+ * DB-backed — adding/removing a whole project is rare enough that it isn't
+ * worth the same admin-editable treatment as project doc *content*.
+ */
+class {
+
+	variables.projects = [
+		{
+			slug    : "boxlang-express",
+			name    : "boxlang-express",
+			icon    : "bi-boxes",
+			tagline : "An Express.js-style API for building lightweight HTTP servers in BoxLang."
+		},
+		{
+			slug    : "bx-zork",
+			name    : "bx-zork",
+			icon    : "bi-controller",
+			tagline : "A from-scratch text-adventure parser engine in BoxLang, loaded with the world of Zork I."
+		},
+		{
+			slug    : "coldbox-graphql",
+			name    : "coldbox-graphql",
+			icon    : "bi-diagram-3",
+			tagline : "A schema-agnostic ColdBox module that serves a GraphQL API from SDL files you supply."
+		},
+		{
+			slug    : "dnd-game-v2",
+			name    : "dnd-game-v2",
+			icon    : "bi-dice-5",
+			tagline : '"The Adventure Begins" — a browser-based, D&D 5e-inspired dungeon crawler with real-time WebSocket combat, no frontend build step.'
+		},
+		{
+			slug    : "commandbox-ssg",
+			name    : "commandbox-ssg",
+			icon    : "bi-terminal",
+			tagline : "A static site generator implemented as a CommandBox module — the predecessor to boxlang-ssg."
+		},
+		{
+			slug    : "boxlang-ssg",
+			name    : "boxlang-ssg",
+			icon    : "bi-file-earmark-richtext",
+			tagline : "A lightweight static site generator written in pure BoxLang — Markdown/.bxm, layouts, collections, and pagination."
+		},
+		{
+			slug    : "boxlang-stomp-chat",
+			name    : "boxlang-stomp-chat",
+			icon    : "bi-chat-dots",
+			tagline : "A Slack-like multi-channel chat app on BoxLang + SocketBox STOMP, with a no-build-step Vue 3 frontend."
+		}
+	];
+
+	/**
+	 * @return {array} Every registered project, in display order.
+	 */
+	function getProjects(){
+		return variables.projects;
+	}
+
+	/**
+	 * @param {string} slug - The project's slug.
+	 * @return {struct} The matching project, or null if no project has that slug.
+	 */
+	function findProject( required string slug ){
+		for ( var project in variables.projects ){
+			if ( project.slug == arguments.slug ){
+				return project;
+			}
+		}
+		return javacast( "null", "" );
+	}
+
+}

@@ -161,3 +161,21 @@ create index idx_request_log_path
 
 create index idx_request_log_requested_at
     on RequestLog (requested_at);
+
+-- Project docs (/projects/:slug/docs/:page), editable via /manage/project-docs
+-- instead of hand-edited .bxm template files + a deploy per change (see
+-- db/migrations/0005_add_project_doc.sql).
+create table ProjectDoc
+(
+    id           varchar(36)   default (uuid())         not null
+        primary key,
+    project_slug varchar(100)                            not null,
+    page_slug    varchar(100)                            not null,
+    title        varchar(255)                            not null,
+    body         mediumtext                               not null,
+    sort_order   int           default 0                 not null,
+    created      timestamp     default CURRENT_TIMESTAMP null,
+    last_updated timestamp     default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP,
+    constraint ProjectDoc_project_page_uindex
+        unique (project_slug, page_slug)
+);

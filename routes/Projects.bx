@@ -1,94 +1,25 @@
 /**
  * /projects — a showcase of side projects, each with an overview page and,
  * for the ones with enough content to warrant it, a multi-page docs section.
+ *
+ * Doc pages are database-backed (see models/services/ProjectDocService.bx +
+ * models/util/ProjectDocRenderer.bx), editable via /manage/project-docs
+ * instead of hand-edited .bxm template files + a deploy per change. Which
+ * projects have a docs section is now a DB question (does ProjectDoc have
+ * any rows for that project_slug), not a hardcoded whitelist.
  */
 class {
 
-	variables.siteDefaults = "";
+	variables.siteDefaults       = "";
+	variables.projectRegistry    = "";
+	variables.projectDocService  = "";
+	variables.projectDocRenderer = "";
 
-	// Registered projects, shown on /projects as cards.
-	variables.projects = [
-		{
-			slug    : "boxlang-express",
-			name    : "boxlang-express",
-			icon    : "bi-boxes",
-			tagline : "An Express.js-style API for building lightweight HTTP servers in BoxLang."
-		},
-		{
-			slug    : "bx-zork",
-			name    : "bx-zork",
-			icon    : "bi-controller",
-			tagline : "A from-scratch text-adventure parser engine in BoxLang, loaded with the world of Zork I."
-		},
-		{
-			slug    : "coldbox-graphql",
-			name    : "coldbox-graphql",
-			icon    : "bi-diagram-3",
-			tagline : "A schema-agnostic ColdBox module that serves a GraphQL API from SDL files you supply."
-		},
-		{
-			slug    : "dnd-game-v2",
-			name    : "dnd-game-v2",
-			icon    : "bi-dice-5",
-			tagline : '"The Adventure Begins" — a browser-based, D&D 5e-inspired dungeon crawler with real-time WebSocket combat, no frontend build step.'
-		},
-		{
-			slug    : "commandbox-ssg",
-			name    : "commandbox-ssg",
-			icon    : "bi-terminal",
-			tagline : "A static site generator implemented as a CommandBox module — the predecessor to boxlang-ssg."
-		},
-		{
-			slug    : "boxlang-ssg",
-			name    : "boxlang-ssg",
-			icon    : "bi-file-earmark-richtext",
-			tagline : "A lightweight static site generator written in pure BoxLang — Markdown/.bxm, layouts, collections, and pagination."
-		},
-		{
-			slug    : "boxlang-stomp-chat",
-			name    : "boxlang-stomp-chat",
-			icon    : "bi-chat-dots",
-			tagline : "A Slack-like multi-channel chat app on BoxLang + SocketBox STOMP, with a no-build-step Vue 3 frontend."
-		}
-	];
-
-	// Ordered doc topics per project slug — only projects with a multi-page
-	// docs section (as opposed to a single overview page) appear here.
-	variables.projectDocs = {
-		"boxlang-express" : [
-			{ slug : "getting-started",  title : "Getting Started" },
-			{ slug : "config",           title : "Configuration" },
-			{ slug : "routing",          title : "Routing" },
-			{ slug : "middleware",       title : "Middleware" },
-			{ slug : "request-response", title : "Request & Response" },
-			{ slug : "views",            title : "Views & Templates" },
-			{ slug : "sessions",         title : "Sessions" },
-			{ slug : "static-files",     title : "Static Files & Uploads" },
-			{ slug : "errors",           title : "Error Handling" },
-			{ slug : "lifecycle",        title : "Process Lifecycle" }
-		],
-		"coldbox-graphql" : [
-			{ slug : "getting-started",       title : "Getting Started" },
-			{ slug : "schema-files",          title : "Schema Files" },
-			{ slug : "module-settings",       title : "Module Settings" },
-			{ slug : "resolvers",             title : "Resolvers" },
-			{ slug : "custom-scalars",        title : "Custom Scalars" },
-			{ slug : "http-endpoint",         title : "HTTP Endpoint" },
-			{ slug : "introspection",         title : "Introspection & SDL" },
-			{ slug : "engine-compatibility",  title : "Engine Compatibility" },
-			{ slug : "testing",               title : "Testing" }
-		],
-		"boxlang-ssg" : [
-			{ slug : "getting-started",   title : "Getting Started" },
-			{ slug : "authoring-content", title : "Authoring Content" },
-			{ slug : "collections-data",  title : "Collections & Data" },
-			{ slug : "pagination",        title : "Pagination" },
-			{ slug : "configuration",     title : "Configuration" }
-		]
-	};
-
-	function init( required siteDefaults ){
-		variables.siteDefaults = arguments.siteDefaults;
+	function init( required siteDefaults, required projectDocService, required projectDocRenderer ){
+		variables.siteDefaults       = arguments.siteDefaults;
+		variables.projectDocService  = arguments.projectDocService;
+		variables.projectDocRenderer = arguments.projectDocRenderer;
+		variables.projectRegistry    = new models.util.ProjectRegistry();
 
 		this.router = boxExpressRouter();
 
@@ -105,14 +36,14 @@ class {
 			pageTitle    : "Projects",
 			canonicalUrl : variables.siteDefaults.canonicalUrl( req.path ),
 			meta         : variables.siteDefaults.defaultMeta( req.path ),
-			projects     : variables.projects
+			projects     : variables.projectRegistry.getProjects()
 		} );
 	}
 
 	// route: /projects/:slug
 	function overview( req, res, next ){
 		var slug    = req.params.slug ?: "";
-		var project = findProject( slug );
+		var project = variables.projectRegistry.findProject( slug );
 
 		if ( isNull( project ) ){
 			next();
@@ -131,17 +62,17 @@ class {
 		var slug = req.params.slug ?: "";
 		var page = req.params.page ?: "";
 
-		if ( !variables.projectDocs.keyExists( slug ) ){
+		if ( !variables.projectDocService.projectHasDocs( slug ) ){
 			next();
 			return;
 		}
 
-		var project  = findProject( slug );
-		var docsList = variables.projectDocs[ slug ];
+		var project  = variables.projectRegistry.findProject( slug );
+		var docsList = variables.projectDocService.getDocsForProject( slug );
 		var docIndex = -1;
 
 		for ( var i = 1; i <= docsList.len(); i++ ){
-			if ( docsList[ i ].slug == page ){
+			if ( docsList[ i ].page_slug == page ){
 				docIndex = i;
 				break;
 			}
@@ -152,31 +83,22 @@ class {
 			return;
 		}
 
-		var current = docsList[ docIndex ];
+		var current = new models.ProjectDocBean().loadBySlug( slug, page );
 		var prevDoc = docIndex > 1 ? docsList[ docIndex - 1 ] : "";
 		var nextDoc = docIndex < docsList.len() ? docsList[ docIndex + 1 ] : "";
 
 		res.render( "projects/_docsShell", {
-			pageTitle    : current.title & " — " & project.name,
+			pageTitle    : current.getTitle() & " — " & project.name,
 			canonicalUrl : variables.siteDefaults.canonicalUrl( req.path ),
 			meta         : variables.siteDefaults.defaultMeta( req.path ),
 			projectSlug  : slug,
 			projectName  : project.name,
 			docs         : docsList,
 			currentSlug  : page,
-			contentView  : slug & "/docs/" & page,
+			docBodyHtml  : variables.projectDocRenderer.render( current.getBody() ),
 			prevDoc      : prevDoc,
 			nextDoc      : nextDoc
 		} );
-	}
-
-	private function findProject( slug ){
-		for ( var project in variables.projects ){
-			if ( project.slug == slug ){
-				return project;
-			}
-		}
-		return javacast( "null", "" );
 	}
 
 }

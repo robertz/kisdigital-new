@@ -402,6 +402,19 @@
 	max-width: 72ch;
 }
 
+.c-manage-section__head--with-action {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-4);
+}
+
+.c-manage-table__actions {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+}
+
 /* ── Server monitor (views/manage/server/index.bxm) ── */
 
 .c-monitor-stats {
