@@ -80,6 +80,6 @@ EXPOSE 3005
 # allocation. Pinning it avoids any 8-core-assuming thread pool (e.g. a
 # default ForkJoinPool) over-provisioning against a single real core.
 # SerialGC itself is unaffected either way — it's single-threaded already.
-ENV JAVA_OPTS="-Xmx640m -Xms128m -XX:+UseSerialGC -XX:ActiveProcessorCount=1"
+ENV JAVA_OPTS="-Xmx600m -Xms128m -XX:+UseSerialGC -XX:ActiveProcessorCount=1"
 
 CMD ["boxlang", "--bx-config", "boxlang.json", "app.bxs"]
