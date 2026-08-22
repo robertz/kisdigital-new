@@ -7,7 +7,7 @@
 		<p class="c-project-hero__tagline">An Express.js-style API for building lightweight HTTP servers in <a href="https://boxlang.io" target="_blank" rel="noopener" class="c-post-link">BoxLang</a> — routing, middleware, sessions, views, and static files, with the same shape as Express if you've used it before.</p>
 		<div class="c-project-hero__actions">
 			<a href="/projects/boxlang-express/docs/getting-started" class="btn btn-primary-custom">Read the Docs</a>
-			<a href="https://github.com/ortus-boxlang/boxlang-express" target="_blank" rel="noopener" class="btn btn-outline-custom">View on GitHub</a>
+			<a href="https://github.com/robertz/boxlang-express" target="_blank" rel="noopener" class="btn btn-outline-custom">View on GitHub</a>
 		</div>
 	</div>
 
