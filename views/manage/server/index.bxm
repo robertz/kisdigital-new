@@ -201,9 +201,14 @@
 
 				<!--- Garbage collection --->
 				<section class="c-manage-section">
-					<header class="c-manage-section__head">
-						<h2>Garbage collection</h2>
-						<p>One row per collector this JVM is running.</p>
+					<header class="c-manage-section__head c-manage-section__head--with-action">
+						<div>
+							<h2>Garbage collection</h2>
+							<p>One row per collector this JVM is running. Status reflects total GC pause time as a share of uptime.</p>
+						</div>
+						<span class="c-status-badge c-status-badge--#data.server.gcHealth.badgeClass#" id="gc-health-badge" title="#data.server.gcHealth.ratioPercent# of uptime spent in GC">
+							<i class="bi bi-circle-fill c-status-badge__dot"></i> <span id="gc-health-label">#encodeForHTML( data.server.gcHealth.label )#</span>
+						</span>
 					</header>
 					<bx:if !data.server.gc.len()>
 						<div class="c-manage-panel__empty c-manage-panel__empty--inline">
@@ -365,6 +370,15 @@
 			if (countCell) countCell.textContent = row.collectionCount;
 			if (timeCell) timeCell.textContent = row.collectionTime;
 		});
+
+		if (server.gcHealth) {
+			var badge = document.getElementById('gc-health-badge');
+			if (badge) {
+				badge.className = 'c-status-badge c-status-badge--' + server.gcHealth.badgeClass;
+				badge.title = server.gcHealth.ratioPercent + ' of uptime spent in GC';
+			}
+			setText('gc-health-label', server.gcHealth.label);
+		}
 
 		setText('stat-liveCount', server.threads.liveCount);
 		setText('stat-peakCount', server.threads.peakCount);

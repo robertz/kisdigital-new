@@ -1141,6 +1141,11 @@ class {
 		var mem = arguments.snapshot.memory;
 		var cpu = arguments.snapshot.cpu;
 
+		var totalGcTimeMs = 0;
+		for ( var gcRow in arguments.snapshot.gc ){
+			totalGcTimeMs += gcRow.collectionTime;
+		}
+
 		var display = {
 			"memory": {
 				"heapUsed"        : _formatBytes( mem.heapUsed ),
@@ -1190,6 +1195,7 @@ class {
 					"collectionTime" : _formatDuration( row.collectionTime )
 				};
 			} ),
+			"gcHealth": _gcHealth( totalGcTimeMs, arguments.snapshot.jvm.uptimeMs ),
 			"threads": {
 				"liveCount"        : numberFormat( arguments.snapshot.threads.liveCount ),
 				"peakCount"        : numberFormat( arguments.snapshot.threads.peakCount ),
@@ -1238,6 +1244,42 @@ class {
 
 	private function _formatPercent( required numeric ratio ){
 		return numberFormat( arguments.ratio * 100, "0.0" ) & "%";
+	}
+
+	// Total GC pause time as a share of process uptime is a much steadier
+	// health signal than any single collection count/time — a JVM that's
+	// spent 15% of its life paused in GC is in trouble even if the heap bar
+	// itself looks fine at the moment of the snapshot. Thresholds mirror the
+	// standard GC-overhead rules of thumb: <1% healthy, 1-5% worth watching,
+	// 5-10% worth investigating, >10% an active problem. badgeClass reuses
+	// the HTTP-status color scale (2xx/3xx/4xx/5xx) already styled in
+	// manage.css rather than inventing new colors.
+	private function _gcHealth( required numeric totalGcTimeMs, required numeric uptimeMs ){
+		var ratio      = arguments.uptimeMs > 0 ? ( arguments.totalGcTimeMs / arguments.uptimeMs * 100 ) : 0;
+		var status     = "healthy";
+		var label      = "Healthy";
+		var badgeClass = "2xx";
+
+		if ( ratio > 10 ){
+			status = "problem";
+			label = "Problem";
+			badgeClass = "5xx";
+		} else if ( ratio > 5 ){
+			status = "investigate";
+			label = "Investigate";
+			badgeClass = "4xx";
+		} else if ( ratio > 1 ){
+			status = "watch";
+			label = "Watch";
+			badgeClass = "3xx";
+		}
+
+		return {
+			"ratioPercent": numberFormat( ratio, "0.00" ) & "%",
+			"status"      : status,
+			"label"       : label,
+			"badgeClass"  : badgeClass
+		};
 	}
 
 }
