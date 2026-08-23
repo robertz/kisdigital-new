@@ -1,0 +1,66 @@
+{
+	"news": [
+		"Sector traffic control reports light congestion along the outer claims.",
+		"A supply freighter passes through, trading gossip for fuel.",
+		"Long-range sensors pick up faint static from the deep dark.",
+		"The guild office posts updated claim boundaries for the quarter.",
+		"Someone on the comms channel is humming an old mining ballad.",
+		"A meteor shower lights up the horizon, harmless but beautiful.",
+		"Dock maintenance crews report all airlocks nominal.",
+		"A rival outfit's beacon flickers out somewhere in the belt.",
+		"The refinery hums along, steady as ever.",
+		"Local news: prices for reclaimed hull plating tick upward.",
+		"A lone comet drifts past, well outside any claimed lane.",
+		"Static on the guild channel resolves into a faint work song.",
+		"Weather satellites confirm clear void conditions for the cycle.",
+		"An old prospector's beacon still pings from a claim abandoned years ago.",
+		"The mess hall is serving something that's allegedly stew."
+	],
+	"moneyWon": [
+		"A forgotten cache of pre-refined ore turns up in the ledgers.",
+		"A rival outfit folds and dumps its holdings at a loss — to your gain.",
+		"A speculative claim you staked years ago finally pays out.",
+		"The guild issues a surprise dividend from the quarter's tariffs.",
+		"A salvage crew returns a debt with interest.",
+		"An old contract you'd written off finally clears.",
+		"A passing trader overpays for hold space, no questions asked."
+	],
+	"moneyLost": [
+		"Guild tariffs come due, and the bill is steeper than expected.",
+		"A docking fee dispute doesn't go your way.",
+		"An insurance premium spikes after a nearby outfit's accident.",
+		"A supplier renegotiates terms, and not in your favor.",
+		"A clerical error in the ledgers takes a while to untangle — at a cost.",
+		"Refinery downtime for inspection eats into the week's margin.",
+		"A bribe to speed up customs clearance turns out to be necessary."
+	],
+	"shipWon": [
+		"A derelict hauler is found drifting nearby, still spaceworthy.",
+		"A bankrupt outfit's fleet goes up for auction — you walk away with one.",
+		"A guild lottery for surplus vessels lands in your favor.",
+		"A hauler crew, between contracts, signs on with your outfit instead.",
+		"An anonymous benefactor gifts a retrofitted mining vessel."
+	],
+	"shipLost": [
+		"A hauler strays too close to an unstable pocket and is written off.",
+		"Structural fatigue finally catches up with one of the older vessels.",
+		"A hauler is repossessed over an unpaid guild lien.",
+		"A collision in a crowded lane takes one vessel out of service.",
+		"A hauler's crew mutinies and disappears with the ship."
+	],
+	"richVein": [
+		"Sensors light up: a dense, unclaimed vein just opened nearby.",
+		"A survey drone flags an unusually rich pocket of ore.",
+		"The belt shifts, exposing a vein no one's touched before."
+	],
+	"solarFlare": [
+		"A solar flare washes out refinery telemetry for a while.",
+		"Radiation spikes force the refinery to throttle back, just in case.",
+		"A geomagnetic storm plays havoc with the refinery's control systems."
+	],
+	"welcomeBack": [
+		"The fleet kept working while you were gone.",
+		"Dock control logs a quiet, uneventful stretch.",
+		"The refinery never stopped humming."
+	]
+}

@@ -1,0 +1,26 @@
+/**
+ * The registered /games showcase entries (slug/name/icon/tagline/href).
+ * Mirrors ProjectRegistry.bx's shape, but each entry links straight to a
+ * static playable page under public/games/ rather than a templated
+ * overview route — these aren't code projects with docs, they're games.
+ */
+class {
+
+	variables.games = [
+		{
+			slug    : "void-harvest",
+			name    : "Void Harvest",
+			icon    : "bi-stars",
+			tagline : "An idle deep-space mining fleet game — spiritual successor to Raymond Camden's IdleFleet.",
+			href    : "/games/void-harvest/"
+		}
+	];
+
+	/**
+	 * @return {array} Every registered game, in display order.
+	 */
+	function getGames(){
+		return variables.games;
+	}
+
+}

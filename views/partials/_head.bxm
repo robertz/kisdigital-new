@@ -67,6 +67,7 @@
 			<nav class="header-actions">
 				<a href="/posts" class="header__link">Articles</a>
 				<a href="/projects" class="header__link">Projects</a>
+				<a href="/games" class="header__link">Games</a>
 				<a href="/about" class="header__link">About</a>
 				<bx:if len( data.manageUser ?: "" )>
 					<a href="/manage" class="header__link">Dashboard</a>
@@ -95,6 +96,9 @@
 			</a>
 			<a href="/projects" class="mobile-menu__link">
 				<i class="bi bi-boxes"></i> Projects
+			</a>
+			<a href="/games" class="mobile-menu__link">
+				<i class="bi bi-joystick"></i> Games
 			</a>
 			<a href="/about" class="mobile-menu__link">
 				<i class="bi bi-person"></i> About

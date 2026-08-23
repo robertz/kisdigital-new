@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Void Harvest</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<meta name="description" content="Void Harvest — an idle deep-space mining fleet game.">
+	<link rel="stylesheet" href="./css/app.css">
+	<style>[x-cloak] { display: none !important; }</style>
+</head>
+<body>
+
+<div id="starfield"><canvas id="starfield-canvas"></canvas></div>
+
+<div class="vh-app" x-data="app" x-cloak>
+
+	<!-- ── Top bar ─────────────────────────────────────────────────────── -->
+	<header class="vh-topbar panel">
+		<div class="vh-brand">
+			<span class="title">VOID HARVEST</span>
+			<span class="rank" x-text="rank"></span>
+		</div>
+
+		<div class="vh-stats">
+			<div class="vh-stat">
+				<span class="label">Credits</span>
+				<span class="value credits" x-text="numberFormat(credits)"></span>
+			</div>
+
+			<div class="vh-stat">
+				<span class="label">Ore Cargo</span>
+				<span class="value ore" x-text="numberFormat(ore) + ' / ' + numberFormat(cargoCapacity)"></span>
+				<div class="vh-cargo-mini"><div :style="`width:${cargoPercent}%`"></div></div>
+			</div>
+
+			<div class="vh-stat" x-show="flowRateAllowed" x-cloak title="Net credits per second, averaged over the last 10s">
+				<span class="label">Flow Rate</span>
+				<span class="value" :class="flowRate >= 0 ? 'flow-pos' : 'flow-neg'" x-text="(flowRate >= 0 ? '+' : '') + numberFormat(flowRate) + '/s'"></span>
+			</div>
+
+			<div class="vh-stat">
+				<span class="label">Fleet</span>
+				<span class="value" x-text="fleetSize"></span>
+			</div>
+		</div>
+
+		<button class="vh-settings-btn" @click="openSettings()" title="Settings">⚙</button>
+	</header>
+
+	<!-- ── Active effects ──────────────────────────────────────────────── -->
+	<div class="effects-row" x-show="activeEffects.length" x-cloak>
+		<template x-for="effect in activeEffects" :key="effect.key">
+			<span class="effect-chip" :class="effect.magnitude >= 1 ? 'good' : 'bad'" x-text="effect.label"></span>
+		</template>
+	</div>
+
+	<!-- ── Main grid ───────────────────────────────────────────────────── -->
+	<div class="vh-grid">
+
+		<!-- Fleet -->
+		<section class="panel">
+			<div class="panel-head">
+				<h2>Fleet Bay</h2>
+				<span class="hint" x-show="nextHaulerReturnIn" x-text="'Next return in ' + nextHaulerReturnIn"></span>
+			</div>
+
+			<div class="vh-fleet-actions">
+				<button class="btn btn-primary" @click="launchAllAvailable()" :disabled="!haulersAvailable">
+					Launch Available (<span x-text="numAvailableHaulers"></span>)
+				</button>
+				<button class="btn" @click="buyHauler(1)" :disabled="!canBuyHauler">
+					Buy Hauler — <span x-text="numberFormat(newHaulerCost)"></span>c
+				</button>
+				<button class="btn" x-show="buy10Allowed" x-cloak @click="buyHauler(10)" :disabled="!canBuy10Hauler">
+					Buy 10× — <span x-text="numberFormat(new10HaulerCost)"></span>c
+				</button>
+				<button class="btn" x-show="buy100Allowed" x-cloak @click="buyHauler(100)" :disabled="!canBuy100Hauler">
+					Buy 100× — <span x-text="numberFormat(new100HaulerCost)"></span>c
+				</button>
+				<button class="btn" :class="autoMine ? 'btn-toggle-on' : ''" x-show="autoMineAllowed" x-cloak @click="toggleAutoMine()">
+					Auto-Mine: <span x-text="autoMine ? 'On' : 'Off'"></span>
+				</button>
+			</div>
+
+			<div class="vh-fleet-grid">
+				<template x-for="ship in ships" :key="ship.id">
+					<div class="hauler-card" :class="!ship.available ? 'is-out' : ''">
+						<span class="name" x-text="ship.name"></span>
+						<div class="status-row">
+							<span><span class="status-dot"></span><span x-text="ship.available ? 'Docked' : 'Mining'"></span></span>
+							<span x-show="!ship.available" x-text="haulerRemainingLabel(ship)"></span>
+						</div>
+						<div class="hauler-progress" x-show="!ship.available">
+							<div :style="`width:${haulerProgressPercent(ship)}%`"></div>
+						</div>
+						<button class="btn launch-btn" x-show="ship.available" @click="launchHauler(ship)">Launch</button>
+					</div>
+				</template>
+			</div>
+		</section>
+
+		<!-- Upgrades -->
+		<aside class="panel">
+			<div class="panel-head"><h2>Outfitting</h2></div>
+
+			<div class="upgrade-list">
+
+				<div class="upgrade-card" x-show="refineryCapacityAllowed" x-cloak>
+					<div class="title-row">
+						<span class="name">Cargo Bay</span>
+						<span class="level" x-text="'Lv. ' + refineryCapacityLevel"></span>
+					</div>
+					<p class="desc">Expands ore storage before it overflows. Currently <span x-text="numberFormat(cargoCapacity)"></span> ore.</p>
+					<button class="btn" @click="buyRefineryCapacity()" :disabled="!canBuyRefineryCapacity">
+						Upgrade — <span x-text="numberFormat(refineryCapacityCost)"></span>c
+					</button>
+				</div>
+
+				<div class="upgrade-card" x-show="prospectingAllowed" x-cloak>
+					<div class="title-row">
+						<span class="name">Prospecting Skill</span>
+						<span class="level" x-text="'Lv. ' + prospectingSkill"></span>
+					</div>
+					<p class="desc">Better surveying means more ore per run.</p>
+					<button class="btn" @click="buyProspecting()" :disabled="!canBuyProspecting">
+						Upgrade — <span x-text="numberFormat(prospectingCost)"></span>c
+					</button>
+				</div>
+
+				<div class="upgrade-card" x-show="refineryThroughputAllowed" x-cloak>
+					<div class="title-row">
+						<span class="name">Refinery Output</span>
+						<span class="level" x-text="'Lv. ' + refineryThroughputLevel"></span>
+					</div>
+					<p class="desc">Processes ore into credits faster. Currently <span x-text="currentThroughput"></span> ore/s.</p>
+					<button class="btn" @click="buyRefineryThroughput()" :disabled="!canBuyRefineryThroughput">
+						Upgrade — <span x-text="numberFormat(refineryThroughputCost)"></span>c
+					</button>
+				</div>
+
+				<div class="upgrade-card" x-show="driveTuningAllowed" x-cloak>
+					<div class="title-row">
+						<span class="name">Drive Tuning</span>
+						<span class="level" x-text="'Lv. ' + driveTuning"></span>
+					</div>
+					<p class="desc">Shaves time off every mining run.</p>
+					<button class="btn" @click="buyDriveTuning()" :disabled="!canBuyDriveTuning">
+						Upgrade — <span x-text="numberFormat(driveTuningCost)"></span>c
+					</button>
+				</div>
+
+				<div class="auto-mine-card" x-show="autoMineAllowed" x-cloak>
+					<div>
+						<div class="name" style="font-size:0.82rem;font-weight:700;">Auto-Mine</div>
+						<p class="desc" style="margin:2px 0 0;">Periodically launches every docked hauler.</p>
+					</div>
+					<button class="btn" :class="autoMine ? 'btn-toggle-on' : ''" @click="toggleAutoMine()" x-text="autoMine ? 'On' : 'Off'"></button>
+				</div>
+
+			</div>
+		</aside>
+	</div>
+
+	<!-- Mission log -->
+	<section class="panel vh-log">
+		<div class="panel-head"><h2>Mission Log</h2></div>
+		<div class="log-panel" x-ref="logPanel">
+			<template x-for="entry in logEntries" :key="entry.id">
+				<div x-html="entry.html"></div>
+			</template>
+		</div>
+	</section>
+
+	<!-- Cheat/debug panel -->
+	<div class="debug-panel" x-show="cheatsEnabled" x-cloak>
+		<span class="tag">Debug</span>
+		<button class="btn" @click="credits += 1000000">+1,000,000 credits</button>
+		<button class="btn" @click="addHauler()">+1 hauler</button>
+		<button class="btn" @click="randomEvent()">Trigger random event</button>
+		<button class="btn" @click="ore = cargoCapacity">Fill cargo</button>
+	</div>
+
+	<footer class="vh-footer">
+		A spiritual successor to <a href="https://github.com/cfjedimaster/IdleFleet" target="_blank" rel="noopener">IdleFleet</a> by Raymond Camden.
+	</footer>
+
+	<!-- ── Welcome back modal ──────────────────────────────────────────── -->
+	<div class="modal-backdrop" x-show="welcomeBack" x-cloak @keydown.escape.window="dismissWelcomeBack()">
+		<div class="modal-card panel" x-show="welcomeBack" x-transition>
+			<h3>Welcome back</h3>
+			<template x-if="welcomeBack">
+				<div>
+					<p x-text="welcomeBack.intro"></p>
+					<div class="modal-stats">
+						<span>Time away: <strong x-text="welcomeBack.away"></strong></span>
+						<span x-show="welcomeBack.haulersReturned">Haulers returned: <strong x-text="welcomeBack.haulersReturned"></strong></span>
+						<span x-show="welcomeBack.oreGained">Ore mined: <strong x-text="numberFormat(welcomeBack.oreGained)"></strong></span>
+						<span x-show="welcomeBack.oreVented" class="hint">(<span x-text="numberFormat(welcomeBack.oreVented)"></span> more vented — cargo bay was full)</span>
+						<span x-show="welcomeBack.creditsGained">Credits refined: <strong x-text="numberFormat(welcomeBack.creditsGained)"></strong></span>
+						<span x-show="welcomeBack.capped" class="hint">(offline progress is capped at 8 hours)</span>
+					</div>
+					<div class="modal-actions">
+						<button class="btn btn-primary" @click="dismissWelcomeBack()">Back to the fleet</button>
+					</div>
+				</div>
+			</template>
+		</div>
+	</div>
+
+	<!-- ── Settings modal ──────────────────────────────────────────────── -->
+	<div class="modal-backdrop" x-show="showSettings" x-cloak @keydown.escape.window="closeSettings()" @click.self="closeSettings()">
+		<div class="modal-card panel">
+			<h3>Settings</h3>
+
+			<div class="field-group">
+				<h4>Export save</h4>
+				<textarea readonly x-model="exportText" @click="$event.target.select()"></textarea>
+			</div>
+
+			<div class="field-group">
+				<h4>Import save</h4>
+				<textarea placeholder="Paste a previously exported save here..." x-model="importText"></textarea>
+				<p x-show="importError" x-text="importError" style="color: var(--bad);"></p>
+				<div class="modal-actions">
+					<button class="btn" @click="submitImport()" :disabled="!importText.trim()">Import &amp; reload</button>
+				</div>
+			</div>
+
+			<div class="field-group">
+				<h4>Danger zone</h4>
+				<div class="modal-actions">
+					<button class="btn btn-danger" @click="if (confirm('Reset all progress? This cannot be undone.')) resetGame()">Reset game</button>
+				</div>
+			</div>
+
+			<div class="modal-actions">
+				<button class="btn" @click="closeSettings()">Close</button>
+			</div>
+		</div>
+	</div>
+
+</div>
+
+<script src="./js/starfield.js"></script>
+<script src="./js/app.js" type="module"></script>
+<script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+</body>
+</html>

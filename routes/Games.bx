@@ -1,0 +1,32 @@
+/**
+ * /games — a small showcase of playable browser games, each a self-contained
+ * static page under public/games/ (no build step, no backend calls) rather
+ * than a server-rendered route like /projects. This route only lists them.
+ */
+class {
+
+	variables.siteDefaults = "";
+	variables.gameRegistry = "";
+
+	function init( required siteDefaults ){
+		variables.siteDefaults = arguments.siteDefaults;
+		variables.gameRegistry = new models.util.GameRegistry();
+
+		this.router = boxExpressRouter();
+
+		this.router.get( "/games", ( req, res ) => index( req, res ) );
+
+		return this;
+	}
+
+	// route: /games
+	function index( req, res ){
+		res.render( "games/index", {
+			pageTitle    : "Games",
+			canonicalUrl : variables.siteDefaults.canonicalUrl( req.path ),
+			meta         : variables.siteDefaults.defaultMeta( req.path ),
+			games        : variables.gameRegistry.getGames()
+		} );
+	}
+
+}

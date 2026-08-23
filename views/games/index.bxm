@@ -1,0 +1,22 @@
+<bx:include template="../partials/_head.bxm">
+<bx:output>
+<div class="container py-5">
+	<div class="c-projects-hero">
+		<p class="section-label mb-3">Games</p>
+		<h1 class="c-projects-hero__title">Things I've built to waste time on</h1>
+		<p class="c-projects-hero__lede">Small, self-contained browser games — no accounts, no build step, just open and play.</p>
+	</div>
+
+	<div class="c-projects-grid">
+		<bx:loop array="#data.games#" item="game">
+		<a href="#game.href#" class="c-project-card">
+			<span class="c-project-card__icon"><i class="bi #game.icon#"></i></span>
+			<span class="c-project-card__name">#encodeForHTML( game.name )#</span>
+			<span class="c-project-card__tagline">#encodeForHTML( game.tagline )#</span>
+			<span class="c-project-card__link">Play &rarr;</span>
+		</a>
+		</bx:loop>
+	</div>
+</div>
+</bx:output>
+<bx:include template="../partials/_foot.bxm">
