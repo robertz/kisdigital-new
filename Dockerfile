@@ -53,6 +53,18 @@ RUN rm -rf /app/* /app/.[!.]*
 # confirmed via `curl https://forgebox.io/api/v1/entry/boxlang-express`),
 # it resolves the same as everything else — no special-casing needed.
 ENV BOXLANG_MODULES=boxlang-express,bx-mysql,bx-markdown,bx-password-encrypt,bx-esapi,bx-compat-cfml
+
+# install-bx-module always resolves "latest" from ForgeBox, but this RUN
+# line's own content never changes — so both local Docker and DigitalOcean
+# App Platform's Kaniko-based builder treat it as cache-eligible and happily
+# reuse a stale layer, silently keeping an old module version around even
+# after a fresh ForgeBox publish (confirmed directly: DO's build log showed
+# "Using caching version of cmd: RUN install-bx-module..." on a
+# --force-rebuild deploy). Bumping this ARG's value is what actually busts
+# that cache — change it any time a module needs a guaranteed fresh pull
+# (e.g. right after publishing a fix to ForgeBox), not just when chasing a
+# stale build.
+ARG MODULE_CACHE_BUST=2026-08-23
 RUN install-bx-module "$BOXLANG_MODULES" --local
 
 COPY app.bxs boxlang.json ./
