@@ -17,6 +17,9 @@
 					<a href="/about" class="btn btn-outline-custom">About the Author</a>
 				</div>
 			</div>
+			<div class="col-lg-5 d-none d-lg-block">
+				<img src="/assets/images/hero.jpg" alt="" class="hero-image" width="960" height="720" fetchpriority="high">
+			</div>
 		</div>
 	</div>
 </section>

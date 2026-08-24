@@ -33,6 +33,13 @@
 	font-size: 1.05rem;
 }
 
+.hero-image {
+	width: 100%;
+	height: auto;
+	border-radius: var(--ui-radius-md);
+	box-shadow: var(--ui-shadow-sm);
+}
+
 /* ── Post list (used on home, /posts, /tag, and about) ── */
 
 .post-list {
