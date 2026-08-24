@@ -79,9 +79,17 @@ app.use(
 	// timeout, so a shorter defaultLastAccessTimeout there silently evicts
 	// idle sessions well before the cookie itself expires.
 	boxExpressSession( { store: boxExpressCacheStore("sessionCache"), maxAge: 30 * 24 * 60 * 60 } ),
-	boxExpressStatic( expandPath( "./public" ), { maxAge: 86400 } ),
 	boxExpressHelmet( { referrerPolicy: "strict-origin-when-cross-origin" } )
 )
+
+// esbuild content-hashes every filename under dist/ (see the manifest logic
+// above), so a cached copy can never go stale — a new deploy ships new
+// filenames, it never overwrites an old one. Safe to cache for a year.
+// Mounted ahead of the general public/ static handler below (whose shorter
+// maxAge covers everything unhashed: images, favicons, etc.) so dist/
+// requests hit this handler first.
+app.use( "/assets/dist", boxExpressStatic( expandPath( "./public/assets/dist" ), { maxAge: 31536000, immutable: true } ) )
+app.use( boxExpressStatic( expandPath( "./public" ), { maxAge: 86400 } ) )
 
 // Resolves the real visitor IP behind DO App Platform's ingress + Cloudflare
 // (kisdigital.com is Cloudflare-proxied) for req.ip everywhere, including
