@@ -134,46 +134,78 @@ class {
 	 * Site-wide daily request totals (same visitor-traffic filter as every
 	 * other method here) for the admin dashboard's traffic chart — the
 	 * full-site equivalent of PostService.getDailyViewTotals(), which only
-	 * ever counted individual post-page views. Same recursive-CTE
-	 * date-series trick as that method, so a quiet day still gets a zero
-	 * row instead of silently vanishing from the chart.
+	 * ever counted individual post-page views.
 	 *
-	 * Cached in cache("default") for 5 minutes: the underlying data only
-	 * moves at RequestLogger.bx's flush granularity (every 5s) anyway, and
-	 * this is a 30-day recursive CTE against the full table — not something
-	 * to re-run on every dashboard load.
+	 * Cached per calendar day in cache("default") rather than as one 30-day
+	 * blob: every day except today is over and immutable, so once a day's
+	 * total is computed it's cached for a week (long enough to survive a
+	 * quiet cache, short enough that a stale value can't linger forever)
+	 * and never recomputed. Only missing (uncached) past days trigger a
+	 * GROUP BY query, and only for the specific date range that's actually
+	 * missing — normally none, since once the window's days are all cached
+	 * they stay cached. Today is still accumulating, so it's always read
+	 * live with a small, index-bound single-day query instead of being
+	 * cached at all. A quiet day still gets a zero row instead of silently
+	 * vanishing from the chart.
 	 *
 	 * @return {array} Array of structs with keys: view_date, total_views. Ordered oldest to newest.
 	 */
 	function getDailyTotals( numeric daysBack = 30 ){
-		var cacheKey = "insights:dailyTotals:" & arguments.daysBack;
-		var cached   = cache( "default" ).get( cacheKey );
-		if ( cached.isPresent() ){
-			return cached.get();
+		var days          = arguments.daysBack;
+		var todayMidnight = createDate( year( now() ), month( now() ), day( now() ) );
+		var totalsByDate  = {};
+		var missingDates  = [];
+
+		for ( var i = days; i >= 1; i-- ){
+			var dayMidnight = dateAdd( "d", -i, todayMidnight );
+			var dayKey      = dateFormat( dayMidnight, "yyyy-mm-dd" );
+			var cached      = cache( "default" ).get( "insights:dailyTotal:" & dayKey );
+			if ( cached.isPresent() ){
+				totalsByDate[ dayKey ] = cached.get();
+			} else {
+				arrayAppend( missingDates, dayMidnight );
+			}
 		}
 
-		var days   = arguments.daysBack;
-		var result = queryExecute(
-			"WITH RECURSIVE date_series AS (
-				SELECT DATE_SUB(CURDATE(), INTERVAL :days DAY) AS d
-				UNION ALL
-				SELECT DATE_ADD(d, INTERVAL 1 DAY) FROM date_series WHERE d < CURDATE()
-			)
-			SELECT
-				ds.d AS view_date,
-				COALESCE(COUNT(rl.id), 0) AS total_views
-			FROM date_series ds
-			LEFT JOIN RequestLog rl
-				ON DATE(rl.requested_at) = ds.d
-				AND " & _where() & "
-				AND " & _excluding404() & "
-			GROUP BY ds.d
-			ORDER BY ds.d ASC",
-			_params( days ),
-			{ returnType: "array" }
-		);
+		if ( arrayLen( missingDates ) ){
+			var rows = queryExecute(
+				"SELECT DATE(requested_at) AS d, COUNT(*) AS total
+				FROM RequestLog
+				WHERE " & _whereBetween() & "
+					AND " & _excluding404() & "
+				GROUP BY DATE(requested_at)",
+				_paramsBetween( missingDates[ 1 ], todayMidnight ),
+				{ returnType: "array" }
+			);
 
-		cache( "default" ).set( cacheKey, result, 300 );
+			var countsByDate = {};
+			for ( var row in rows ){
+				countsByDate[ dateFormat( row.d, "yyyy-mm-dd" ) ] = row.total;
+			}
+			for ( var dayMidnight in missingDates ){
+				var dayKey = dateFormat( dayMidnight, "yyyy-mm-dd" );
+				var total  = countsByDate.keyExists( dayKey ) ? countsByDate[ dayKey ] : 0;
+				totalsByDate[ dayKey ] = total;
+				cache( "default" ).set( "insights:dailyTotal:" & dayKey, total, 604800 );
+			}
+		}
+
+		var todayKey = dateFormat( todayMidnight, "yyyy-mm-dd" );
+		var todayRow = queryExecute(
+			"SELECT COUNT(*) AS total
+			FROM RequestLog
+			WHERE " & _whereBetween() & "
+				AND " & _excluding404(),
+			_paramsBetween( todayMidnight, dateAdd( "d", 1, todayMidnight ) ),
+			{ returnType: "array" }
+		)[ 1 ];
+		totalsByDate[ todayKey ] = todayRow.total;
+
+		var result = [];
+		for ( var i = days; i >= 0; i-- ){
+			var dayKey = dateFormat( dateAdd( "d", -i, todayMidnight ), "yyyy-mm-dd" );
+			arrayAppend( result, { "view_date": dayKey, "total_views": totalsByDate[ dayKey ] } );
+		}
 		return result;
 	}
 
@@ -264,6 +296,31 @@ class {
 	private function _params( required numeric days ){
 		return {
 			"days"      : { value: arguments.days, cfsqltype: "cf_sql_integer" },
+			"botPattern": { value: variables.botDetector.sqlPattern(), cfsqltype: "cf_sql_varchar" }
+		};
+	}
+
+	// Same traffic filter as _where(), but bound to an explicit [rangeStart,
+	// rangeEnd) window instead of "the last :days days from now" — used by
+	// getDailyTotals() to query a specific missing date range rather than
+	// always rescanning the full daysBack window.
+	private function _whereBetween(){
+		return "
+			requested_at >= :rangeStart
+			AND requested_at < :rangeEnd
+			AND method = 'GET'
+			AND path NOT LIKE '/manage%'
+			AND path NOT LIKE '/assets/%'
+			AND path <> '/health'
+			AND user_agent <> ''
+			AND user_agent NOT REGEXP :botPattern
+		";
+	}
+
+	private function _paramsBetween( required date rangeStart, required date rangeEnd ){
+		return {
+			"rangeStart": { value: arguments.rangeStart, cfsqltype: "cf_sql_timestamp" },
+			"rangeEnd"  : { value: arguments.rangeEnd, cfsqltype: "cf_sql_timestamp" },
 			"botPattern": { value: variables.botDetector.sqlPattern(), cfsqltype: "cf_sql_varchar" }
 		};
 	}
