@@ -76,6 +76,7 @@ class {
 		var meta         = variables.siteDefaults.defaultMeta( req.path );
 		meta[ "og:type" ]        = "article";
 		meta[ "og:title" ]       = post.getTitle();
+		meta[ "description" ]    = post.getDescription();
 		meta[ "og:description" ] = post.getDescription();
 		meta[ "og:url" ]         = canonicalUrl;
 		meta[ "twitter:card" ]   = len( post.getCoverImage() ) ? "summary_large_image" : "summary";

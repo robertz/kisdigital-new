@@ -22,6 +22,7 @@ class {
 		var defaultImage = variables.siteUrl & "/assets/images/kisdigital-default.jpg";
 
 		return {
+			"description"         : "Deep dives into ColdFusion, Lucee, and BoxLang — modern CFML development, runtime internals, and the future of the JVM web stack.",
 			"og:type"             : "website",
 			"og:site_name"        : "KISDigital",
 			"og:title"            : "KISDigital",
