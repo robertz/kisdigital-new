@@ -78,35 +78,6 @@ class {
 	}
 
 	/**
-	 * Something GoatCounter never offered: real server-side response times.
-	 * Requires at least 3 hits for a path in the window, so one slow one-off
-	 * (a cold cache, a background job sharing the box) can't make a
-	 * barely-visited path look like the slowest thing on the site. Excludes
-	 * 404s — a missing page's response time isn't a "slow page", it's not a
-	 * page at all.
-	 *
-	 * @return {array} of { path, avgDurationMs, count }, slowest first.
-	 */
-	function getSlowestPaths( numeric daysBack = 30, numeric limit = 10 ){
-		var days = arguments.daysBack;
-		var params = _params( days );
-		params[ "lim" ] = { value: arguments.limit, cfsqltype: "cf_sql_integer" };
-
-		return queryExecute(
-			"SELECT path, ROUND(AVG(duration_ms)) AS avgDurationMs, COUNT(*) AS count
-			FROM RequestLog
-			WHERE " & _where() & "
-				AND " & _excluding404() & "
-			GROUP BY path
-			HAVING COUNT(*) >= 3
-			ORDER BY avgDurationMs DESC
-			LIMIT :lim",
-			params,
-			{ returnType: "array" }
-		);
-	}
-
-	/**
 	 * Site-wide daily request totals (same visitor-traffic filter as every
 	 * other method here) for the admin dashboard's traffic chart — the
 	 * full-site equivalent of PostService.getDailyViewTotals(), which only

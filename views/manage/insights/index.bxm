@@ -77,28 +77,6 @@
 				</bx:if>
 			</section>
 
-			<!--- Slowest pages card --->
-			<section class="c-manage-dashboard__card c-manage-dashboard__card--locations">
-				<div class="c-manage-dashboard__card-head">
-					<span class="c-manage-dashboard__icon"><i class="bi bi-hourglass-split"></i></span>
-					<span class="c-manage-dashboard__eyebrow">Slowest pages</span>
-				</div>
-				<bx:if isNull( data.slowestPaths )>
-					<p class="c-manage-dashboard__meta">Couldn't load this &mdash; see server logs.</p>
-				<bx:elseif !data.slowestPaths.len()>
-					<p class="c-manage-dashboard__meta">Not enough traffic yet to measure.</p>
-				<bx:else>
-					<ul class="c-dashboard-list">
-						<bx:loop array="#data.slowestPaths#" item="row">
-							<li class="c-dashboard-list__item">
-								<span class="c-dashboard-list__label">#encodeForHTML( row.path )#</span>
-								<span class="c-dashboard-list__meta">#numberFormat( row.avgDurationMs )# ms</span>
-							</li>
-						</bx:loop>
-					</ul>
-				</bx:if>
-			</section>
-
 		</div>
 
 	</main>

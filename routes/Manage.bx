@@ -946,8 +946,7 @@ class {
 			daysBack       : daysBack,
 			total          : insightsFetch( () => variables.insightsService.getTotal( daysBack ) ),
 			topPosts       : insightsFetch( () => variables.postService.getTrendingPosts( 10 ) ),
-			topReferrers   : insightsFetch( () => variables.insightsService.getTopReferrers( daysBack, 10 ) ),
-			slowestPaths   : insightsFetch( () => variables.insightsService.getSlowestPaths( daysBack, 8 ) )
+			topReferrers   : insightsFetch( () => variables.insightsService.getTopReferrers( daysBack, 10 ) )
 		} );
 	}
 
