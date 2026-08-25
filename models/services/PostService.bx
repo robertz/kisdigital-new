@@ -974,6 +974,36 @@ class {
 	}
 
 	/**
+	 * Most frequent site search queries regardless of whether they returned
+	 * results — what readers are actually looking for, a stronger content
+	 * signal than pageviews alone since it's an explicit ask rather than
+	 * inferred interest. See getZeroResultSearches() for the "found nothing"
+	 * complement to this.
+	 *
+	 * @param {numeric} days  - Trailing window in days. Defaults to 30.
+	 * @param {numeric} limit - Maximum distinct queries to return. Defaults to 8.
+	 * @return {array} Array of structs: query, search_count, last_searched.
+	 */
+	function getTopSearches( numeric days = 30, numeric limit = 8 ){
+		return queryExecute(
+			"SELECT
+				query,
+				COUNT(*) AS search_count,
+				MAX(searched_at) AS last_searched
+			FROM SearchLog
+			WHERE searched_at >= DATE_SUB(NOW(), INTERVAL :days DAY)
+			GROUP BY query
+			ORDER BY search_count DESC, last_searched DESC
+			LIMIT :lim",
+			{
+				"days": { value: arguments.days,  cfsqltype: "cf_sql_integer" },
+				"lim" : { value: arguments.limit, cfsqltype: "cf_sql_integer" }
+			},
+			{ returnType: "array" }
+		);
+	}
+
+	/**
 	 * Returns the most recently created or edited posts, across any status,
 	 * for the dashboard's activity feed. `last_updated` also moves on
 	 * publish/unpublish, so this doubles as a status-change feed.

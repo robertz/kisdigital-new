@@ -44,6 +44,32 @@ class {
 	}
 
 	/**
+	 * Broken/removed links and bad referrers, the exact opposite of every
+	 * other query here (which all exclude 404s via _excluding404() as
+	 * noise) — a 404 isn't noise on its own, it's the whole signal: the one
+	 * thing every other "top pages"-style card can't show.
+	 *
+	 * @return {array} of { path, count }, highest first.
+	 */
+	function getTop404s( numeric daysBack = 30, numeric limit = 10 ){
+		var days = arguments.daysBack;
+		var params = _params( days );
+		params[ "lim" ] = { value: arguments.limit, cfsqltype: "cf_sql_integer" };
+
+		return queryExecute(
+			"SELECT path, COUNT(*) AS count
+			FROM RequestLog
+			WHERE " & _where() & "
+				AND status_code = 404
+			GROUP BY path
+			ORDER BY count DESC
+			LIMIT :lim",
+			params,
+			{ returnType: "array" }
+		);
+	}
+
+	/**
 	 * Referrers are grouped by host, not the full URL — a raw Referer header
 	 * carries the referring page's whole path and query string, which would
 	 * otherwise fragment one real source (e.g. Google search) into dozens of

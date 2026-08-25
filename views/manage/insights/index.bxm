@@ -77,6 +77,52 @@
 				</bx:if>
 			</section>
 
+			<!--- Top searches card --->
+			<section class="c-manage-dashboard__card c-manage-dashboard__card--searches">
+				<div class="c-manage-dashboard__card-head">
+					<span class="c-manage-dashboard__icon"><i class="bi bi-search"></i></span>
+					<span class="c-manage-dashboard__eyebrow">Top searches</span>
+				</div>
+				<bx:if isNull( data.topSearches )>
+					<p class="c-manage-dashboard__meta">Couldn't load this &mdash; see server logs.</p>
+				<bx:elseif !data.topSearches.len()>
+					<p class="c-manage-dashboard__meta">No searches recorded yet.</p>
+				<bx:else>
+					<ul class="c-dashboard-list">
+						<bx:loop array="#data.topSearches#" item="row">
+							<li class="c-dashboard-list__item">
+								<span class="c-dashboard-list__label">&ldquo;#encodeForHTML( row.query )#&rdquo;</span>
+								<span class="c-dashboard-list__meta">#row.search_count# #( row.search_count == 1 ? "search" : "searches" )#</span>
+							</li>
+						</bx:loop>
+					</ul>
+				</bx:if>
+			</section>
+
+			<!--- Top 404s card --->
+			<section class="c-manage-dashboard__card c-manage-dashboard__card--404s">
+				<div class="c-manage-dashboard__card-head">
+					<span class="c-manage-dashboard__icon"><i class="bi bi-exclamation-triangle"></i></span>
+					<span class="c-manage-dashboard__eyebrow">Top 404s</span>
+				</div>
+				<bx:if isNull( data.top404s )>
+					<p class="c-manage-dashboard__meta">Couldn't load this &mdash; see server logs.</p>
+				<bx:elseif !data.top404s.len()>
+					<p class="c-manage-dashboard__meta">No 404s recorded &mdash; nothing broken lately.</p>
+				<bx:else>
+					<ul class="c-dashboard-list">
+						<bx:loop array="#data.top404s#" item="row">
+							<li class="c-dashboard-list__item">
+								<a href="#encodeForHTMLAttribute( row.path )#" class="c-dashboard-list__label c-dashboard-list__label--link" target="_blank" rel="noopener">
+									#encodeForHTML( row.path )#
+								</a>
+								<span class="c-dashboard-list__meta">#numberFormat( row.count )#</span>
+							</li>
+						</bx:loop>
+					</ul>
+				</bx:if>
+			</section>
+
 		</div>
 
 	</main>
