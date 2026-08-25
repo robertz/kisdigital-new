@@ -76,7 +76,7 @@ class {
 				return;
 			}
 
-			var user = variables.authService.findOrCreateGoogleUser( profile.email, profile.name );
+			var user = variables.authService.findOrCreateGoogleUser( profile.email, profile.name, profile.pictureUrl );
 			if ( user.isEmpty() ){
 				flashSet( req, { loginError: "This account has been deactivated." } );
 				res.redirect( "/manage/login" );
@@ -98,7 +98,8 @@ class {
 			req.session.commenter = {
 				"id"          : user.id,
 				"display_name": user.display_name,
-				"email"       : user.email
+				"email"       : user.email,
+				"avatar_url"  : user.avatar_url ?: ""
 			};
 			println( "[auth] Google sign-in (commenter) for '" & user.email & "' from " & req.ip );
 			res.redirect( redirectTo );

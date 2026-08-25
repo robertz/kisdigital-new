@@ -77,15 +77,20 @@ class {
 	 * @param {string} email       - Google-verified email address.
 	 * @param {string} displayName - Google account's display name; falls
 	 *        back to the email's local part when Google didn't provide one.
-	 * @return {struct} User struct (id, display_name, email, role) — same
-	 *         shape as authenticate()'s success case. Empty struct if a
-	 *         matching row exists but is deactivated.
+	 * @param {string} pictureUrl  - Google account's profile photo URL, if
+	 *        any (GoogleOAuthClient.getUserInfo()'s pictureUrl) — only ever
+	 *        stored at creation time, same as displayName; ignored for an
+	 *        existing row.
+	 * @return {struct} User struct (id, display_name, email, role,
+	 *         avatar_url) — same shape as authenticate()'s success case plus
+	 *         avatar_url. Empty struct if a matching row exists but is
+	 *         deactivated.
 	 */
-	function findOrCreateGoogleUser( required string email, string displayName = "" ){
+	function findOrCreateGoogleUser( required string email, string displayName = "", string pictureUrl = "" ){
 		var normalizedEmail = lCase( trim( arguments.email ) );
 
 		var existing = queryExecute(
-			"SELECT id, display_name, email, role, is_active
+			"SELECT id, display_name, email, role, avatar_url, is_active
 			FROM User
 			WHERE email = :email
 			LIMIT 1",
@@ -97,21 +102,23 @@ class {
 			return existing[ 1 ].is_active ? existing[ 1 ] : {};
 		}
 
-		var newId = createGUID();
-		var name  = len( trim( arguments.displayName ) ) ? trim( arguments.displayName ) : listFirst( normalizedEmail, "@" );
+		var newId      = createGUID();
+		var name        = len( trim( arguments.displayName ) ) ? trim( arguments.displayName ) : listFirst( normalizedEmail, "@" );
+		var pictureUrl  = trim( arguments.pictureUrl );
 
 		queryExecute(
-			"INSERT INTO User (id, display_name, email, password, role)
-			VALUES (:id, :display_name, :email, :password, 'commenter')",
+			"INSERT INTO User (id, display_name, email, password, role, avatar_url)
+			VALUES (:id, :display_name, :email, :password, 'commenter', :avatar_url)",
 			{
 				"id"          : { value: newId,                        cfsqltype: "cf_sql_varchar" },
 				"display_name": { value: name,                         cfsqltype: "cf_sql_varchar" },
 				"email"       : { value: normalizedEmail,               cfsqltype: "cf_sql_varchar" },
-				"password"    : { value: BCryptHash( createUUID() ),    cfsqltype: "cf_sql_varchar" }
+				"password"    : { value: BCryptHash( createUUID() ),    cfsqltype: "cf_sql_varchar" },
+				"avatar_url"  : { value: pictureUrl, cfsqltype: "cf_sql_varchar", null: !len( pictureUrl ) }
 			}
 		);
 
-		return { "id": newId, "display_name": name, "email": normalizedEmail, "role": "commenter" };
+		return { "id": newId, "display_name": name, "email": normalizedEmail, "role": "commenter", "avatar_url": pictureUrl };
 	}
 
 }

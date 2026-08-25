@@ -82,9 +82,11 @@ class {
 
 	/**
 	 * @param {string} accessToken - From exchangeCodeForToken().
-	 * @return {struct} { email, emailVerified, name } from Google's own
-	 *         profile — emailVerified matters: an unverified email on a
-	 *         Google account could belong to someone else entirely.
+	 * @return {struct} { email, emailVerified, name, pictureUrl } from
+	 *         Google's own profile — emailVerified matters: an unverified
+	 *         email on a Google account could belong to someone else
+	 *         entirely. pictureUrl is "" when Google didn't return one
+	 *         (not every account has a profile photo set).
 	 * @throws {GoogleOAuthError} if the userinfo request fails.
 	 */
 	function getUserInfo( required string accessToken ){
@@ -105,7 +107,8 @@ class {
 		return {
 			"email"        : parsed.email ?: "",
 			"emailVerified": parsed.email_verified ?: false,
-			"name"         : parsed.name ?: ""
+			"name"         : parsed.name ?: "",
+			"pictureUrl"   : parsed.picture ?: ""
 		};
 	}
 
