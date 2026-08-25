@@ -89,9 +89,20 @@ EXPOSE 3005
 # ActiveProcessorCount=1: this instance is provisioned as apps-s-1vcpu-1gb
 # (see .do/app.yaml), but Runtime.availableProcessors() has been observed
 # reporting 8 — the host's full core count, not this container's actual
-# allocation. Pinning it avoids any 8-core-assuming thread pool (e.g. a
-# default ForkJoinPool) over-provisioning against a single real core.
+# allocation. Pinning it avoids any 8-core-assuming thread pool over-
+# provisioning against a single real core — this matters even more since
+# boxlang-express moved to Undertow (see its own commit history): XNIO
+# sizes its I/O thread pool from this same availableProcessors() call.
 # SerialGC itself is unaffected either way — it's single-threaded already.
-ENV JAVA_OPTS="-Xmx600m -Xms128m -XX:+UseSerialGC -XX:ActiveProcessorCount=1"
+#
+# MaxDirectMemorySize=64m: Undertow defaults to off-heap direct ByteBuffers
+# for its buffer pool once heap exceeds ~128MB (ours does), and BoxExpress's
+# listen() never calls setDirectBuffers(false) to opt out — so that pool
+# lives entirely outside the Xmx cap above, untracked, on a container with
+# only 1GB total RAM. Left uncapped, a spike there risks a silent OOM-kill
+# from the container's own memory limit (no heap-space exception, no stack
+# trace, the process just disappears). Capping it turns that into a normal,
+# loud `OutOfMemoryError: Direct buffer memory` instead.
+ENV JAVA_OPTS="-Xmx600m -Xms128m -XX:+UseSerialGC -XX:ActiveProcessorCount=1 -XX:MaxDirectMemorySize=64m"
 
 CMD ["boxlang", "--bx-config", "boxlang.json", "app.bxs"]
