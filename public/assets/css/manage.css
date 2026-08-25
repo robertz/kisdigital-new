@@ -2638,6 +2638,12 @@
 	}
 }
 
+/* ── Top posts card (insights) ── */
+
+.c-manage-dashboard__card--pages {
+	grid-column: span 2;
+}
+
 /* ── Zero-result searches / recent activity cards ── */
 
 .c-dashboard-list {
