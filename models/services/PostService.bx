@@ -756,26 +756,29 @@ class {
 	 * @return {array} Array of structs with keys: title, slug, views.
 	 */
 	function getTrendingPosts( numeric limit = 4 ){
-		return queryExecute(
-			"SELECT
-				P.title,
-				P.slug,
-				P.publish_date,
-				SUM(VD.views) AS views
-			FROM Post P
-			INNER JOIN ViewDaily VD ON VD.post_id = P.id
-			WHERE P.status = 'published'
-				AND P.publish_date <= NOW()
-				AND VD.view_date >= DATE_SUB(CURDATE(), INTERVAL :windowDays DAY)
-			GROUP BY P.id, P.title, P.slug, P.publish_date
-			ORDER BY views DESC
-			LIMIT :lim",
-			{
-				"windowDays" : { value: variables.trendingWindowDays, cfsqltype: "cf_sql_integer" },
-				"lim"        : { value: arguments.limit,             cfsqltype: "cf_sql_integer" }
-			},
-			{ returnType: "array" }
-		);
+		var limit = arguments.limit;
+		return _cached( "posts:trending:" & limit, 300, () => {
+			return queryExecute(
+				"SELECT
+					P.title,
+					P.slug,
+					P.publish_date,
+					SUM(VD.views) AS views
+				FROM Post P
+				INNER JOIN ViewDaily VD ON VD.post_id = P.id
+				WHERE P.status = 'published'
+					AND P.publish_date <= NOW()
+					AND VD.view_date >= DATE_SUB(CURDATE(), INTERVAL :windowDays DAY)
+				GROUP BY P.id, P.title, P.slug, P.publish_date
+				ORDER BY views DESC
+				LIMIT :lim",
+				{
+					"windowDays" : { value: variables.trendingWindowDays, cfsqltype: "cf_sql_integer" },
+					"lim"        : { value: limit,                       cfsqltype: "cf_sql_integer" }
+				},
+				{ returnType: "array" }
+			);
+		} );
 	}
 
 	/**
@@ -985,22 +988,26 @@ class {
 	 * @return {array} Array of structs: query, search_count, last_searched.
 	 */
 	function getTopSearches( numeric days = 30, numeric limit = 8 ){
-		return queryExecute(
-			"SELECT
-				query,
-				COUNT(*) AS search_count,
-				MAX(searched_at) AS last_searched
-			FROM SearchLog
-			WHERE searched_at >= DATE_SUB(NOW(), INTERVAL :days DAY)
-			GROUP BY query
-			ORDER BY search_count DESC, last_searched DESC
-			LIMIT :lim",
-			{
-				"days": { value: arguments.days,  cfsqltype: "cf_sql_integer" },
-				"lim" : { value: arguments.limit, cfsqltype: "cf_sql_integer" }
-			},
-			{ returnType: "array" }
-		);
+		var days  = arguments.days;
+		var limit = arguments.limit;
+		return _cached( "posts:topSearches:" & days & ":" & limit, 300, () => {
+			return queryExecute(
+				"SELECT
+					query,
+					COUNT(*) AS search_count,
+					MAX(searched_at) AS last_searched
+				FROM SearchLog
+				WHERE searched_at >= DATE_SUB(NOW(), INTERVAL :days DAY)
+				GROUP BY query
+				ORDER BY search_count DESC, last_searched DESC
+				LIMIT :lim",
+				{
+					"days": { value: days,  cfsqltype: "cf_sql_integer" },
+					"lim" : { value: limit, cfsqltype: "cf_sql_integer" }
+				},
+				{ returnType: "array" }
+			);
+		} );
 	}
 
 	/**
@@ -1072,6 +1079,24 @@ class {
 			"missingCoverCount": counts.missing_cover_count,
 			"missingTagsCount" : missingTags
 		};
+	}
+
+	// Shared read-through cache for getTrendingPosts()/getTopSearches() —
+	// both are aggregate GROUP BY queries hit repeatedly (getTrendingPosts()
+	// backs the public trending sidebar on every post page, plus
+	// /manage/insights and the dashboard summary card), not something that
+	// needs recomputing on every single call. 5 minutes: short enough that a
+	// freshly-published post or a new search shows up quickly, long enough
+	// that repeated hits within a browsing session are free.
+	private function _cached( required string key, required numeric ttlSeconds, required fn ){
+		var cached = cache( "default" ).get( arguments.key );
+		if ( cached.isPresent() ){
+			return cached.get();
+		}
+
+		var result = arguments.fn();
+		cache( "default" ).set( arguments.key, result, arguments.ttlSeconds );
+		return result;
 	}
 
 }

@@ -33,14 +33,16 @@ class {
 	 */
 	function getTotal( numeric daysBack = 30 ){
 		var days = arguments.daysBack;
-		var row  = queryExecute(
-			"SELECT COUNT(DISTINCT ip_address) AS total
-			FROM RequestLog
-			WHERE " & _where(),
-			_params( days ),
-			{ returnType: "array" }
-		)[ 1 ];
-		return { "total": row.total };
+		return _cached( "insights:total:" & days, 300, () => {
+			var row = queryExecute(
+				"SELECT COUNT(DISTINCT ip_address) AS total
+				FROM RequestLog
+				WHERE " & _where(),
+				_params( days ),
+				{ returnType: "array" }
+			)[ 1 ];
+			return { "total": row.total };
+		} );
 	}
 
 	/**
@@ -52,21 +54,24 @@ class {
 	 * @return {array} of { path, count }, highest first.
 	 */
 	function getTop404s( numeric daysBack = 30, numeric limit = 10 ){
-		var days = arguments.daysBack;
-		var params = _params( days );
-		params[ "lim" ] = { value: arguments.limit, cfsqltype: "cf_sql_integer" };
+		var days  = arguments.daysBack;
+		var limit = arguments.limit;
+		return _cached( "insights:top404s:" & days & ":" & limit, 300, () => {
+			var params = _params( days );
+			params[ "lim" ] = { value: limit, cfsqltype: "cf_sql_integer" };
 
-		return queryExecute(
-			"SELECT path, COUNT(*) AS count
-			FROM RequestLog
-			WHERE " & _where() & "
-				AND status_code = 404
-			GROUP BY path
-			ORDER BY count DESC
-			LIMIT :lim",
-			params,
-			{ returnType: "array" }
-		);
+			return queryExecute(
+				"SELECT path, COUNT(*) AS count
+				FROM RequestLog
+				WHERE " & _where() & "
+					AND status_code = 404
+				GROUP BY path
+				ORDER BY count DESC
+				LIMIT :lim",
+				params,
+				{ returnType: "array" }
+			);
+		} );
 	}
 
 	/**
@@ -80,27 +85,30 @@ class {
 	 * @return {array} of { name, count }, highest first.
 	 */
 	function getTopReferrers( numeric daysBack = 30, numeric limit = 10 ){
-		var days = arguments.daysBack;
-		var params = _params( days );
-		params[ "lim" ]     = { value: arguments.limit, cfsqltype: "cf_sql_integer" };
-		params[ "selfHost" ] = { value: "%" & variables.siteHost & "%", cfsqltype: "cf_sql_varchar" };
+		var days  = arguments.daysBack;
+		var limit = arguments.limit;
+		return _cached( "insights:topReferrers:" & days & ":" & limit, 300, () => {
+			var params = _params( days );
+			params[ "lim" ]     = { value: limit, cfsqltype: "cf_sql_integer" };
+			params[ "selfHost" ] = { value: "%" & variables.siteHost & "%", cfsqltype: "cf_sql_varchar" };
 
-		return queryExecute(
-			"SELECT
-				CASE
-					WHEN referrer = '' THEN '(direct)'
-					ELSE SUBSTRING_INDEX(SUBSTRING_INDEX(SUBSTRING_INDEX(referrer, '://', -1), '/', 1), '?', 1)
-				END AS name,
-				COUNT(*) AS count
-			FROM RequestLog
-			WHERE " & _where() & "
-				AND referrer NOT LIKE :selfHost
-			GROUP BY name
-			ORDER BY count DESC
-			LIMIT :lim",
-			params,
-			{ returnType: "array" }
-		);
+			return queryExecute(
+				"SELECT
+					CASE
+						WHEN referrer = '' THEN '(direct)'
+						ELSE SUBSTRING_INDEX(SUBSTRING_INDEX(SUBSTRING_INDEX(referrer, '://', -1), '/', 1), '?', 1)
+					END AS name,
+					COUNT(*) AS count
+				FROM RequestLog
+				WHERE " & _where() & "
+					AND referrer NOT LIKE :selfHost
+				GROUP BY name
+				ORDER BY count DESC
+				LIMIT :lim",
+				params,
+				{ returnType: "array" }
+			);
+		} );
 	}
 
 	/**
@@ -242,6 +250,26 @@ class {
 			"totalPages": ceiling( max( total, 1 ) / safePageSize ),
 			"pathFilter": arguments.pathFilter
 		};
+	}
+
+	// Shared read-through cache for the /manage/insights queries above — all
+	// of them scan the full RequestLog table for the window, so re-running
+	// on every page load (an admin re-checking the dashboard, or the same
+	// query firing again from a different page — getTotal() also backs the
+	// /manage dashboard's own summary card) is wasted work. 5 minutes matches
+	// getDailyTotals()'s own reasoning: the underlying data only moves at
+	// RequestLogger.bx's flush granularity (every 5s) anyway, so anything
+	// tighter than a few minutes buys nothing. Not used by getDailyTotals()
+	// itself, which already caches per calendar day rather than per query.
+	private function _cached( required string key, required numeric ttlSeconds, required fn ){
+		var cached = cache( "default" ).get( arguments.key );
+		if ( cached.isPresent() ){
+			return cached.get();
+		}
+
+		var result = arguments.fn();
+		cache( "default" ).set( arguments.key, result, arguments.ttlSeconds );
+		return result;
 	}
 
 	private function _where(){
