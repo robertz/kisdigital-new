@@ -6,12 +6,11 @@
  * always runs on HotSpot (OpenJDK, see the Dockerfile), so those are
  * expected to work, but each is still wrapped individually — a metric one
  * JVM/OS combination doesn't expose shouldn't take the rest of the page
- * down with it, same reasoning as InsightsService/SecurityService's
- * per-section isolation.
+ * down with it, same reasoning as InsightsService's per-section isolation.
  *
  * Everything returned is a snapshot at the moment of the call — there's no
- * caching here (unlike HostnameResolver), because these are all local,
- * near-instant JMX bean reads, not network calls.
+ * caching here, because these are all local, near-instant JMX bean reads,
+ * not network calls.
  *
  * "Disk" below means the container's own filesystem, not the host's — this
  * process only ever sees what's mounted inside its own container.

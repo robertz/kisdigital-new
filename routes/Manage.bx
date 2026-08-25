@@ -27,14 +27,12 @@ class {
 	variables.r2Client        = "";
 	variables.r2UploadPrefix  = "posts";
 	variables.insightsService = "";
-	variables.securityService = "";
-	variables.hostnameResolver = "";
 	variables.serverMonitor = "";
 	variables.projectDocService  = "";
 	variables.projectDocRenderer = "";
 	variables.projectRegistry    = "";
 
-	function init( required authService, required postService, required authorService, required settingsService, required postRenderer, required r2Client, r2UploadPrefix = "posts", required insightsService, required securityService, required hostnameResolver, required serverMonitor, required projectDocService, required projectDocRenderer ){
+	function init( required authService, required postService, required authorService, required settingsService, required postRenderer, required r2Client, r2UploadPrefix = "posts", required insightsService, required serverMonitor, required projectDocService, required projectDocRenderer ){
 		variables.authService     = arguments.authService;
 		variables.postService     = arguments.postService;
 		variables.authorService   = arguments.authorService;
@@ -43,8 +41,6 @@ class {
 		variables.r2UploadPrefix  = len( trim( arguments.r2UploadPrefix ) ) ? trim( arguments.r2UploadPrefix ).reReplace( "^/+|/+$", "", "all" ) : "posts";
 		variables.r2Client        = arguments.r2Client;
 		variables.insightsService = arguments.insightsService;
-		variables.securityService = arguments.securityService;
-		variables.hostnameResolver = arguments.hostnameResolver;
 		variables.serverMonitor = arguments.serverMonitor;
 		variables.projectDocService  = arguments.projectDocService;
 		variables.projectDocRenderer = arguments.projectDocRenderer;
@@ -108,7 +104,6 @@ class {
 
 		this.router.get( "/manage/insights", admin, ( req, res ) => insightsIndex( req, res ) );
 		this.router.get( "/manage/logs", admin, ( req, res ) => logsIndex( req, res ) );
-		this.router.get( "/manage/security", admin, ( req, res ) => securityIndex( req, res ) );
 		this.router.get( "/manage/server", admin, ( req, res ) => serverIndex( req, res ) );
 		this.router.get( "/manage/server/data", admin, ( req, res ) => serverData( req, res ) );
 
@@ -1012,68 +1007,6 @@ class {
 			// of the embedding <script type="application/json"> tag below.
 			rowsJson: replace( JSONSerialize( _rowsForClient( paging.rows ) ), "</", "<\/", "all" )
 		} );
-	}
-
-	// ── Security (RequestLog heuristic scans) ───────────────────────────────
-
-	// GET /manage/security — each section's own query is caught
-	// independently, same reasoning as insightsIndex(): a DB blip or a
-	// pathological regex on a huge table degrades that one section instead
-	// of blanking the whole page.
-	function securityIndex( req, res ){
-		var volumeAnomalies      = securityFetch( () => variables.securityService.getVolumeAnomalies() );
-		var burstDetection       = securityFetch( () => variables.securityService.getBurstDetection() );
-		var enumerationScanning  = securityFetch( () => variables.securityService.getEnumerationScanning() );
-		var payloadSignatures    = securityFetch( () => variables.securityService.getPayloadSignatures() );
-		var suspiciousUserAgents = securityFetch( () => variables.securityService.getSuspiciousUserAgents() );
-		var sensitivePathProbing = securityFetch( () => variables.securityService.getSensitivePathProbing() );
-		var unusualMethods       = securityFetch( () => variables.securityService.getUnusualMethods() );
-
-		res.render( "manage/security/index", {
-			pageTitle           : "Security",
-			manageSection       : "security",
-			volumeAnomalies     : volumeAnomalies,
-			burstDetection      : burstDetection,
-			enumerationScanning : enumerationScanning,
-			payloadSignatures   : payloadSignatures,
-			suspiciousUserAgents: suspiciousUserAgents,
-			sensitivePathProbing: sensitivePathProbing,
-			unusualMethods      : unusualMethods,
-			hostnames           : _resolveHostnames( [ volumeAnomalies, burstDetection, enumerationScanning, payloadSignatures, suspiciousUserAgents, sensitivePathProbing, unusualMethods ] )
-		} );
-	}
-
-	// Reverse-DNS for every IP across all 7 sections at once, so repeats
-	// (the same scanner IP is often flagged by more than one heuristic)
-	// only get resolved once — see HostnameResolver.bx for the timeout/
-	// caching strategy that keeps this from stalling the page.
-	private function _resolveHostnames( required array sections ){
-		var allIps = [];
-		for ( var section in arguments.sections ){
-			if ( isNull( section ) ) continue;
-			for ( var row in section ) allIps.append( row.ip_address );
-		}
-
-		try {
-			return variables.hostnameResolver.resolveAll( allIps );
-		} catch ( any e ) {
-			println( "[error] Hostname resolution failed: " & e.message );
-			return {};
-		}
-	}
-
-	/**
-	 * Same shape as insightsFetch() — runs one SecurityService call, logging
-	 * and swallowing any failure so the view gets a safe null (rendered as
-	 * "couldn't load this section") instead of a 500 for the whole page.
-	 */
-	private function securityFetch( required fetchFn ){
-		try {
-			return arguments.fetchFn();
-		} catch ( any e ) {
-			println( "[error] Security fetch failed: " & e.message );
-			return javacast( "null", "" );
-		}
 	}
 
 	private function _rowsForClient( required array rows ){

@@ -54,11 +54,6 @@ insightsService = new models.services.InsightsService(
 	reReplace( getSystemSetting( "SITEURL", "https://kisdigital.com" ), "^https?://", "", "one" )
 )
 
-// /manage/security — heuristic scans over the same RequestLog table, aimed
-// at attack patterns rather than visitor analytics. See SecurityService.bx.
-securityService   = new models.services.SecurityService()
-hostnameResolver  = new models.util.HostnameResolver()
-
 // /manage/server — live JVM/OS metrics (memory, CPU, disk, GC, threads).
 // See ServerMonitor.bx; no datasource involved, pure in-process JMX reads.
 serverMonitor = new models.util.ServerMonitor()
@@ -159,7 +154,7 @@ app.use( new routes.Tags( postService, siteDefaults ).router )
 app.use( new routes.Feeds( sitemapService ).router )
 app.use( new routes.Projects( siteDefaults, projectDocService, projectDocRenderer ).router )
 app.use( new routes.Games( siteDefaults ).router )
-app.use( new routes.Manage( authService, postService, authorService, settingsService, postRenderer, r2Client, getSystemSetting( "R2_UPLOAD_PREFIX", "posts" ), insightsService, securityService, hostnameResolver, serverMonitor, projectDocService, projectDocRenderer ).router )
+app.use( new routes.Manage( authService, postService, authorService, settingsService, postRenderer, r2Client, getSystemSetting( "R2_UPLOAD_PREFIX", "posts" ), insightsService, serverMonitor, projectDocService, projectDocRenderer ).router )
 
 // ── 404 / 500 (themed, matching the site's own look) ────────────────────
 app.use( ( req, res ) => {
