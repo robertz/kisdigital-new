@@ -88,15 +88,15 @@ class {
 	 * @throws {GoogleOAuthError} if the userinfo request fails.
 	 */
 	function getUserInfo( required string accessToken ){
-		var client = createObject( "java", "java.net.http.HttpClient" ).newHttpClient();
-		var request = createObject( "java", "java.net.http.HttpRequest" )
-			.newBuilder()
-			.uri( createObject( "java", "java.net.URI" ).create( "https://www.googleapis.com/oauth2/v3/userinfo" ) )
-			.header( "Authorization", "Bearer " & arguments.accessToken )
-			.GET()
-			.build();
-
-		var response = client.send( request, createObject( "java", "java.net.http.HttpResponse$BodyHandlers" ).ofString() );
+		var response = _client().send(
+			createObject( "java", "java.net.http.HttpRequest" )
+				.newBuilder()
+				.uri( _uri( "https://www.googleapis.com/oauth2/v3/userinfo" ) )
+				.header( "Authorization", "Bearer " & arguments.accessToken )
+				.GET()
+				.build(),
+			createObject( "java", "java.net.http.HttpResponse$BodyHandlers" ).ofString()
+		);
 		if ( response.statusCode() != 200 ){
 			throw( type: "GoogleOAuthError", message: "userinfo request failed (HTTP " & response.statusCode() & "): " & response.body() );
 		}
@@ -110,15 +110,15 @@ class {
 	}
 
 	private function _post( required string url, required string formBody ){
-		var client = createObject( "java", "java.net.http.HttpClient" ).newHttpClient();
-		var request = createObject( "java", "java.net.http.HttpRequest" )
-			.newBuilder()
-			.uri( createObject( "java", "java.net.URI" ).create( arguments.url ) )
-			.header( "Content-Type", "application/x-www-form-urlencoded" )
-			.POST( createObject( "java", "java.net.http.HttpRequest$BodyPublishers" ).ofString( arguments.formBody ) )
-			.build();
-
-		var response = client.send( request, createObject( "java", "java.net.http.HttpResponse$BodyHandlers" ).ofString() );
+		var response = _client().send(
+			createObject( "java", "java.net.http.HttpRequest" )
+				.newBuilder()
+				.uri( _uri( arguments.url ) )
+				.header( "Content-Type", "application/x-www-form-urlencoded" )
+				.POST( createObject( "java", "java.net.http.HttpRequest$BodyPublishers" ).ofString( arguments.formBody ) )
+				.build(),
+			createObject( "java", "java.net.http.HttpResponse$BodyHandlers" ).ofString()
+		);
 		return { "status": response.statusCode(), "body": response.body() };
 	}
 
@@ -129,6 +129,24 @@ class {
 			parts.append( encoder.encode( key, "UTF-8" ) & "=" & encoder.encode( arguments.params[ key ], "UTF-8" ) );
 		}
 		return parts.toList( "&" );
+	}
+
+	// BoxLang interop gotcha, confirmed by direct isolation (not guessed):
+	// assigning a built java.net.http.HttpRequest to a local var *before*
+	// passing it to HttpClient.send() breaks method resolution entirely —
+	// "Error getting method [send] for class [jdk.internal.net.http.
+	// HttpClientFacade]", even though the client itself is fine stored in a
+	// var. Building the request inline as a direct .send() argument (see
+	// getUserInfo()/_post() above) avoids it. HttpClient.newHttpClient() and
+	// URI.create() (static factories) work fine too, for what it's worth —
+	// .newBuilder().build()/.init() below is just the shape that happened to
+	// get isolated during testing, not itself the fix.
+	private function _client(){
+		return createObject( "java", "java.net.http.HttpClient" ).newBuilder().build();
+	}
+
+	private function _uri( required string url ){
+		return createObject( "java", "java.net.URI" ).init( arguments.url );
 	}
 
 }
