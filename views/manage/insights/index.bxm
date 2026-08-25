@@ -37,21 +37,24 @@
 					<span class="c-manage-dashboard__icon"><i class="bi bi-file-earmark-text"></i></span>
 					<span class="c-manage-dashboard__eyebrow">Top pages</span>
 				</div>
-				<bx:if isNull( data.topPaths )>
+				<bx:if isNull( data.topContentAreas )>
 					<p class="c-manage-dashboard__meta">Couldn't load this &mdash; see server logs.</p>
-				<bx:elseif !data.topPaths.len()>
+				<bx:elseif !data.topContentAreas.len()>
 					<p class="c-manage-dashboard__meta">No visits recorded yet.</p>
 				<bx:else>
-					<ul class="c-dashboard-list">
-						<bx:loop array="#data.topPaths#" item="row">
+					<ol class="c-dashboard-list">
+						<bx:loop array="#data.topContentAreas#" item="row">
 							<li class="c-dashboard-list__item">
-								<a href="#encodeForHTMLAttribute( row.path )#" class="c-dashboard-list__label c-dashboard-list__label--link" target="_blank" rel="noopener">
-									#encodeForHTML( row.path )#
-								</a>
-								<span class="c-dashboard-list__meta">#numberFormat( row.count )#</span>
+								<bx:if len( row.path )>
+									<a href="#encodeForHTMLAttribute( row.path )#" class="c-dashboard-list__label c-dashboard-list__label--link" target="_blank" rel="noopener">
+										#encodeForHTML( row.name )#
+									</a>
+								<bx:else>
+									<span class="c-dashboard-list__label">#encodeForHTML( row.name )#</span>
+								</bx:if>
 							</li>
 						</bx:loop>
-					</ul>
+					</ol>
 				</bx:if>
 			</section>
 

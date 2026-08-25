@@ -44,27 +44,56 @@ class {
 	}
 
 	/**
-	 * Excludes 404s — a broken/removed link showing up as a "top page" is
-	 * noise, not a page anyone actually visited.
+	 * Grouped by top-level content area (Articles, Projects, Games, ...)
+	 * rather than exact path — a per-post/per-project breakdown is too
+	 * granular to read as "what's popular" at a glance, and on a site this
+	 * size it's mostly individual posts each getting a handful of hits, not
+	 * a meaningful ranking. Excludes 404s — a broken/removed link showing up
+	 * here is noise, not a page anyone actually visited.
 	 *
-	 * @return {array} of { path, count }, highest first.
+	 * @return {array} of { name, path, count }, highest first. `path` is the
+	 *         area's canonical link target, empty when there isn't one
+	 *         (e.g. "Tags" spans many different /tag/:tag pages).
 	 */
-	function getTopPaths( numeric daysBack = 30, numeric limit = 10 ){
+	function getTopContentAreas( numeric daysBack = 30, numeric limit = 10 ){
 		var days = arguments.daysBack;
 		var params = _params( days );
 		params[ "lim" ] = { value: arguments.limit, cfsqltype: "cf_sql_integer" };
 
-		return queryExecute(
-			"SELECT path, COUNT(*) AS count
+		var rows = queryExecute(
+			"SELECT
+				CASE
+					WHEN path = '/' THEN 'Home'
+					WHEN path LIKE '/posts%' THEN 'Articles'
+					WHEN path LIKE '/projects%' THEN 'Projects'
+					WHEN path LIKE '/games%' THEN 'Games'
+					WHEN path = '/about' THEN 'About'
+					WHEN path LIKE '/tag/%' THEN 'Tags'
+					WHEN path LIKE '/search%' THEN 'Search'
+					ELSE 'Other'
+				END AS name,
+				COUNT(*) AS count
 			FROM RequestLog
 			WHERE " & _where() & "
 				AND " & _excluding404() & "
-			GROUP BY path
+			GROUP BY name
 			ORDER BY count DESC
 			LIMIT :lim",
 			params,
 			{ returnType: "array" }
 		);
+
+		var areaPaths = {
+			"Home"    : "/",
+			"Articles": "/posts",
+			"Projects": "/projects",
+			"Games"   : "/games",
+			"About"   : "/about"
+		};
+		for ( var row in rows ){
+			row[ "path" ] = areaPaths.keyExists( row.name ) ? areaPaths[ row.name ] : "";
+		}
+		return rows;
 	}
 
 	/**
@@ -106,7 +135,7 @@ class {
 	 * Requires at least 3 hits for a path in the window, so one slow one-off
 	 * (a cold cache, a background job sharing the box) can't make a
 	 * barely-visited path look like the slowest thing on the site. Excludes
-	 * 404s for the same reason getTopPaths() does — a missing page's
+	 * 404s for the same reason getTopContentAreas() does — a missing page's
 	 * response time isn't a "slow page", it's not a page at all.
 	 *
 	 * @return {array} of { path, avgDurationMs, count }, slowest first.
