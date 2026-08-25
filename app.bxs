@@ -54,9 +54,10 @@ insightsService = new models.services.InsightsService(
 	reReplace( getSystemSetting( "SITEURL", "https://kisdigital.com" ), "^https?://", "", "one" )
 )
 
-// /manage/server — live JVM/OS metrics (memory, CPU, disk, GC, threads).
-// See ServerMonitor.bx; no datasource involved, pure in-process JMX reads.
-serverMonitor = new models.util.ServerMonitor()
+// /manage/server — live JVM/OS metrics (memory, CPU, disk, GC, threads) plus
+// Undertow's own connector stats via `app`. See ServerMonitor.bx; no
+// datasource involved, pure in-process JMX/Undertow reads.
+serverMonitor = new models.util.ServerMonitor( app )
 
 // ── Middleware ───────────────────────────────────────────────────────────
 // requestLogger goes first, ahead of everything else, so its next() wraps

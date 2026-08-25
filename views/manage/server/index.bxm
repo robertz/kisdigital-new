@@ -267,6 +267,64 @@
 					</div>
 				</section>
 
+				<!--- HTTP connector (Undertow) --->
+				<section class="c-manage-section">
+					<header class="c-manage-section__head">
+						<h2>HTTP connector</h2>
+						<p>Live request/connection counts straight from Undertow's own listener, not derived from RequestLog.</p>
+					</header>
+					<bx:if isNull( data.server.connector )>
+						<div class="c-manage-panel__empty c-manage-panel__empty--inline">
+							<p>Not available &mdash; requires a boxlang-express version with getConnectorStatistics().</p>
+						</div>
+					<bx:else>
+						<div class="c-manage-panel">
+							<div class="c-monitor-stats">
+								<div class="c-monitor-stat">
+									<span class="c-monitor-stat__label">Total requests</span>
+									<span class="c-monitor-stat__value" id="stat-requestCount">#encodeForHTML( data.server.connector.requestCount )#</span>
+								</div>
+								<div class="c-monitor-stat">
+									<span class="c-monitor-stat__label">Active requests</span>
+									<span class="c-monitor-stat__value" id="stat-activeRequests">#encodeForHTML( data.server.connector.activeRequests )#</span>
+								</div>
+								<div class="c-monitor-stat">
+									<span class="c-monitor-stat__label">Peak active requests</span>
+									<span class="c-monitor-stat__value" id="stat-maxActiveRequests">#encodeForHTML( data.server.connector.maxActiveRequests )#</span>
+								</div>
+								<div class="c-monitor-stat">
+									<span class="c-monitor-stat__label">Active connections</span>
+									<span class="c-monitor-stat__value" id="stat-activeConnections">#encodeForHTML( data.server.connector.activeConnections )#</span>
+								</div>
+								<div class="c-monitor-stat">
+									<span class="c-monitor-stat__label">Peak active connections</span>
+									<span class="c-monitor-stat__value" id="stat-maxActiveConnections">#encodeForHTML( data.server.connector.maxActiveConnections )#</span>
+								</div>
+								<div class="c-monitor-stat">
+									<span class="c-monitor-stat__label">Errors</span>
+									<span class="c-monitor-stat__value" id="stat-errorCount">#encodeForHTML( data.server.connector.errorCount )#</span>
+								</div>
+								<div class="c-monitor-stat">
+									<span class="c-monitor-stat__label">Avg processing time</span>
+									<span class="c-monitor-stat__value" id="stat-avgProcessingTime">#encodeForHTML( data.server.connector.avgProcessingTime )#</span>
+								</div>
+								<div class="c-monitor-stat">
+									<span class="c-monitor-stat__label">Max processing time</span>
+									<span class="c-monitor-stat__value" id="stat-maxProcessingTime">#encodeForHTML( data.server.connector.maxProcessingTime )#</span>
+								</div>
+								<div class="c-monitor-stat">
+									<span class="c-monitor-stat__label">Bytes sent</span>
+									<span class="c-monitor-stat__value" id="stat-bytesSent">#encodeForHTML( data.server.connector.bytesSent )#</span>
+								</div>
+								<div class="c-monitor-stat">
+									<span class="c-monitor-stat__label">Bytes received</span>
+									<span class="c-monitor-stat__value" id="stat-bytesReceived">#encodeForHTML( data.server.connector.bytesReceived )#</span>
+								</div>
+							</div>
+						</div>
+					</bx:if>
+				</section>
+
 				<!--- Process --->
 				<section class="c-manage-section">
 					<header class="c-manage-section__head">
@@ -384,6 +442,19 @@
 		setText('stat-peakCount', server.threads.peakCount);
 		setText('stat-daemonCount', server.threads.daemonCount);
 		setText('stat-totalStartedCount', server.threads.totalStartedCount);
+
+		if (server.connector) {
+			setText('stat-requestCount', server.connector.requestCount);
+			setText('stat-activeRequests', server.connector.activeRequests);
+			setText('stat-maxActiveRequests', server.connector.maxActiveRequests);
+			setText('stat-activeConnections', server.connector.activeConnections);
+			setText('stat-maxActiveConnections', server.connector.maxActiveConnections);
+			setText('stat-errorCount', server.connector.errorCount);
+			setText('stat-avgProcessingTime', server.connector.avgProcessingTime);
+			setText('stat-maxProcessingTime', server.connector.maxProcessingTime);
+			setText('stat-bytesSent', server.connector.bytesSent);
+			setText('stat-bytesReceived', server.connector.bytesReceived);
+		}
 	}
 
 	function tickLastUpdatedLabel(){

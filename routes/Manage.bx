@@ -1143,6 +1143,20 @@ class {
 				"osArch"     : arguments.snapshot.process.osArch,
 				"javaVersion": arguments.snapshot.process.javaVersion,
 				"userDir"    : arguments.snapshot.process.userDir
+			},
+			"connector": isNull( arguments.snapshot.connector ) ? javacast( "null", "" ) : {
+				"requestCount"        : numberFormat( arguments.snapshot.connector.requestCount ),
+				"activeRequests"      : numberFormat( arguments.snapshot.connector.activeRequests ),
+				"maxActiveRequests"   : numberFormat( arguments.snapshot.connector.maxActiveRequests ),
+				"activeConnections"   : numberFormat( arguments.snapshot.connector.activeConnections ),
+				"maxActiveConnections": numberFormat( arguments.snapshot.connector.maxActiveConnections ),
+				"bytesSent"           : _formatBytes( arguments.snapshot.connector.bytesSent ),
+				"bytesReceived"       : _formatBytes( arguments.snapshot.connector.bytesReceived ),
+				"errorCount"          : numberFormat( arguments.snapshot.connector.errorCount ),
+				"avgProcessingTime"   : arguments.snapshot.connector.requestCount > 0
+					? _formatMs( arguments.snapshot.connector.processingTimeMs / arguments.snapshot.connector.requestCount )
+					: "n/a",
+				"maxProcessingTime"   : _formatMs( arguments.snapshot.connector.maxProcessingTimeMs )
 			}
 		};
 
@@ -1174,6 +1188,14 @@ class {
 		if ( hours > 0 ) return hours & "h " & minutes & "m";
 		if ( minutes > 0 ) return minutes & "m " & seconds & "s";
 		return seconds & "s";
+	}
+
+	// _formatDuration() above truncates to whole seconds — fine for uptime/GC
+	// time, useless for a per-request duration that's normally well under a
+	// second (it'd just read "0s" for anything under a full second).
+	private function _formatMs( required numeric ms ){
+		if ( arguments.ms < 1000 ) return numberFormat( arguments.ms, "0" ) & "ms";
+		return numberFormat( arguments.ms / 1000, "0.00" ) & "s";
 	}
 
 	private function _formatPercent( required numeric ratio ){

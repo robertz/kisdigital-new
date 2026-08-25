@@ -17,15 +17,29 @@
  */
 class {
 
+	variables.app = "";
+
+	/**
+	 * @param {BoxExpress} app - The running app instance, for connector-level
+	 *        HTTP metrics via app.getConnectorStatistics() (boxlang-express
+	 *        >=0.2.1). Optional so this class still works standalone (e.g.
+	 *        under test) without a real server behind it.
+	 */
+	function init( app = javacast( "null", "" ) ){
+		variables.app = arguments.app;
+		return this;
+	}
+
 	function getSnapshot(){
 		return {
-			"memory" : _memory(),
-			"cpu"    : _cpu(),
-			"disk"   : _disk(),
-			"jvm"    : _jvm(),
-			"gc"     : _gc(),
-			"threads": _threads(),
-			"process": _process()
+			"memory"   : _memory(),
+			"cpu"      : _cpu(),
+			"disk"     : _disk(),
+			"jvm"      : _jvm(),
+			"gc"       : _gc(),
+			"threads"  : _threads(),
+			"process"  : _process(),
+			"connector": _connector()
 		};
 	}
 
@@ -135,6 +149,39 @@ class {
 		};
 		_tryPut( result, "pid", () => createObject( "java", "java.lang.ProcessHandle" ).current().pid() );
 		return result;
+	}
+
+	// HTTP-layer metrics straight from Undertow's own listener — everything
+	// above this comes from java.lang.management, which only ever sees the
+	// JVM/OS, not requests. null when there's no app (standalone/test use)
+	// or the server hasn't started/has already stopped — see
+	// BoxExpress.getConnectorStatistics()'s own docblock for when that is.
+	//
+	// getProcessingTime()/getMaxProcessingTime() are nanoseconds per
+	// Undertow's own ConnectorStatistics API — converted to ms here so
+	// every duration this class returns is consistently in milliseconds.
+	private function _connector(){
+		if ( isNull( variables.app ) || !isObject( variables.app ) ){
+			return javacast( "null", "" );
+		}
+
+		var stats = variables.app.getConnectorStatistics();
+		if ( isNull( stats ) ){
+			return javacast( "null", "" );
+		}
+
+		return {
+			"requestCount"        : stats.getRequestCount(),
+			"activeRequests"      : stats.getActiveRequests(),
+			"maxActiveRequests"   : stats.getMaxActiveRequests(),
+			"activeConnections"   : stats.getActiveConnections(),
+			"maxActiveConnections": stats.getMaxActiveConnections(),
+			"bytesSent"           : stats.getBytesSent(),
+			"bytesReceived"       : stats.getBytesReceived(),
+			"errorCount"          : stats.getErrorCount(),
+			"processingTimeMs"    : stats.getProcessingTime() / 1000000,
+			"maxProcessingTimeMs" : stats.getMaxProcessingTime() / 1000000
+		};
 	}
 
 	// Runs fn(), stores its result under key only if it succeeds — used for
