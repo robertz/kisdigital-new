@@ -15,7 +15,11 @@
 	<div class="post-row__meta">
 		<bx:if len( post.getAuthorName() )>
 			<span class="d-inline-flex align-items-center gap-2">
-				<span class="author-avatar author-avatar--sm">#encodeForHTML( post.getAuthorInitials() )#</span>
+				<bx:if len( post.getAuthorAvatarUrl() )>
+					<img src="#encodeForHTMLAttribute( post.getAuthorAvatarUrl() )#" alt="" class="author-avatar author-avatar--sm">
+				<bx:else>
+					<span class="author-avatar author-avatar--sm">#encodeForHTML( post.getAuthorInitials() )#</span>
+				</bx:if>
 				<span class="read-time">#encodeForHTML( post.getAuthorName() )#</span>
 			</span>
 		</bx:if>

@@ -9,6 +9,7 @@
 	width: 108px;
 	height: 108px;
 	border-radius: 50%;
+	object-fit: cover;
 	background: var(--ui-surface-2);
 	border: 1px solid var(--ui-border-subtle);
 	color: var(--post-anchor);

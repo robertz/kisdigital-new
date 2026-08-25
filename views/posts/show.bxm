@@ -58,9 +58,13 @@
 
 						<div class="c-post__meta">
 							<bx:if len( data.post.getAuthorName() )>
-								<div class="c-post__author-avatar">
-									#encodeForHTML( data.post.getAuthorInitials() )#
-								</div>
+								<bx:if len( data.post.getAuthorAvatarUrl() )>
+									<img src="#encodeForHTMLAttribute( data.post.getAuthorAvatarUrl() )#" alt="" class="c-post__author-avatar">
+								<bx:else>
+									<div class="c-post__author-avatar">
+										#encodeForHTML( data.post.getAuthorInitials() )#
+									</div>
+								</bx:if>
 								<span>#encodeForHTML( data.post.getAuthorName() )#</span>
 								<span class="c-post__meta-sep">&middot;</span>
 							</bx:if>
@@ -176,9 +180,13 @@
 					<p class="c-post-sidebar__label">Author</p>
 					<div class="c-post-sidebar__widget mb-5">
 						<div class="d-flex align-items-center gap-3 mb-3">
-							<div class="c-post-sidebar__author-avatar">
-								#encodeForHTML( data.post.getAuthorInitials() )#
-							</div>
+							<bx:if len( data.post.getAuthorAvatarUrl() )>
+								<img src="#encodeForHTMLAttribute( data.post.getAuthorAvatarUrl() )#" alt="" class="c-post-sidebar__author-avatar">
+							<bx:else>
+								<div class="c-post-sidebar__author-avatar">
+									#encodeForHTML( data.post.getAuthorInitials() )#
+								</div>
+							</bx:if>
 							<div class="text-body fw-bold">#encodeForHTML( data.post.getAuthorName() )#</div>
 						</div>
 						<bx:if len( data.post.getAuthorAbout() )>

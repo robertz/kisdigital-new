@@ -126,6 +126,7 @@
 	width: 30px;
 	height: 30px;
 	border-radius: 50%;
+	object-fit: cover;
 	background: var(--ui-surface-2);
 	border: 1px solid var(--ui-border-subtle);
 	display: flex;
@@ -285,6 +286,7 @@
 	width: 42px;
 	height: 42px;
 	border-radius: 50%;
+	object-fit: cover;
 	background: var(--ui-surface-2);
 	border: 1px solid var(--ui-border-subtle);
 	display: flex;

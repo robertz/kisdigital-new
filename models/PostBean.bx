@@ -28,6 +28,7 @@ class accessors="true" {
 	property name="tags"        type="array";
 	property name="authorName"        type="string"  default="";
 	property name="authorAvatarLabel" type="string"  default="";
+	property name="authorAvatarUrl"   type="string"  default="";
 	property name="authorAbout"       type="string"  default="";
 	property name="views"       type="numeric" default=0;
 	property name="created"     type="any"     default="";
@@ -50,6 +51,7 @@ class accessors="true" {
 		setTags(        [] );
 		setAuthorName(        "" );
 		setAuthorAvatarLabel( "" );
+		setAuthorAvatarUrl(   "" );
 		setAuthorAbout(       "" );
 		setViews(       0 );
 		setCreated(     "" );
@@ -79,6 +81,7 @@ class accessors="true" {
 		setTags(        data["tags"]         ?: [] );
 		setAuthorName(        data["author_name"]         ?: "" );
 		setAuthorAvatarLabel( data["author_avatar_label"] ?: "" );
+		setAuthorAvatarUrl(   data["author_avatar_url"]   ?: "" );
 		setAuthorAbout(       data["author_about"]        ?: "" );
 		setViews(       data["views"]        ?: 0 );
 		setCreated(     data["created"]      ?: "" );
@@ -182,7 +185,7 @@ class accessors="true" {
 		).map( ( r ) => r.tag );
 
 		var authorRows = queryExecute(
-			"SELECT U.display_name
+			"SELECT U.display_name, U.avatar_label, U.avatar_url
 			FROM User U
 			INNER JOIN UserPost UP ON UP.user_id = U.id
 			WHERE UP.post_id = :post_id
@@ -191,7 +194,9 @@ class accessors="true" {
 			{ "post_id": { value: row.id, cfsqltype: "cf_sql_varchar" } },
 			{ returnType: "array" }
 		);
-		row[ "author_name" ] = authorRows.len() ? authorRows[ 1 ].display_name : "";
+		row[ "author_name" ]         = authorRows.len() ? authorRows[ 1 ].display_name : "";
+		row[ "author_avatar_label" ] = authorRows.len() ? authorRows[ 1 ].avatar_label  : "";
+		row[ "author_avatar_url" ]   = authorRows.len() ? authorRows[ 1 ].avatar_url    : "";
 
 		return populate( row );
 
@@ -244,6 +249,14 @@ class accessors="true" {
 						AND UP.author_role = 'author'
 					LIMIT 1
 				) AS author_avatar_label,
+				(
+					SELECT U.avatar_url
+					FROM User U
+					INNER JOIN UserPost UP ON UP.user_id = U.id
+					WHERE UP.post_id = P.id
+						AND UP.author_role = 'author'
+					LIMIT 1
+				) AS author_avatar_url,
 				(
 					SELECT U.about
 					FROM User U
