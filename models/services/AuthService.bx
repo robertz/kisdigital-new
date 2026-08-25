@@ -60,7 +60,9 @@ class {
 	 * created the normal way, or a commenter who's signed in before) keep
 	 * whatever role they already have — this never changes an existing
 	 * row's role, so it can't be used to escalate a commenter into admin
-	 * just by them re-authenticating.
+	 * just by them re-authenticating. avatar_url is the one field that IS
+	 * kept in sync on every login, admin/author rows included — it carries
+	 * no privilege, so refreshing it here doesn't reopen that concern.
 	 *
 	 * The new row's password is a BCryptHash() of a random, never-disclosed
 	 * UUID — a valid hash the User.password NOT NULL column accepts, but
@@ -77,10 +79,16 @@ class {
 	 * @param {string} email       - Google-verified email address.
 	 * @param {string} displayName - Google account's display name; falls
 	 *        back to the email's local part when Google didn't provide one.
+	 *        Only stored at creation time — an existing row's display_name
+	 *        is left alone, so a CMS-set name doesn't get silently
+	 *        overwritten by whatever the Google account happens to say.
 	 * @param {string} pictureUrl  - Google account's profile photo URL, if
-	 *        any (GoogleOAuthClient.getUserInfo()'s pictureUrl) — only ever
-	 *        stored at creation time, same as displayName; ignored for an
-	 *        existing row.
+	 *        any (GoogleOAuthClient.getUserInfo()'s pictureUrl). Stored at
+	 *        creation time, and re-synced on every subsequent login when
+	 *        Google returns a non-empty value that differs from what's
+	 *        stored — an empty pictureUrl never clears an existing one, in
+	 *        case that's just a transient gap in Google's response rather
+	 *        than the account's photo actually having been removed.
 	 * @return {struct} User struct (id, display_name, email, role,
 	 *         avatar_url) — same shape as authenticate()'s success case plus
 	 *         avatar_url. Empty struct if a matching row exists but is
@@ -88,6 +96,7 @@ class {
 	 */
 	function findOrCreateGoogleUser( required string email, string displayName = "", string pictureUrl = "" ){
 		var normalizedEmail = lCase( trim( arguments.email ) );
+		var pictureUrl       = trim( arguments.pictureUrl );
 
 		var existing = queryExecute(
 			"SELECT id, display_name, email, role, avatar_url, is_active
@@ -99,12 +108,25 @@ class {
 		);
 
 		if ( existing.len() ){
-			return existing[ 1 ].is_active ? existing[ 1 ] : {};
+			var row = existing[ 1 ];
+			if ( !row.is_active ) return {};
+
+			if ( len( pictureUrl ) && pictureUrl != ( row.avatar_url ?: "" ) ){
+				queryExecute(
+					"UPDATE User SET avatar_url = :avatar_url WHERE id = :id",
+					{
+						"avatar_url": { value: pictureUrl, cfsqltype: "cf_sql_varchar" },
+						"id"        : { value: row.id,      cfsqltype: "cf_sql_varchar" }
+					}
+				);
+				row[ "avatar_url" ] = pictureUrl;
+			}
+
+			return row;
 		}
 
-		var newId      = createGUID();
-		var name        = len( trim( arguments.displayName ) ) ? trim( arguments.displayName ) : listFirst( normalizedEmail, "@" );
-		var pictureUrl  = trim( arguments.pictureUrl );
+		var newId = createGUID();
+		var name  = len( trim( arguments.displayName ) ) ? trim( arguments.displayName ) : listFirst( normalizedEmail, "@" );
 
 		queryExecute(
 			"INSERT INTO User (id, display_name, email, password, role, avatar_url)
