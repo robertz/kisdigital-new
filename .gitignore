@@ -5,6 +5,7 @@ tests/results/
 .env
 .env.*
 !.env.example
+docker-compose.override.yml
 public/assets/dist/
 uploads/
 .DS_Store
