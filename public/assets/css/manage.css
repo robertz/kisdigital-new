@@ -108,6 +108,51 @@
 	transform: translateY(1px);
 }
 
+/* ── Google sign-in ── */
+
+.c-auth__divider {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+	margin: var(--space-5) 0;
+	color: var(--text-secondary);
+	font-size: 0.8125rem;
+}
+
+.c-auth__divider::before,
+.c-auth__divider::after {
+	content: "";
+	flex: 1;
+	height: 1px;
+	background: var(--ui-border-subtle);
+}
+
+.c-auth__google-btn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--space-3);
+	width: 100%;
+	padding: 10px var(--space-4);
+	/* .c-auth-card itself is --ui-surface-1 — a step darker/lighter here
+	   (--ui-surface-2) is what keeps this visible against the card in both
+	   themes, rather than blending into it like .c-auth__submit would if it
+	   used the card's own surface color. */
+	background: var(--ui-surface-2);
+	border: 1px solid var(--ui-border-subtle);
+	border-radius: var(--ui-radius-sm);
+	color: var(--post-anchor);
+	font-size: 0.9375rem;
+	font-weight: 600;
+	text-decoration: none;
+	transition: border-color 120ms ease;
+}
+
+.c-auth__google-btn:hover {
+	border-color: var(--post-link-text);
+	color: var(--post-anchor);
+}
+
 /* ── Error alert ── */
 
 .c-auth__error {

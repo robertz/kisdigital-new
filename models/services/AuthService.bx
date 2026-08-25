@@ -54,4 +54,64 @@ class {
 		return user;
 	}
 
+	/**
+	 * Looks up a User row by a Google-verified email, creating a new
+	 * role='commenter' row if none exists. Existing rows (staff accounts
+	 * created the normal way, or a commenter who's signed in before) keep
+	 * whatever role they already have — this never changes an existing
+	 * row's role, so it can't be used to escalate a commenter into admin
+	 * just by them re-authenticating.
+	 *
+	 * The new row's password is a BCryptHash() of a random, never-disclosed
+	 * UUID — a valid hash the User.password NOT NULL column accepts, but
+	 * one nobody can ever know the plaintext for, so password-based login
+	 * (doLogin() in routes/Manage.bx) can never succeed against it. That
+	 * route also independently rejects any non-admin/author role even if it
+	 * somehow did, so this account only ever gets in via Google.
+	 *
+	 * SECURITY: only call this with an email whose ownership Google has
+	 * already confirmed (GoogleOAuthClient.getUserInfo()'s emailVerified) —
+	 * this trusts the given email outright, the same way authenticate()
+	 * trusts a matched password.
+	 *
+	 * @param {string} email       - Google-verified email address.
+	 * @param {string} displayName - Google account's display name; falls
+	 *        back to the email's local part when Google didn't provide one.
+	 * @return {struct} User struct (id, display_name, email, role) — same
+	 *         shape as authenticate()'s success case. Empty struct if a
+	 *         matching row exists but is deactivated.
+	 */
+	function findOrCreateGoogleUser( required string email, string displayName = "" ){
+		var normalizedEmail = lCase( trim( arguments.email ) );
+
+		var existing = queryExecute(
+			"SELECT id, display_name, email, role, is_active
+			FROM User
+			WHERE email = :email
+			LIMIT 1",
+			{ "email": { value: normalizedEmail, cfsqltype: "cf_sql_varchar" } },
+			{ returnType: "array" }
+		);
+
+		if ( existing.len() ){
+			return existing[ 1 ].is_active ? existing[ 1 ] : {};
+		}
+
+		var newId = createGUID();
+		var name  = len( trim( arguments.displayName ) ) ? trim( arguments.displayName ) : listFirst( normalizedEmail, "@" );
+
+		queryExecute(
+			"INSERT INTO User (id, display_name, email, password, role)
+			VALUES (:id, :display_name, :email, :password, 'commenter')",
+			{
+				"id"          : { value: newId,                        cfsqltype: "cf_sql_varchar" },
+				"display_name": { value: name,                         cfsqltype: "cf_sql_varchar" },
+				"email"       : { value: normalizedEmail,               cfsqltype: "cf_sql_varchar" },
+				"password"    : { value: BCryptHash( createUUID() ),    cfsqltype: "cf_sql_varchar" }
+			}
+		);
+
+		return { "id": newId, "display_name": name, "email": normalizedEmail, "role": "commenter" };
+	}
+
 }

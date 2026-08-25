@@ -44,6 +44,21 @@ r2Client = new models.util.R2Client(
 	getSystemSetting( "R2_PUBLIC_BASE_URL", "https://static.kisdigital.com" )
 )
 
+// "Sign in with Google" — see models/util/GoogleOAuthClient.bx and
+// routes/Auth.bx. Credentials optional, same as r2Client above:
+// isConfigured() is false until both env vars are set, and /auth/google
+// reports that clearly instead of redirecting into a broken flow. The
+// callback URL is derived from SITEURL rather than its own env var so dev
+// and prod can never drift apart from each other — but it has to match
+// (exactly, including scheme/host) whatever's registered as an authorized
+// redirect URI on the Google Cloud OAuth client, or Google rejects the
+// exchange outright.
+googleOAuthClient = new models.util.GoogleOAuthClient(
+	getSystemSetting( "GOOGLE_CLIENT_ID", "" ),
+	getSystemSetting( "GOOGLE_CLIENT_SECRET", "" ),
+	getSystemSetting( "SITEURL", "https://kisdigital.com" ) & "/auth/google/callback"
+)
+
 // Apache-style access log (RequestLog table) — see models/util/RequestLogger.bx.
 // requestLogger fills the table in asynchronously; insightsService reads it
 // back out for /manage/insights and the dashboard's insights summary card.
@@ -149,13 +164,14 @@ if ( app.getSetting( "env" ) == "production" ){
 }
 
 // ── Routes ───────────────────────────────────────────────────────────────
+app.use( new routes.Auth( authService, googleOAuthClient ).router )
 app.use( new routes.Main( postService, authorService, siteDefaults ).router )
 app.use( new routes.Posts( postService, postRenderer, siteDefaults ).router )
 app.use( new routes.Tags( postService, siteDefaults ).router )
 app.use( new routes.Feeds( sitemapService ).router )
 app.use( new routes.Projects( siteDefaults, projectDocService, projectDocRenderer ).router )
 app.use( new routes.Games( siteDefaults ).router )
-app.use( new routes.Manage( authService, postService, authorService, settingsService, postRenderer, r2Client, getSystemSetting( "R2_UPLOAD_PREFIX", "posts" ), insightsService, serverMonitor, projectDocService, projectDocRenderer ).router )
+app.use( new routes.Manage( authService, postService, authorService, settingsService, postRenderer, r2Client, getSystemSetting( "R2_UPLOAD_PREFIX", "posts" ), insightsService, serverMonitor, projectDocService, projectDocRenderer, googleOAuthClient ).router )
 
 // ── 404 / 500 (themed, matching the site's own look) ────────────────────
 app.use( ( req, res ) => {

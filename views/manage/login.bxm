@@ -54,6 +54,14 @@
 
 		</form>
 
+		<bx:if data.googleSignInEnabled>
+		<div class="c-auth__divider"><span>or</span></div>
+
+		<a href="/auth/google" class="c-auth__google-btn">
+			<i class="bi bi-google"></i> Sign in with Google
+		</a>
+		</bx:if>
+
 	</div>
 </div>
 </bx:output>

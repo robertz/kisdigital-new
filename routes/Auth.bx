@@ -1,0 +1,143 @@
+/**
+ * "Sign in with Google" — general-purpose, not CMS-specific. A matched
+ * existing User row (admin/author — real staff) gets the normal CMS
+ * session (req.session.manage_user, same shape doLogin() sets in
+ * routes/Manage.bx). Anyone else gets a lightweight role='commenter'
+ * account (AuthService.findOrCreateGoogleUser()) and a separate
+ * req.session.commenter session that carries no /manage access at all —
+ * groundwork for a comments feature, not wired into any comment UI yet.
+ *
+ * Deliberately its own router (not folded into Manage.bx) since this isn't
+ * a CMS concern — a future comment form on a post page would point its own
+ * "Sign in" link at GET /auth/google?redirect=<that post's URL>.
+ */
+class {
+
+	variables.authService     = "";
+	variables.googleOAuthClient = "";
+
+	function init( required authService, required googleOAuthClient ){
+		variables.authService       = arguments.authService;
+		variables.googleOAuthClient = arguments.googleOAuthClient;
+
+		this.router = boxExpressRouter();
+		this.router.get( "/auth/google", ( req, res ) => start( req, res ) );
+		this.router.get( "/auth/google/callback", ( req, res ) => callback( req, res ) );
+		this.router.get( "/auth/logout", ( req, res ) => logout( req, res ) );
+
+		return this;
+	}
+
+	// GET /auth/google?redirect=<internal path> — begins the OAuth dance.
+	function start( req, res ){
+		if ( !variables.googleOAuthClient.isConfigured() ){
+			res.status( 503 ).send( "Google sign-in isn't configured." );
+			return;
+		}
+
+		var state = createUUID();
+		req.session.oauthState    = state;
+		req.session.oauthRedirect = _safeRedirect( req.query.redirect ?: "/" );
+
+		res.redirect( variables.googleOAuthClient.buildAuthorizationUrl( state ) );
+	}
+
+	// GET /auth/google/callback?code=...&state=...
+	function callback( req, res ){
+		var expectedState = req.session.oauthState ?: "";
+		var redirectTo    = req.session.oauthRedirect ?: "/";
+		structDelete( req.session, "oauthState" );
+		structDelete( req.session, "oauthRedirect" );
+
+		var returnedState = req.query.state ?: "";
+		var code           = req.query.code  ?: "";
+
+		if ( !len( expectedState ) || !len( returnedState ) || returnedState != expectedState ){
+			println( "[auth] Google OAuth state mismatch from " & req.ip );
+			flashSet( req, { loginError: "Sign-in failed — please try again." } );
+			res.redirect( "/manage/login" );
+			return;
+		}
+
+		if ( !len( code ) ){
+			// User denied consent, or Google sent an error instead of a code.
+			flashSet( req, { loginError: "Google sign-in was cancelled." } );
+			res.redirect( "/manage/login" );
+			return;
+		}
+
+		try {
+			var accessToken = variables.googleOAuthClient.exchangeCodeForToken( code );
+			var profile     = variables.googleOAuthClient.getUserInfo( accessToken );
+
+			if ( !profile.emailVerified || !len( profile.email ) ){
+				flashSet( req, { loginError: "That Google account's email isn't verified." } );
+				res.redirect( "/manage/login" );
+				return;
+			}
+
+			var user = variables.authService.findOrCreateGoogleUser( profile.email, profile.name );
+			if ( user.isEmpty() ){
+				flashSet( req, { loginError: "This account has been deactivated." } );
+				res.redirect( "/manage/login" );
+				return;
+			}
+
+			if ( user.role == "admin" || user.role == "author" ){
+				req.session.manage_user = {
+					"id"           : user.id,
+					"display_name" : user.display_name,
+					"email"        : user.email,
+					"role"         : user.role
+				};
+				println( "[auth] successful Google sign-in for '" & user.email & "' from " & req.ip );
+				res.redirect( len( trim( redirectTo ) ) && redirectTo != "/" ? redirectTo : "/manage" );
+				return;
+			}
+
+			req.session.commenter = {
+				"id"          : user.id,
+				"display_name": user.display_name,
+				"email"       : user.email
+			};
+			println( "[auth] Google sign-in (commenter) for '" & user.email & "' from " & req.ip );
+			res.redirect( redirectTo );
+
+		} catch ( any e ){
+			println( "[error] Google OAuth callback failed: " & e.message );
+			flashSet( req, { loginError: "Sign-in failed — please try again." } );
+			res.redirect( "/manage/login" );
+		}
+	}
+
+	// GET /auth/logout — clears a commenter session only; CMS logout stays
+	// at /manage/logout (routes/Manage.bx) since the two sessions are
+	// independent (a commenter session never grants manage_user, so there's
+	// nothing here for the CMS logout route to clean up, and vice versa).
+	function logout( req, res ){
+		structDelete( req.session, "commenter" );
+		res.redirect( "/" );
+	}
+
+	// Only an internal, same-origin path is ever safe to redirect to after
+	// login — req.query.redirect is attacker-controlled input (a crafted
+	// link), so an absolute or protocol-relative URL here would be an open
+	// redirect straight off a login flow, a classic phishing vector.
+	private function _safeRedirect( required string path ){
+		var p = trim( arguments.path );
+		if ( !len( p ) ) return "/";
+		if ( left( p, 1 ) != "/" ) return "/";
+		if ( left( p, 2 ) == "//" ) return "/";
+		if ( left( p, 2 ) == "/\" ) return "/";
+		if ( findNoCase( "://", p ) ) return "/";
+		return p;
+	}
+
+	// Same session-backed flash as routes/Manage.bx's showLogin() reads —
+	// duplicated rather than shared for two call sites across two small
+	// route files; not worth a shared util yet.
+	private function flashSet( req, required struct data ){
+		req.session._flash = arguments.data;
+	}
+
+}
