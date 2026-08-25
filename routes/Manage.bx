@@ -945,7 +945,7 @@ class {
 			manageSection  : "insights",
 			daysBack       : daysBack,
 			total          : insightsFetch( () => variables.insightsService.getTotal( daysBack ) ),
-			topContentAreas: insightsFetch( () => variables.insightsService.getTopContentAreas( daysBack, 10 ) ),
+			topPosts       : insightsFetch( () => variables.postService.getTrendingPosts( 10 ) ),
 			topReferrers   : insightsFetch( () => variables.insightsService.getTopReferrers( daysBack, 10 ) ),
 			slowestPaths   : insightsFetch( () => variables.insightsService.getSlowestPaths( daysBack, 8 ) )
 		} );

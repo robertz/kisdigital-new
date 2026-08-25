@@ -35,23 +35,20 @@
 			<section class="c-manage-dashboard__card c-manage-dashboard__card--pages">
 				<div class="c-manage-dashboard__card-head">
 					<span class="c-manage-dashboard__icon"><i class="bi bi-file-earmark-text"></i></span>
-					<span class="c-manage-dashboard__eyebrow">Top pages</span>
+					<span class="c-manage-dashboard__eyebrow">Top posts</span>
 				</div>
-				<bx:if isNull( data.topContentAreas )>
+				<bx:if isNull( data.topPosts )>
 					<p class="c-manage-dashboard__meta">Couldn't load this &mdash; see server logs.</p>
-				<bx:elseif !data.topContentAreas.len()>
+				<bx:elseif !data.topPosts.len()>
 					<p class="c-manage-dashboard__meta">No visits recorded yet.</p>
 				<bx:else>
 					<ol class="c-dashboard-list">
-						<bx:loop array="#data.topContentAreas#" item="row">
+						<bx:loop array="#data.topPosts#" item="row">
 							<li class="c-dashboard-list__item">
-								<bx:if len( row.path )>
-									<a href="#encodeForHTMLAttribute( row.path )#" class="c-dashboard-list__label c-dashboard-list__label--link" target="_blank" rel="noopener">
-										#encodeForHTML( row.name )#
-									</a>
-								<bx:else>
-									<span class="c-dashboard-list__label">#encodeForHTML( row.name )#</span>
-								</bx:if>
+								<a href="/posts/#year( row.publish_date )#/#numberFormat( month( row.publish_date ), "00" )#/#encodeForURL( row.slug )#" class="c-dashboard-list__label c-dashboard-list__label--link" target="_blank" rel="noopener">
+									#encodeForHTML( row.title )#
+								</a>
+								<span class="c-dashboard-list__meta">#( row.views gte 1000 ? numberFormat( row.views / 1000, "0.0" ) & "k" : row.views )# views</span>
 							</li>
 						</bx:loop>
 					</ol>
