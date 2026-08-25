@@ -62,18 +62,24 @@ create table TagPost
         foreign key (tag_id) references Tag (id)
 );
 
+-- role='commenter' (0007) is a Google-only account tier with no /manage
+-- access, created by AuthService.findOrCreateGoogleUser() for anyone
+-- signing in whose email doesn't match an existing author/admin row —
+-- built as groundwork for the Comment table below. avatar_url (0008) is
+-- that same Google account's profile photo, synced on every login.
 create table User
 (
-    id           varchar(36)              default (uuid())          not null
+    id           varchar(36)                          default (uuid())          not null
         primary key,
-    display_name varchar(50)                                        not null,
-    email        varchar(255)                                       not null,
-    password     varchar(1000)                                      not null,
-    role         enum ('author', 'admin') default 'author'          not null,
-    about        varchar(500)                                       null,
-    avatar_label varchar(2)                                         null,
-    is_active    tinyint(1)               default 1                 not null,
-    created      timestamp                default CURRENT_TIMESTAMP null,
+    display_name varchar(50)                                                    not null,
+    email        varchar(255)                                                   not null,
+    password     varchar(1000)                                                  not null,
+    role         enum ('author', 'admin', 'commenter') default 'author'         not null,
+    about        varchar(500)                                                   null,
+    avatar_label varchar(2)                                                     null,
+    avatar_url   varchar(500)                                                   null,
+    is_active    tinyint(1)                           default 1                 not null,
+    created      timestamp                            default CURRENT_TIMESTAMP null,
     constraint User_email_uindex
         unique (email)
 );
@@ -93,6 +99,38 @@ create table UserPost
     constraint UserPost_User_id_fk
         foreign key (user_id) references User (id)
 );
+
+-- Nested comments (see db/migrations/0009_add_comment_table.sql) — replaces
+-- the giscus embed formerly in views/posts/show.bxm. parent_id (nullable,
+-- self-referencing) is a plain adjacency list: queried flat, ordered by
+-- created, grouped into a tree in CommentService.getCommentTree(). Deletion
+-- is always soft (status flag) so removing a comment never orphans its
+-- replies.
+create table Comment
+(
+    id        varchar(36)                  default (uuid())          not null
+        primary key,
+    post_id   varchar(36)                                             not null,
+    parent_id varchar(36)                                             null,
+    user_id   varchar(36)                                             not null,
+    body      text                                                    not null,
+    status    enum ('visible', 'deleted')  default 'visible'          not null,
+    created   timestamp(3)                 default CURRENT_TIMESTAMP(3) null,
+    constraint Comment_Post_id_fk
+        foreign key (post_id) references Post (id)
+            on update cascade on delete cascade,
+    constraint Comment_Parent_id_fk
+        foreign key (parent_id) references Comment (id)
+            on update cascade on delete cascade,
+    constraint Comment_User_id_fk
+        foreign key (user_id) references User (id)
+);
+
+create index idx_comment_post
+    on Comment (post_id, created);
+
+create index idx_comment_parent
+    on Comment (parent_id);
 
 create table Views
 (

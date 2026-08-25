@@ -122,41 +122,36 @@
 				</article>
 
 				<section class="c-comments">
-					<p class="section-label mb-4">Comments</p>
-					<div class="giscus"></div>
-					<script>
-						(function () {
-							var theme = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
-							var s = document.createElement('script');
-							s.src = 'https://giscus.app/client.js';
-							s.setAttribute('data-repo', 'robertz/kdfe-ssg');
-							s.setAttribute('data-repo-id', 'R_kgDOK8F-Yw');
-							s.setAttribute('data-category', 'Comments');
-							s.setAttribute('data-category-id', 'DIC_kwDOK8F-Y84CcVjP');
-							s.setAttribute('data-mapping', 'pathname');
-							s.setAttribute('data-strict', '0');
-							s.setAttribute('data-reactions-enabled', '1');
-							s.setAttribute('data-emit-metadata', '0');
-							s.setAttribute('data-input-position', 'bottom');
-							s.setAttribute('data-theme', theme);
-							s.setAttribute('data-lang', 'en');
-							s.setAttribute('crossorigin', 'anonymous');
-							s.async = true;
-							document.currentScript.parentNode.appendChild(s);
+					<p class="section-label mb-4">Comments#( data.commentCount ? " (" & data.commentCount & ")" : "" )#</p>
 
-							// Update giscus when the site theme changes
-							new MutationObserver(function () {
-								var newTheme = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
-								var iframe = document.querySelector('iframe.giscus-frame');
-								if (iframe) {
-									iframe.contentWindow.postMessage(
-										{ giscus: { setConfig: { theme: newTheme } } },
-										'https://giscus.app'
-									);
-								}
-							}).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-						})();
-					</script>
+					<bx:if len( data.commentError ?: "" )>
+						<div class="c-comment-form__error" role="alert">#encodeForHTML( data.commentError )#</div>
+					</bx:if>
+
+					<bx:if !isNull( data.currentUser )>
+						<form method="post" action="/comments" class="c-comment-form c-comment-form--top">
+							<input type="hidden" name="_csrf" value="#encodeForHTMLAttribute( data.csrfToken )#">
+							<input type="hidden" name="post_id" value="#encodeForHTMLAttribute( data.post.getId() )#">
+							<input type="hidden" name="parent_id" value="">
+							<input type="hidden" name="redirect" value="#encodeForHTMLAttribute( data.post.getPostUrl() )#">
+							<textarea name="body" class="c-comment-form__input" rows="3" placeholder="Add a comment&hellip;" required></textarea>
+							<button type="submit" class="c-comment-form__submit">Comment</button>
+						</form>
+					<bx:else>
+						<p class="c-comments__signin">
+							<a href="/auth/google?redirect=#encodeForURL( data.post.getPostUrl() )#">Sign in with Google</a> to leave a comment.
+						</p>
+					</bx:if>
+
+					<bx:if data.commentThread.len()>
+						<div class="c-comment-list">
+							<bx:loop array="#data.commentThread#" item="comment">
+								<bx:include template="../partials/commentThread.bxm">
+							</bx:loop>
+						</div>
+					<bx:else>
+						<p class="c-comments__empty">No comments yet &mdash; be the first.</p>
+					</bx:if>
 				</section>
 
 				<bx:if data.relatedPosts.len()>

@@ -307,6 +307,189 @@
 	border-top: 1px solid var(--ui-border-subtle);
 }
 
+.c-comments__signin,
+.c-comments__empty {
+	color: var(--text-secondary);
+	font-size: 0.9rem;
+}
+
+.c-comments__signin a {
+	color: var(--post-link-text);
+	font-weight: 600;
+}
+
+/* ── Comment form (shared by the top-level composer and each reply toggle) ── */
+
+.c-comment-form {
+	margin-bottom: var(--space-6);
+}
+
+.c-comment-form--reply {
+	margin-top: var(--space-3);
+	margin-bottom: 0;
+}
+
+.c-comment-form__input {
+	display: block;
+	width: 100%;
+	padding: 10px var(--space-4);
+	background: var(--color-neutral-background-container);
+	border: 1px solid var(--ui-border-subtle);
+	border-radius: var(--ui-radius-sm);
+	color: var(--post-anchor);
+	font-size: 0.9rem;
+	font-family: inherit;
+	resize: vertical;
+}
+
+.c-comment-form__input:focus-visible {
+	outline: none;
+	border-color: var(--post-link-text);
+	box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+.c-comment-form__submit {
+	margin-top: var(--space-3);
+	padding: 8px var(--space-5);
+	background: var(--post-anchor);
+	color: var(--site-background-color);
+	font-size: 0.85rem;
+	font-weight: 600;
+	border: none;
+	border-radius: var(--ui-radius-sm);
+	cursor: pointer;
+}
+
+.c-comment-form__submit:hover {
+	filter: brightness(1.1);
+}
+
+.c-comment-form__error {
+	margin-bottom: var(--space-5);
+	padding: 10px var(--space-4);
+	background: rgba(239, 68, 68, 0.08);
+	border: 1px solid rgba(239, 68, 68, 0.25);
+	border-radius: var(--ui-radius-sm);
+	color: #dc2626;
+	font-size: 0.875rem;
+}
+
+/* ── Comment thread ── */
+
+.c-comment-list {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-5);
+}
+
+.c-comment {
+	/* --comment-depth is set per row (capped at 6) by
+	   views/partials/commentThread.bxm — indent grows with nesting, then
+	   stops, the same way Reddit's own UI avoids squeezing replies into an
+	   unreadable sliver on deep threads. */
+	margin-left: calc(var(--comment-depth, 0) * 20px);
+}
+
+.c-comment__row {
+	display: flex;
+	gap: var(--space-3);
+}
+
+.c-comment__avatar {
+	flex-shrink: 0;
+	width: 30px;
+	height: 30px;
+	border-radius: 50%;
+	object-fit: cover;
+	background: var(--ui-surface-2);
+	border: 1px solid var(--ui-border-subtle);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-family: var(--font-mono);
+	font-size: 0.65rem;
+	font-weight: 600;
+	color: var(--post-anchor);
+}
+
+.c-comment__body-col {
+	min-width: 0;
+	flex: 1 1 auto;
+}
+
+.c-comment__meta {
+	display: flex;
+	align-items: baseline;
+	gap: var(--space-3);
+	margin-bottom: var(--space-1);
+}
+
+.c-comment__author {
+	font-weight: 600;
+	font-size: 0.85rem;
+	color: var(--post-anchor);
+}
+
+.c-comment__meta time {
+	font-size: 0.75rem;
+	color: var(--text-secondary);
+}
+
+.c-comment__text {
+	font-size: 0.9rem;
+	line-height: 1.6;
+	color: var(--post-anchor);
+	white-space: pre-wrap;
+	margin-bottom: var(--space-2);
+}
+
+.c-comment__deleted {
+	font-size: 0.85rem;
+	font-style: italic;
+	color: var(--text-muted);
+}
+
+.c-comment__actions {
+	display: flex;
+	align-items: center;
+	gap: var(--space-4);
+}
+
+.c-comment__reply-toggle summary {
+	display: inline-block;
+	font-size: 0.8rem;
+	font-weight: 600;
+	color: var(--text-secondary);
+	cursor: pointer;
+	list-style: none;
+}
+
+.c-comment__reply-toggle summary::-webkit-details-marker {
+	display: none;
+}
+
+.c-comment__reply-toggle summary:hover {
+	color: var(--post-link-text);
+}
+
+.c-comment__delete-form {
+	display: inline;
+}
+
+.c-comment__delete-btn {
+	background: none;
+	border: none;
+	padding: 0;
+	font-size: 0.8rem;
+	font-weight: 600;
+	color: var(--text-secondary);
+	cursor: pointer;
+}
+
+.c-comment__delete-btn:hover {
+	color: #dc2626;
+}
+
 /* ── Related articles ── */
 
 .c-related-posts {

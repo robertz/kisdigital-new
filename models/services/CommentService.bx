@@ -1,0 +1,201 @@
+/**
+ * Nested comments, replacing the giscus embed formerly on /posts/:slug.
+ *
+ * Comment rows are a plain adjacency list (parent_id, nullable — see
+ * db/migrations/0009_add_comment_table.sql); getCommentTree() fetches the
+ * whole thread flat in one query and groups it into a nested structure
+ * here rather than in SQL — simple at this site's comment volume, and
+ * keeps the query itself trivial.
+ *
+ * No PostRenderer.bx markdown pipeline here — comment bodies are plain
+ * text (HTML-escaped, line breaks preserved) on render. That pipeline is
+ * for long-form authored content; running public user input through it
+ * would be a needless expansion of the security surface for a feature
+ * where markdown was never asked for.
+ */
+class {
+
+	/**
+	 * Fetches every comment for a post and flattens the thread into a
+	 * single depth-annotated list in pre-order (a comment immediately
+	 * followed by all of its descendants, then the next sibling) — the
+	 * view renders this with one plain, non-recursive loop.
+	 *
+	 * Deliberately flat rather than a nested { replies: [...] } tree:
+	 * views/partials/commentThread.bxm would otherwise need to recurse via
+	 * <bx:include>, but a BoxLang template include shares the caller's
+	 * variable scope rather than getting its own stack frame the way a
+	 * function call does — mutating a loop variable across recursive
+	 * includes would corrupt sibling iterations at every level above.
+	 * Building the flat, depth-tagged list here (genuine function
+	 * recursion — models/services classes don't have that scoping
+	 * problem) sidesteps it entirely and keeps the view trivial.
+	 *
+	 * @param {string} postId - The post UUID.
+	 * @return {array} Structs in display order: { id, displayName,
+	 *         avatarUrl, avatarLabel, userId, body, isDeleted, created,
+	 *         depth } — depth 0 is top-level.
+	 */
+	function getCommentThread( required string postId ){
+		var rows = queryExecute(
+			"SELECT
+				C.id,
+				C.parent_id,
+				C.user_id,
+				C.body,
+				C.status,
+				C.created,
+				U.display_name,
+				U.avatar_label,
+				U.avatar_url
+			FROM Comment C
+			INNER JOIN User U ON U.id = C.user_id
+			WHERE C.post_id = :post_id
+			ORDER BY C.created ASC",
+			{ "post_id": { value: arguments.postId, cfsqltype: "cf_sql_varchar" } },
+			{ returnType: "array" }
+		);
+
+		// Three passes: build every node keyed by id, group children by
+		// parent_id, then walk depth-first from the top-level nodes to
+		// produce the final flat/ordered list — needed because a row can
+		// reference a parent that hasn't been visited yet if this tried to
+		// do it in one pass (parent_id has no guaranteed relationship to
+		// created order beyond "before its own children").
+		var nodesById       = {};
+		var childrenByParent = {};
+		var topLevelIds      = [];
+
+		for ( var row in rows ){
+			nodesById[ row.id ] = {
+				"id"          : row.id,
+				"displayName" : row.display_name,
+				"avatarUrl"   : row.avatar_url   ?: "",
+				"avatarLabel" : row.avatar_label ?: "",
+				"userId"      : row.user_id,
+				"body"        : row.status == "deleted" ? "" : row.body,
+				"isDeleted"   : row.status == "deleted",
+				"created"     : row.created
+			};
+		}
+
+		for ( var row in rows ){
+			var parentId = row.parent_id ?: "";
+			if ( len( parentId ) && nodesById.keyExists( parentId ) ){
+				if ( !childrenByParent.keyExists( parentId ) ) childrenByParent[ parentId ] = [];
+				childrenByParent[ parentId ].append( row.id );
+			} else {
+				topLevelIds.append( row.id );
+			}
+		}
+
+		var flat = [];
+		for ( var id in topLevelIds ){
+			_appendThread( id, 0, nodesById, childrenByParent, flat );
+		}
+		return flat;
+	}
+
+	// Depth-first walk: appends nodeId's own struct (tagged with depth),
+	// then recurses into each of its children before moving to the next
+	// sibling — real function recursion (each call gets its own `depth`
+	// argument), not the shared-scope template-include kind.
+	private function _appendThread( required string nodeId, required numeric depth, required struct nodesById, required struct childrenByParent, required array out ){
+		var node = duplicate( nodesById[ nodeId ] );
+		node[ "depth" ] = depth;
+		arguments.out.append( node );
+
+		if ( childrenByParent.keyExists( nodeId ) ){
+			for ( var childId in childrenByParent[ nodeId ] ){
+				_appendThread( childId, depth + 1, nodesById, childrenByParent, out );
+			}
+		}
+	}
+
+	/**
+	 * @param {string} postId - The post UUID.
+	 * @return {numeric} Count of non-deleted comments on the post — a
+	 *         deleted comment still occupies a thread slot (see
+	 *         getCommentTree()'s "[deleted]" placeholder) but isn't real
+	 *         content, so it doesn't count toward the "N comments" heading.
+	 */
+	function getCommentCount( required string postId ){
+		return queryExecute(
+			"SELECT COUNT(*) AS cnt FROM Comment WHERE post_id = :post_id AND status = 'visible'",
+			{ "post_id": { value: arguments.postId, cfsqltype: "cf_sql_varchar" } },
+			{ returnType: "array" }
+		)[ 1 ].cnt;
+	}
+
+	/**
+	 * @param {string} postId   - The post UUID being commented on.
+	 * @param {string} parentId - Parent comment UUID for a reply; blank for
+	 *        a top-level comment.
+	 * @param {string} userId   - The commenting User's UUID (any role —
+	 *        commenter, author, or admin can all comment).
+	 * @param {string} body     - Comment text, trimmed. Rejected if empty
+	 *        or over 5000 characters after trimming.
+	 * @return {string} The new comment's id.
+	 * @throws {CommentValidationError} if body is empty or too long.
+	 */
+	function createComment( required string postId, string parentId = "", required string userId, required string body ){
+		var trimmedBody = trim( arguments.body );
+		if ( !len( trimmedBody ) ){
+			throw( type: "CommentValidationError", message: "Comment can't be empty." );
+		}
+		if ( len( trimmedBody ) > 5000 ){
+			throw( type: "CommentValidationError", message: "Comment is too long (5000 characters max)." );
+		}
+
+		var newId = createGUID();
+
+		queryExecute(
+			"INSERT INTO Comment (id, post_id, parent_id, user_id, body)
+			VALUES (:id, :post_id, :parent_id, :user_id, :body)",
+			{
+				"id"       : { value: newId,                    cfsqltype: "cf_sql_varchar" },
+				"post_id"  : { value: arguments.postId,          cfsqltype: "cf_sql_varchar" },
+				"parent_id": { value: arguments.parentId,        cfsqltype: "cf_sql_varchar", null: !len( trim( arguments.parentId ) ) },
+				"user_id"  : { value: arguments.userId,          cfsqltype: "cf_sql_varchar" },
+				"body"     : { value: trimmedBody,               cfsqltype: "cf_sql_longvarchar" }
+			}
+		);
+
+		return newId;
+	}
+
+	/**
+	 * Soft-deletes a comment — status flips to 'deleted', the row (and its
+	 * position in the thread) stays put so replies aren't orphaned; the
+	 * body itself is left in the row but getCommentTree() blanks it and
+	 * flags isDeleted for the "[deleted]" placeholder.
+	 *
+	 * @param {string} commentId - The comment to delete.
+	 * @param {string} userId    - The requesting user's UUID.
+	 * @param {string} userRole  - The requesting user's role — 'admin' can
+	 *        delete any comment, matching PostService.canUserEditPost()'s
+	 *        admin-override shape.
+	 * @return {boolean} True if a comment was deleted, false if not found
+	 *         or the requester doesn't own it and isn't admin.
+	 */
+	function deleteComment( required string commentId, required string userId, required string userRole ){
+		var rows = queryExecute(
+			"SELECT user_id FROM Comment WHERE id = :id LIMIT 1",
+			{ "id": { value: arguments.commentId, cfsqltype: "cf_sql_varchar" } },
+			{ returnType: "array" }
+		);
+
+		if ( !rows.len() ) return false;
+
+		var isOwner = rows[ 1 ].user_id == arguments.userId;
+		if ( !isOwner && arguments.userRole != "admin" ) return false;
+
+		queryExecute(
+			"UPDATE Comment SET status = 'deleted' WHERE id = :id",
+			{ "id": { value: arguments.commentId, cfsqltype: "cf_sql_varchar" } }
+		);
+
+		return true;
+	}
+
+}

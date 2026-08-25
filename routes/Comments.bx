@@ -1,0 +1,123 @@
+/**
+ * Nested comments — create/delete only; reading a post's comment tree
+ * happens inline in routes/Posts.bx's show() via CommentService directly,
+ * same as every other piece of a post page (tags, related posts, etc).
+ *
+ * Its own router (not folded into Posts.bx) for the same reason
+ * routes/Auth.bx is its own router: a focused concern, and it needs
+ * boxExpressCsrf() mounted, which Posts.bx's router doesn't carry today.
+ *
+ * Plain POST-and-redirect forms, matching this app's established choice
+ * (see routes/Manage.bx's own header comment) over rebuilding cbwire's
+ * live in-page components — no fetch/AJAX here either.
+ */
+class {
+
+	variables.commentService = "";
+	variables.botDetector    = "";
+
+	function init( required commentService ){
+		variables.commentService = arguments.commentService;
+		variables.botDetector    = new models.util.BotDetector();
+
+		var requireCommenter = ( req, res, next ) => _requireCommenter( req, res, next );
+
+		this.router = boxExpressRouter();
+		this.router.use( boxExpressCsrf() );
+
+		this.router.post(
+			"/comments",
+			requireCommenter,
+			boxExpressRateLimit( { windowMs: 15 * 60000, max: 10 } ),
+			( req, res ) => create( req, res )
+		);
+		this.router.post( "/comments/:id/delete", requireCommenter, ( req, res ) => remove( req, res ) );
+
+		return this;
+	}
+
+	// POST /comments — body: post_id, parent_id (blank for top-level),
+	// body, redirect (the post's own URL, so we can send the commenter
+	// straight back to their new comment), _csrf.
+	function create( req, res ){
+		var redirectTo = _safeRedirect( req.body.redirect ?: "/" );
+
+		if ( variables.botDetector.isBot( req.headers[ "User-Agent" ] ?: "" ) ){
+			// Silently drop rather than error — telling a bot *why* it
+			// failed only helps it adjust and retry.
+			res.redirect( redirectTo );
+			return;
+		}
+
+		var user = _currentUser( req );
+
+		try {
+			var newId = variables.commentService.createComment(
+				req.body.post_id   ?: "",
+				req.body.parent_id ?: "",
+				user.id,
+				req.body.body ?: ""
+			);
+			res.redirect( redirectTo & "##comment-" & newId );
+		} catch ( CommentValidationError e ){
+			flashSet( req, { commentError: e.message } );
+			res.redirect( redirectTo );
+		} catch ( any e ){
+			println( "[error] Comment creation failed: " & e.message );
+			flashSet( req, { commentError: "Couldn't post your comment — please try again." } );
+			res.redirect( redirectTo );
+		}
+	}
+
+	// POST /comments/:id/delete — body: redirect.
+	function remove( req, res ){
+		var redirectTo = _safeRedirect( req.body.redirect ?: "/" );
+		var user       = _currentUser( req );
+
+		variables.commentService.deleteComment( req.params.id, user.id, user.role );
+		res.redirect( redirectTo );
+	}
+
+	function _requireCommenter( req, res, next ){
+		if ( isNull( _currentUser( req ) ) ){
+			res.status( 401 ).send( "Sign in to comment." );
+			return;
+		}
+		next();
+	}
+
+	// Reads whichever session slot is populated — req.session.manage_user
+	// (admin/author, set by doLogin() or routes/Auth.bx's callback) or
+	// req.session.commenter (routes/Auth.bx, Google-only accounts) — since
+	// a comment's author can legitimately be either. Returns null when
+	// neither is set.
+	private function _currentUser( req ){
+		if ( len( req.session.manage_user ?: "" ) ){
+			var u = req.session.manage_user;
+			return { "id": u.id, "displayName": u.display_name, "role": u.role };
+		}
+		if ( len( req.session.commenter ?: "" ) ){
+			var u = req.session.commenter;
+			return { "id": u.id, "displayName": u.display_name, "role": "commenter" };
+		}
+		return javacast( "null", "" );
+	}
+
+	// Same open-redirect defense as routes/Auth.bx's _safeRedirect() — the
+	// redirect target comes from a hidden form field a client controls, so
+	// only an internal, same-origin path is ever safe to send them to.
+	private function _safeRedirect( required string path ){
+		var p = trim( arguments.path );
+		if ( !len( p ) ) return "/";
+		if ( left( p, 1 ) != "/" ) return "/";
+		if ( left( p, 2 ) == "//" ) return "/";
+		if ( left( p, 2 ) == "/\" ) return "/";
+		if ( findNoCase( "://", p ) ) return "/";
+		return p;
+	}
+
+	private function flashSet( req, required struct data ){
+		req.session._flash = arguments.data;
+	}
+
+}
