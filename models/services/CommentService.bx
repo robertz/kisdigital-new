@@ -292,7 +292,9 @@ class {
 				C.created,
 				U.display_name,
 				U.email,
-				P.title AS post_title
+				P.title AS post_title,
+				P.slug AS post_slug,
+				P.publish_date AS post_publish_date
 			FROM Comment C
 			INNER JOIN User U ON U.id = C.user_id
 			INNER JOIN Post P ON P.id = C.post_id
@@ -311,6 +313,11 @@ class {
 					"id"         : row.id,
 					"postId"     : row.post_id,
 					"postTitle"  : row.post_title,
+					// Same URL shape as PostBean.getPostUrl() — duplicated rather
+					// than loading a full PostBean per row for one derived field.
+					"postUrl"    : isDate( row.post_publish_date ?: "" )
+						? "/posts/#year( row.post_publish_date )#/#numberFormat( month( row.post_publish_date ), '00' )#/#encodeForURL( row.post_slug )#"
+						: "/posts/#encodeForURL( row.post_slug )#",
 					"isReply"    : len( row.parent_id ?: "" ) > 0,
 					"authorName" : row.display_name,
 					"authorEmail": row.email,

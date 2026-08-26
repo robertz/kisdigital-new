@@ -64,7 +64,7 @@
 											</bx:if>
 										</td>
 										<td>
-											<a href="/manage/posts/#encodeForURL( comment.postId )#/edit" class="c-manage-table__title">
+											<a href="#encodeForHTMLAttribute( comment.postUrl )#" class="c-manage-table__title" target="_blank" rel="noopener">
 												#encodeForHTML( comment.postTitle )#
 											</a>
 										</td>
