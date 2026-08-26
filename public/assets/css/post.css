@@ -345,6 +345,26 @@
 	color: var(--post-anchor);
 }
 
+/* Only shown for a Google-only commenter session, not an admin/author's
+   manage_user session browsing the public site — those already have a
+   visible signed-in state elsewhere (the header's Dashboard link, the
+   post nav's Edit link) and sign out from the CMS itself, a more
+   consequential action this casual comment-box link shouldn't trigger. */
+.c-comments__account {
+	margin-bottom: var(--space-4);
+	color: var(--text-secondary);
+	font-size: 0.85rem;
+}
+
+.c-comments__account strong {
+	color: var(--post-anchor);
+}
+
+.c-comments__account a {
+	color: var(--post-link-text);
+	font-weight: 600;
+}
+
 /* ── Comment form (shared by the top-level composer and each reply toggle) ── */
 
 .c-comment-form {

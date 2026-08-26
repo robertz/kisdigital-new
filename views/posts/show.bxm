@@ -129,6 +129,12 @@
 					</bx:if>
 
 					<bx:if !isNull( data.currentUser )>
+						<bx:if data.currentUser.role == "commenter">
+						<p class="c-comments__account">
+							Signed in as <strong>#encodeForHTML( data.currentUser.displayName )#</strong>
+							&middot; <a href="/auth/logout?redirect=#encodeForURL( data.post.getPostUrl() )#">Sign out</a>
+						</p>
+						</bx:if>
 						<form method="post" action="/comments" class="c-comment-form c-comment-form--top" data-comment-form data-parent-id="">
 							<input type="hidden" name="_csrf" value="#encodeForHTMLAttribute( data.csrfToken )#">
 							<input type="hidden" name="post_id" value="#encodeForHTMLAttribute( data.post.getId() )#">

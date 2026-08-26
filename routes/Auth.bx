@@ -111,13 +111,16 @@ class {
 		}
 	}
 
-	// GET /auth/logout — clears a commenter session only; CMS logout stays
-	// at /manage/logout (routes/Manage.bx) since the two sessions are
-	// independent (a commenter session never grants manage_user, so there's
-	// nothing here for the CMS logout route to clean up, and vice versa).
+	// GET /auth/logout?redirect=<internal path> — clears a commenter
+	// session only; CMS logout stays at /manage/logout (routes/Manage.bx)
+	// since the two sessions are independent (a commenter session never
+	// grants manage_user, so there's nothing here for the CMS logout route
+	// to clean up, and vice versa). redirect lets the comment UI send
+	// someone back to the post they signed out from, same as start()'s own
+	// redirect param — defaults to "/" if omitted or unsafe.
 	function logout( req, res ){
 		structDelete( req.session, "commenter" );
-		res.redirect( "/" );
+		res.redirect( _safeRedirect( req.query.redirect ?: "/" ) );
 	}
 
 	// Only an internal, same-origin path is ever safe to redirect to after
