@@ -33,17 +33,19 @@
 						<div class="c-dashboard-sparkline__chart-skeleton" aria-hidden="true"></div>
 					</div>
 					<div class="c-dashboard-sparkline__stats">
-						<div class="c-dashboard-sparkline__stat">
-							<span class="c-dashboard-sparkline__stat-value" id="traffic-total-views"><span class="c-dashboard-skeleton-text" aria-hidden="true"></span></span>
-							<span class="c-dashboard-sparkline__stat-label">total views</span>
+						<div class="c-dashboard-sparkline__stats-row">
+							<div class="c-dashboard-sparkline__stat">
+								<span class="c-dashboard-sparkline__stat-value" id="traffic-total-views"><span class="c-dashboard-skeleton-text" aria-hidden="true"></span></span>
+								<span class="c-dashboard-sparkline__stat-label">total views</span>
+							</div>
+							<div class="c-dashboard-sparkline__stat">
+								<span class="c-dashboard-sparkline__stat-value" id="traffic-peak-day"><span class="c-dashboard-skeleton-text" aria-hidden="true"></span></span>
+								<span class="c-dashboard-sparkline__stat-label">peak day</span>
+							</div>
 						</div>
 						<div class="c-dashboard-sparkline__stat">
 							<span class="c-dashboard-sparkline__stat-value" id="traffic-today-views"><span class="c-dashboard-skeleton-text" aria-hidden="true"></span></span>
 							<span class="c-dashboard-sparkline__stat-label">today</span>
-						</div>
-						<div class="c-dashboard-sparkline__stat">
-							<span class="c-dashboard-sparkline__stat-value" id="traffic-peak-day"><span class="c-dashboard-skeleton-text" aria-hidden="true"></span></span>
-							<span class="c-dashboard-sparkline__stat-label">peak day</span>
 						</div>
 					</div>
 				</div>
