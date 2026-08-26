@@ -38,6 +38,10 @@
 							<span class="c-dashboard-sparkline__stat-label">total views</span>
 						</div>
 						<div class="c-dashboard-sparkline__stat">
+							<span class="c-dashboard-sparkline__stat-value" id="traffic-today-views"><span class="c-dashboard-skeleton-text" aria-hidden="true"></span></span>
+							<span class="c-dashboard-sparkline__stat-label">today</span>
+						</div>
+						<div class="c-dashboard-sparkline__stat">
 							<span class="c-dashboard-sparkline__stat-value" id="traffic-peak-day"><span class="c-dashboard-skeleton-text" aria-hidden="true"></span></span>
 							<span class="c-dashboard-sparkline__stat-label">peak day</span>
 						</div>
@@ -48,6 +52,7 @@
 				(function(){
 					var widget  = document.getElementById('traffic-widget');
 					var totalEl = document.getElementById('traffic-total-views');
+					var todayEl = document.getElementById('traffic-today-views');
 					var peakEl  = document.getElementById('traffic-peak-day');
 
 					fetch('/manage/dashboard/traffic-data', { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
@@ -85,6 +90,7 @@
 							});
 
 							totalEl.textContent = traffic.total.toLocaleString();
+							todayEl.textContent = traffic.todayViews.toLocaleString();
 							peakEl.textContent = traffic.maxViews.toLocaleString();
 							widget.classList.remove('is-loading');
 						})

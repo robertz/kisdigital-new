@@ -304,7 +304,8 @@ class {
 	/**
 	 * Turns a day-by-day view-totals array into what the dashboard's Chart.js
 	 * traffic graph needs: parallel labels/values arrays, the period total,
-	 * and the single busiest day for the stat boxes beside the chart.
+	 * the single busiest day, and today's own count for the stat boxes
+	 * beside the chart.
 	 */
 	private function buildTrafficChartData( required array dailyTotals ){
 		var maxViews = 0;
@@ -319,12 +320,18 @@ class {
 			values.append( row.total_views );
 		}
 
+		// getDailyTotals() always appends today as its last row (a live,
+		// uncached query — see that function), so the last value here is
+		// today's count so far, not a cached/completed day's total.
+		var todayViews = arguments.dailyTotals.len() ? arguments.dailyTotals[ arguments.dailyTotals.len() ].total_views : 0;
+
 		return {
-			"labels"   : labels,
-			"values"   : values,
-			"total"    : total,
-			"maxViews" : maxViews,
-			"days"     : arguments.dailyTotals.len()
+			"labels"    : labels,
+			"values"    : values,
+			"total"     : total,
+			"maxViews"  : maxViews,
+			"todayViews": todayViews,
+			"days"      : arguments.dailyTotals.len()
 		};
 	}
 
