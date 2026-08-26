@@ -12,6 +12,7 @@ class accessors="true" {
 	property name="role"        type="string"  default="author";
 	property name="about"       type="string"  default="";
 	property name="avatarLabel" type="string"  default="";
+	property name="avatarUrl"   type="string"  default="";
 	property name="postCount"   type="numeric" default=0;
 	property name="created"     type="any"     default="";
 
@@ -25,6 +26,7 @@ class accessors="true" {
 		setRole(        "author" );
 		setAbout(       "" );
 		setAvatarLabel( "" );
+		setAvatarUrl(   "" );
 		setPostCount(   0 );
 		setCreated(     "" );
 		return this;
@@ -43,6 +45,7 @@ class accessors="true" {
 		setRole(        data["role"]         ?: "author" );
 		setAbout(       data["about"]        ?: "" );
 		setAvatarLabel( data["avatar_label"] ?: "" );
+		setAvatarUrl(   data["avatar_url"]   ?: "" );
 		setPostCount(   data["post_count"]   ?: 0 );
 		setCreated(     data["created"]      ?: "" );
 		return this;
@@ -74,6 +77,7 @@ class accessors="true" {
 				U.role,
 				U.about,
 				U.avatar_label,
+				U.avatar_url,
 				U.created,
 				COUNT(UP.post_id) AS post_count
 			FROM User U

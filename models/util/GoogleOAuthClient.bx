@@ -1,0 +1,155 @@
+/**
+ * Minimal Google OAuth 2.0 / OpenID Connect client for "Sign in with
+ * Google" — builds the authorization URL, exchanges an authorization code
+ * for tokens, and fetches the signed-in user's verified email/name.
+ *
+ * Talks to Google directly via java.net.http.HttpClient rather than a
+ * dedicated OAuth library — three plain HTTP calls (authorize is just a
+ * redirect URL, token exchange is one POST, userinfo is one GET), not
+ * enough surface to justify a dependency. See routes/Auth.bx for the
+ * request handlers that actually drive this.
+ */
+class {
+
+	variables.clientId     = "";
+	variables.clientSecret = "";
+	variables.redirectUri  = "";
+
+	function init( required string clientId, required string clientSecret, required string redirectUri ){
+		variables.clientId     = arguments.clientId;
+		variables.clientSecret = arguments.clientSecret;
+		variables.redirectUri  = arguments.redirectUri;
+		return this;
+	}
+
+	/**
+	 * True once both OAuth client credentials are present. Callers use this
+	 * to hide the "Sign in with Google" button / fail fast with a clear
+	 * message instead of a broken redirect when the .env vars aren't set.
+	 */
+	function isConfigured(){
+		return len( variables.clientId ) > 0 && len( variables.clientSecret ) > 0;
+	}
+
+	/**
+	 * The URL to send the browser to. `state` is an opaque, unguessable
+	 * value the caller generates and later verifies against the callback's
+	 * own `state` param — the standard OAuth CSRF defense (without it,
+	 * an attacker could trick a victim's browser into completing an
+	 * attacker-initiated auth flow, e.g. linking the victim's session to
+	 * an account the attacker controls).
+	 *
+	 * @param {string} state - Caller-generated anti-CSRF token.
+	 * @return {string} The full https://accounts.google.com/... URL.
+	 */
+	function buildAuthorizationUrl( required string state ){
+		var params = {
+			"client_id"    : variables.clientId,
+			"redirect_uri" : variables.redirectUri,
+			"response_type": "code",
+			"scope"        : "openid email profile",
+			"state"        : arguments.state
+		};
+		return "https://accounts.google.com/o/oauth2/v2/auth?" & _toFormBody( params );
+	}
+
+	/**
+	 * Exchanges a one-time authorization code (from the callback's ?code=)
+	 * for an access token.
+	 *
+	 * @param {string} code - The `code` query param the callback received.
+	 * @return {string} The access token, for use with getUserInfo().
+	 * @throws {GoogleOAuthError} if Google rejects the exchange (expired/
+	 *         reused code, mismatched redirect_uri, revoked client, etc).
+	 */
+	function exchangeCodeForToken( required string code ){
+		var body = _toFormBody( {
+			"code"         : arguments.code,
+			"client_id"    : variables.clientId,
+			"client_secret": variables.clientSecret,
+			"redirect_uri" : variables.redirectUri,
+			"grant_type"   : "authorization_code"
+		} );
+
+		var response = _post( "https://oauth2.googleapis.com/token", body );
+		if ( response.status != 200 ){
+			throw( type: "GoogleOAuthError", message: "Token exchange failed (HTTP " & response.status & "): " & response.body );
+		}
+
+		var parsed = JSONDeserialize( response.body );
+		return parsed.access_token;
+	}
+
+	/**
+	 * @param {string} accessToken - From exchangeCodeForToken().
+	 * @return {struct} { email, emailVerified, name, pictureUrl } from
+	 *         Google's own profile — emailVerified matters: an unverified
+	 *         email on a Google account could belong to someone else
+	 *         entirely. pictureUrl is "" when Google didn't return one
+	 *         (not every account has a profile photo set).
+	 * @throws {GoogleOAuthError} if the userinfo request fails.
+	 */
+	function getUserInfo( required string accessToken ){
+		var response = _client().send(
+			createObject( "java", "java.net.http.HttpRequest" )
+				.newBuilder()
+				.uri( _uri( "https://www.googleapis.com/oauth2/v3/userinfo" ) )
+				.header( "Authorization", "Bearer " & arguments.accessToken )
+				.GET()
+				.build(),
+			createObject( "java", "java.net.http.HttpResponse$BodyHandlers" ).ofString()
+		);
+		if ( response.statusCode() != 200 ){
+			throw( type: "GoogleOAuthError", message: "userinfo request failed (HTTP " & response.statusCode() & "): " & response.body() );
+		}
+
+		var parsed = JSONDeserialize( response.body() );
+		return {
+			"email"        : parsed.email ?: "",
+			"emailVerified": parsed.email_verified ?: false,
+			"name"         : parsed.name ?: "",
+			"pictureUrl"   : parsed.picture ?: ""
+		};
+	}
+
+	private function _post( required string url, required string formBody ){
+		var response = _client().send(
+			createObject( "java", "java.net.http.HttpRequest" )
+				.newBuilder()
+				.uri( _uri( arguments.url ) )
+				.header( "Content-Type", "application/x-www-form-urlencoded" )
+				.POST( createObject( "java", "java.net.http.HttpRequest$BodyPublishers" ).ofString( arguments.formBody ) )
+				.build(),
+			createObject( "java", "java.net.http.HttpResponse$BodyHandlers" ).ofString()
+		);
+		return { "status": response.statusCode(), "body": response.body() };
+	}
+
+	private function _toFormBody( required struct params ){
+		var encoder = createObject( "java", "java.net.URLEncoder" );
+		var parts   = [];
+		for ( var key in arguments.params ){
+			parts.append( encoder.encode( key, "UTF-8" ) & "=" & encoder.encode( arguments.params[ key ], "UTF-8" ) );
+		}
+		return parts.toList( "&" );
+	}
+
+	// BoxLang interop gotcha, confirmed by direct isolation (not guessed):
+	// assigning a built java.net.http.HttpRequest to a local var *before*
+	// passing it to HttpClient.send() breaks method resolution entirely —
+	// "Error getting method [send] for class [jdk.internal.net.http.
+	// HttpClientFacade]", even though the client itself is fine stored in a
+	// var. Building the request inline as a direct .send() argument (see
+	// getUserInfo()/_post() above) avoids it. HttpClient.newHttpClient() and
+	// URI.create() (static factories) work fine too, for what it's worth —
+	// .newBuilder().build()/.init() below is just the shape that happened to
+	// get isolated during testing, not itself the fix.
+	private function _client(){
+		return createObject( "java", "java.net.http.HttpClient" ).newBuilder().build();
+	}
+
+	private function _uri( required string url ){
+		return createObject( "java", "java.net.URI" ).init( arguments.url );
+	}
+
+}

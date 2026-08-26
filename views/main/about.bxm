@@ -4,9 +4,13 @@
 	<div class="container">
 		<div class="row align-items-center g-5">
 			<div class="col-lg-3 text-center text-lg-start">
-				<div class="c-about-hero__avatar">
-					#encodeForHTML( data.author.getAvatarLabel().len() ? data.author.getAvatarLabel() : left( data.author.getDisplayName(), 2 ).uCase() )#
-				</div>
+				<bx:if len( data.author.getAvatarUrl() )>
+					<img src="#encodeForHTMLAttribute( data.author.getAvatarUrl() )#" alt="" class="c-about-hero__avatar">
+				<bx:else>
+					<div class="c-about-hero__avatar">
+						#encodeForHTML( data.author.getAvatarLabel().len() ? data.author.getAvatarLabel() : left( data.author.getDisplayName(), 2 ).uCase() )#
+					</div>
+				</bx:if>
 			</div>
 			<div class="col-lg-9">
 				<p class="c-about-hero__eyebrow">About the Author</p>

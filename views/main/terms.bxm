@@ -1,0 +1,41 @@
+<bx:include template="../partials/_head.bxm">
+<bx:output>
+<section class="py-5 posts-section">
+	<div class="container">
+		<div class="row justify-content-center">
+			<div class="col-lg-8">
+
+				<h1 class="c-post__title">Terms of Service</h1>
+				<p class="c-post__description">Last updated August 25, 2026.</p>
+
+				<div class="c-post__body">
+
+					<p>KISDigital is a personal site written by Robert Zehnder. These terms are short on purpose &mdash; this is a blog, not a product with a legal team. By reading or commenting on the site, you're agreeing to them.</p>
+
+					<h2>The content</h2>
+					<p>Posts, code samples, and other content on this site are Robert's own, written and posted at his own discretion. Everything is provided as-is: articles may contain mistakes, code samples are illustrative rather than production-audited, and nothing here is professional advice. Use anything you find at your own judgment and risk.</p>
+
+					<h2>Comments</h2>
+					<p>Leaving a comment requires signing in with Google (see the <a href="/privacy" class="c-post-link">Privacy Policy</a> for what that shares). You're responsible for what you post. Don't post anything illegal, abusive, spam, or something you don't have the right to share. Comments stay yours &mdash; posting one just gives this site permission to display it alongside the post it was left on.</p>
+					<p>Comments can be removed at the site owner's discretion, for any reason, without notice &mdash; most commonly spam or abuse. You can delete your own comment at any time.</p>
+
+					<h2>No warranty, no liability</h2>
+					<p>The site is provided "as is," with no guarantee it'll be available, error-free, or fit for any particular purpose. Robert isn't liable for any damages arising from your use of the site, to the fullest extent the law allows.</p>
+
+					<h2>External links</h2>
+					<p>Posts and comments may link to other sites. Robert doesn't control and isn't responsible for the content or practices of any site linked from here.</p>
+
+					<h2>Changes</h2>
+					<p>These terms may change as the site does. If they change in a meaningful way, the date at the top of this page will be updated.</p>
+
+					<h2>Contact</h2>
+					<p>Questions about these terms: <a href="mailto:robert@kisdigital.com" class="c-post-link">robert@kisdigital.com</a>.</p>
+
+				</div>
+
+			</div>
+		</div>
+	</div>
+</section>
+</bx:output>
+<bx:include template="../partials/_foot.bxm">

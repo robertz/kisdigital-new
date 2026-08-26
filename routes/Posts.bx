@@ -3,18 +3,25 @@
  */
 class {
 
-	variables.postService  = "";
-	variables.postRenderer = "";
-	variables.siteDefaults = "";
-	variables.botDetector  = "";
+	variables.postService    = "";
+	variables.postRenderer   = "";
+	variables.siteDefaults   = "";
+	variables.botDetector    = "";
+	variables.commentService = "";
 
-	function init( required postService, required postRenderer, required siteDefaults ){
-		variables.postService  = arguments.postService;
-		variables.postRenderer = arguments.postRenderer;
-		variables.siteDefaults = arguments.siteDefaults;
-		variables.botDetector  = new models.util.BotDetector();
+	function init( required postService, required postRenderer, required siteDefaults, required commentService ){
+		variables.postService    = arguments.postService;
+		variables.postRenderer   = arguments.postRenderer;
+		variables.siteDefaults   = arguments.siteDefaults;
+		variables.botDetector    = new models.util.BotDetector();
+		variables.commentService = arguments.commentService;
 
 		this.router = boxExpressRouter();
+		// Needed so show() can render a comment form's CSRF field — the
+		// actual POST /comments validation happens in routes/Comments.bx's
+		// own router, but req.csrfToken() has to come from a boxExpressCsrf()
+		// mounted on whichever router renders the form in the first place.
+		this.router.use( boxExpressCsrf() );
 
 		this.router.get( "/posts", ( req, res ) => index( req, res ) );
 		this.router.get( "/search", ( req, res ) => search( req, res ) );
@@ -108,6 +115,8 @@ class {
 			variables.postService.recordView( post.getId() );
 		}
 
+		var flash = flashConsume( req );
+
 		res.render( "posts/show", {
 			pageTitle     : post.getTitle(),
 			canonicalUrl  : canonicalUrl,
@@ -116,8 +125,41 @@ class {
 			isPreview     : isPreview,
 			postBodyHtml  : variables.postRenderer.render( post.getBody() ),
 			trendingPosts : variables.postService.getTrendingPosts(),
-			relatedPosts  : variables.postService.getRelatedPosts( post.getId(), post.getTags() )
+			relatedPosts  : variables.postService.getRelatedPosts( post.getId(), post.getTags() ),
+			commentThread : variables.commentService.getCommentThread( post.getId() ),
+			commentCount  : variables.commentService.getCommentCount( post.getId() ),
+			commentError  : flash.commentError ?: "",
+			currentUser   : _currentUser( req ),
+			csrfToken     : req.csrfToken()
 		} );
+	}
+
+	// Same shape as routes/Comments.bx's own _currentUser() — reads
+	// whichever session slot is populated (admin/author's manage_user, or
+	// a Google-only commenter's own session) so the comment form/controls
+	// know who's viewing regardless of account type. Duplicated rather
+	// than shared: two small call sites, not worth a shared util yet.
+	private function _currentUser( req ){
+		if ( len( req.session.manage_user ?: "" ) ){
+			var u = req.session.manage_user;
+			return { "id": u.id, "displayName": u.display_name, "role": u.role };
+		}
+		if ( len( req.session.commenter ?: "" ) ){
+			var u = req.session.commenter;
+			return { "id": u.id, "displayName": u.display_name, "role": "commenter" };
+		}
+		return javacast( "null", "" );
+	}
+
+	// Same session-backed flash as routes/Manage.bx's showLogin() reads,
+	// and routes/Auth.bx/routes/Comments.bx's own flashSet() write into —
+	// all four share the one req.session._flash slot, keyed by field name
+	// (loginError vs commentError), so a flash set by one never collides
+	// with what another reads.
+	private function flashConsume( req ){
+		var f = req.session._flash ?: {};
+		structDelete( req.session, "_flash" );
+		return f;
 	}
 
 	// route: /search

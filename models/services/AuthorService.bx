@@ -17,6 +17,7 @@ class {
 				U.role,
 				U.about,
 				U.avatar_label,
+				U.avatar_url,
 				U.created,
 				COUNT(UP.post_id) AS post_count
 			FROM User U
@@ -44,6 +45,7 @@ class {
 				U.role,
 				U.about,
 				U.avatar_label,
+				U.avatar_url,
 				U.created,
 				COUNT(UP.post_id) AS post_count
 			FROM User U

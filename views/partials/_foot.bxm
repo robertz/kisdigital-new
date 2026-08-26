@@ -1,6 +1,19 @@
 <bx:output>
 </main>
 
+<footer class="c-site-footer">
+	<div class="container">
+		<div class="c-site-footer__inner">
+			<span>&copy; #year( now() )# KISDigital</span>
+			<nav class="c-site-footer__links">
+				<a href="/about">About</a>
+				<a href="/privacy">Privacy</a>
+				<a href="/terms">Terms</a>
+			</nav>
+		</div>
+	</div>
+</footer>
+
 <script defer src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js" integrity="sha384-oBqDVmMz9ATKxIep9tiCxS/Z9fNfEXiDAYTujMAeBAsjFuCZSmKbSSUnQlmh/jp3" crossorigin="anonymous"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.min.js" integrity="sha384-cuYeSxntonz0PPNlHhBs68uyIAVpIIOZZ5JqeqvYYIcEL727kskC66kF92t6Xl2V" crossorigin="anonymous"></script>
 <script src="#data.jsHref#"></script>
@@ -21,6 +34,33 @@
 
 	toggle.addEventListener('click', function () {
 		applyTheme(html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+	});
+})();
+
+(function () {
+	var html   = document.documentElement;
+	var toggle = document.getElementById('manage-nav-toggle');
+	var icon   = document.getElementById('manage-nav-toggle-icon');
+	if (!toggle) return;
+
+	function applyCollapsed(collapsed) {
+		if (collapsed) {
+			html.setAttribute('data-manage-nav-collapsed', 'true');
+		} else {
+			html.removeAttribute('data-manage-nav-collapsed');
+		}
+		localStorage.setItem('manageNavCollapsed', collapsed ? '1' : '0');
+		toggle.setAttribute('aria-expanded', String(!collapsed));
+		toggle.setAttribute('aria-label', collapsed ? 'Expand sidebar' : 'Collapse sidebar');
+		icon.className = collapsed ? 'bi bi-chevron-double-right' : 'bi bi-chevron-double-left';
+	}
+
+	// Reflects whatever _head.bxm's early script already applied (or the
+	// default expanded state) rather than assuming expanded.
+	applyCollapsed(html.getAttribute('data-manage-nav-collapsed') === 'true');
+
+	toggle.addEventListener('click', function () {
+		applyCollapsed(html.getAttribute('data-manage-nav-collapsed') !== 'true');
 	});
 })();
 

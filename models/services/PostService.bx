@@ -50,7 +50,7 @@ class {
 		).map( ( r ) => r.tag );
 
 		var author = queryExecute(
-			"SELECT U.display_name, U.avatar_label
+			"SELECT U.display_name, U.avatar_label, U.avatar_url
 			FROM User U
 			INNER JOIN UserPost UP ON UP.user_id = U.id
 			WHERE UP.post_id = :post_id
@@ -62,6 +62,7 @@ class {
 
 		row[ "author_name" ]         = author.len() ? author[ 1 ].display_name : "";
 		row[ "author_avatar_label" ] = author.len() ? author[ 1 ].avatar_label  : "";
+		row[ "author_avatar_url" ]   = author.len() ? author[ 1 ].avatar_url    : "";
 
 		return new models.PostBean().populate( row );
 	}
@@ -100,7 +101,15 @@ class {
 					WHERE UP.post_id = P.id
 						AND UP.author_role = 'author'
 					LIMIT 1
-				) AS author_avatar_label
+				) AS author_avatar_label,
+				(
+					SELECT U.avatar_url
+					FROM User U
+					INNER JOIN UserPost UP ON UP.user_id = U.id
+					WHERE UP.post_id = P.id
+						AND UP.author_role = 'author'
+					LIMIT 1
+				) AS author_avatar_url
 			FROM Post P
 			LEFT JOIN TagPost TP ON TP.post_id = P.id
 			LEFT JOIN Tag T ON T.id = TP.tag_id
@@ -184,6 +193,14 @@ class {
 						AND UP.author_role = 'author'
 					LIMIT 1
 				) AS author_avatar_label,
+				(
+					SELECT U.avatar_url
+					FROM User U
+					INNER JOIN UserPost UP ON UP.user_id = U.id
+					WHERE UP.post_id = P.id
+						AND UP.author_role = 'author'
+					LIMIT 1
+				) AS author_avatar_url,
 				COUNT(DISTINCT TP_match.tag_id) AS shared_tags
 			FROM Post P
 			INNER JOIN TagPost TP_match ON TP_match.post_id = P.id
@@ -249,7 +266,15 @@ class {
 					WHERE UP.post_id = P.id
 						AND UP.author_role = 'author'
 					LIMIT 1
-				) AS author_avatar_label
+				) AS author_avatar_label,
+				(
+					SELECT U.avatar_url
+					FROM User U
+					INNER JOIN UserPost UP ON UP.user_id = U.id
+					WHERE UP.post_id = P.id
+						AND UP.author_role = 'author'
+					LIMIT 1
+				) AS author_avatar_url
 			FROM Post P
 			LEFT JOIN TagPost TP ON TP.post_id = P.id
 			LEFT JOIN Tag T ON T.id = TP.tag_id
@@ -326,7 +351,15 @@ class {
 					WHERE UP.post_id = P.id
 						AND UP.author_role = 'author'
 					LIMIT 1
-				) AS author_avatar_label
+				) AS author_avatar_label,
+				(
+					SELECT U.avatar_url
+					FROM User U
+					INNER JOIN UserPost UP ON UP.user_id = U.id
+					WHERE UP.post_id = P.id
+						AND UP.author_role = 'author'
+					LIMIT 1
+				) AS author_avatar_url
 			FROM Post P
 			INNER JOIN TagPost TP_f ON TP_f.post_id = P.id
 			INNER JOIN Tag T_f ON T_f.id = TP_f.tag_id AND T_f.tag = :tag
@@ -429,6 +462,14 @@ class {
 						AND UP.author_role = 'author'
 					LIMIT 1
 				) AS author_avatar_label,
+				(
+					SELECT U.avatar_url
+					FROM User U
+					INNER JOIN UserPost UP ON UP.user_id = U.id
+					WHERE UP.post_id = P.id
+						AND UP.author_role = 'author'
+					LIMIT 1
+				) AS author_avatar_url,
 				MATCH(P.title, P.description, P.body) AGAINST(:q IN NATURAL LANGUAGE MODE) AS relevance
 			FROM Post P
 			LEFT JOIN TagPost TP ON TP.post_id = P.id
@@ -540,7 +581,15 @@ class {
 					WHERE UP.post_id = P.id
 						AND UP.author_role = 'author'
 					LIMIT 1
-				) AS author_avatar_label
+				) AS author_avatar_label,
+				(
+					SELECT U.avatar_url
+					FROM User U
+					INNER JOIN UserPost UP ON UP.user_id = U.id
+					WHERE UP.post_id = P.id
+						AND UP.author_role = 'author'
+					LIMIT 1
+				) AS author_avatar_url
 			FROM Post P
 			LEFT JOIN TagPost TP ON TP.post_id = P.id
 			LEFT JOIN Tag T ON T.id = TP.tag_id

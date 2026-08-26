@@ -56,7 +56,11 @@
 					</p>
 					<div class="d-flex align-items-center gap-3 mb-4">
 						<bx:if len( data.featuredPost.getAuthorName() )>
-							<div class="author-avatar">#encodeForHTML( data.featuredPost.getAuthorInitials() )#</div>
+							<bx:if len( data.featuredPost.getAuthorAvatarUrl() )>
+								<img src="#encodeForHTMLAttribute( data.featuredPost.getAuthorAvatarUrl() )#" alt="" class="author-avatar">
+							<bx:else>
+								<div class="author-avatar">#encodeForHTML( data.featuredPost.getAuthorInitials() )#</div>
+							</bx:if>
 							<div>
 								<div class="text-body small fw-semibold">#encodeForHTML( data.featuredPost.getAuthorName() )#</div>
 								<div class="read-time">#dateFormat( data.featuredPost.getPublishDate(), "MMMM D, YYYY" )#</div>
@@ -108,7 +112,11 @@
 				<p class="section-label mb-4">About</p>
 				<div class="sidebar-widget pt-1">
 					<div class="d-flex align-items-center gap-3 mb-3">
-						<div class="author-avatar author-avatar--lg">#encodeForHTML( data.siteAuthor.getAvatarLabel().len() ? data.siteAuthor.getAvatarLabel() : left( data.siteAuthor.getDisplayName(), 2 ).uCase() )#</div>
+						<bx:if len( data.siteAuthor.getAvatarUrl() )>
+							<img src="#encodeForHTMLAttribute( data.siteAuthor.getAvatarUrl() )#" alt="" class="author-avatar author-avatar--lg">
+						<bx:else>
+							<div class="author-avatar author-avatar--lg">#encodeForHTML( data.siteAuthor.getAvatarLabel().len() ? data.siteAuthor.getAvatarLabel() : left( data.siteAuthor.getDisplayName(), 2 ).uCase() )#</div>
+						</bx:if>
 						<div>
 							<div class="text-body fw-bold">#encodeForHTML( data.siteAuthor.getDisplayName() )#</div>
 							<bx:if len( data.siteAuthor.getRole() )>

@@ -4,8 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
-<!--- Theme init: runs before render to prevent flash of wrong theme --->
-<script>(function(){var t=localStorage.getItem('theme');if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.setAttribute('data-theme','dark');}else if(t==='light'){document.documentElement.setAttribute('data-theme','light');}})();</script>
+<!--- Theme + manage-sidebar init: runs before render to prevent a flash of
+      the wrong state — data-manage-nav-collapsed is inert outside
+      /manage (there's no .c-manage-nav for it to style there), so setting
+      it unconditionally on every page costs nothing. --->
+<script>(function(){var t=localStorage.getItem('theme');if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.setAttribute('data-theme','dark');}else if(t==='light'){document.documentElement.setAttribute('data-theme','light');}if(localStorage.getItem('manageNavCollapsed')==='1'){document.documentElement.setAttribute('data-manage-nav-collapsed','true');}})();</script>
 
 <title>#encodeForHTML( len( data.pageTitle ?: "" ) ? data.pageTitle & " | " & data.siteName : data.siteName )#</title>
 

@@ -126,6 +126,7 @@
 	width: 30px;
 	height: 30px;
 	border-radius: 50%;
+	object-fit: cover;
 	background: var(--ui-surface-2);
 	border: 1px solid var(--ui-border-subtle);
 	display: flex;
@@ -285,6 +286,7 @@
 	width: 42px;
 	height: 42px;
 	border-radius: 50%;
+	object-fit: cover;
 	background: var(--ui-surface-2);
 	border: 1px solid var(--ui-border-subtle);
 	display: flex;
@@ -304,6 +306,328 @@
 	padding-top: var(--space-7);
 	border-top: 1px solid var(--ui-border-subtle);
 }
+
+.c-comments__signin,
+.c-comments__empty {
+	color: var(--text-secondary);
+	font-size: 0.9rem;
+}
+
+.c-comments__signin {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: var(--space-3);
+}
+
+/* Same treatment as the real Google sign-in button on /manage/login
+   (.c-auth__google-btn) — reused here as its own class rather than
+   shared, since that one is styled to fill a narrow centered auth card
+   at width:100%, which would look oversized inline in the wider post
+   content column this sits in. */
+.c-comments__google-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-2);
+	padding: 8px var(--space-4);
+	background: var(--ui-surface-2);
+	border: 1px solid var(--ui-border-subtle);
+	border-radius: var(--ui-radius-sm);
+	color: var(--post-anchor);
+	font-size: 0.85rem;
+	font-weight: 600;
+	text-decoration: none;
+	transition: border-color 120ms ease;
+}
+
+.c-comments__google-btn:hover {
+	border-color: var(--post-link-text);
+	color: var(--post-anchor);
+}
+
+.c-comments__legal {
+	margin-top: var(--space-2);
+	color: var(--text-muted);
+	font-size: 0.75rem;
+}
+
+.c-comments__legal a {
+	color: var(--text-muted);
+	text-decoration: underline;
+}
+
+.c-comments__legal a:hover {
+	color: var(--post-link-text);
+}
+
+/* Only shown for a Google-only commenter session, not an admin/author's
+   manage_user session browsing the public site — those already have a
+   visible signed-in state elsewhere (the header's Dashboard link, the
+   post nav's Edit link) and sign out from the CMS itself, a more
+   consequential action this casual comment-box link shouldn't trigger. */
+.c-comments__account {
+	margin-bottom: var(--space-4);
+	color: var(--text-secondary);
+	font-size: 0.85rem;
+}
+
+.c-comments__account strong {
+	color: var(--post-anchor);
+}
+
+.c-comments__account a {
+	color: var(--post-link-text);
+	font-weight: 600;
+}
+
+/* ── Comment form (shared by the top-level composer and each reply toggle) ── */
+
+.c-comment-form {
+	margin-bottom: var(--space-6);
+}
+
+.c-comment-form--reply {
+	margin-top: var(--space-3);
+	margin-bottom: 0;
+}
+
+.c-comment-form__input {
+	display: block;
+	width: 100%;
+	padding: 10px var(--space-4);
+	background: var(--color-neutral-background-container);
+	border: 1px solid var(--ui-border-subtle);
+	border-radius: var(--ui-radius-sm);
+	color: var(--post-anchor);
+	font-size: 0.9rem;
+	font-family: inherit;
+	resize: vertical;
+	transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.c-comment-form__input:focus-visible {
+	outline: none;
+	border-color: var(--post-link-text);
+	box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+.c-comment-form__input::placeholder {
+	color: var(--text-placeholder);
+}
+
+.c-comment-form__submit {
+	margin-top: var(--space-3);
+	padding: 8px var(--space-5);
+	background: var(--post-anchor);
+	color: var(--site-background-color);
+	font-size: 0.9rem;
+	font-weight: 600;
+	border: none;
+	border-radius: var(--ui-radius-sm);
+	cursor: pointer;
+	transition: filter 120ms ease, transform 80ms ease;
+}
+
+.c-comment-form__submit:hover {
+	filter: brightness(1.1);
+}
+
+.c-comment-form__submit:active {
+	transform: translateY(1px);
+}
+
+.c-comment-form__error {
+	margin-bottom: var(--space-5);
+	padding: 10px var(--space-4);
+	background: rgba(239, 68, 68, 0.08);
+	border: 1px solid rgba(239, 68, 68, 0.25);
+	border-radius: var(--ui-radius-sm);
+	color: #dc2626;
+	font-size: 0.875rem;
+}
+
+/* ── Comment thread ── */
+
+.c-comment-list {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-5);
+}
+
+.c-comment {
+	/* --comment-depth is set per row (capped at 6) by
+	   views/partials/commentThread.bxm — indent grows with nesting, then
+	   stops, the same way Reddit's own UI avoids squeezing replies into an
+	   unreadable sliver on deep threads. */
+	margin-left: calc(var(--comment-depth, 0) * 20px);
+}
+
+/* Depth-colored left rail, same --comment-depth-N tokens root.css already
+   defines for this — cycles through 5 colors (light/dark variants both
+   already tuned there) instead of every reply level looking identical. */
+.c-comment[data-depth]:not([data-depth="0"]) {
+	padding-left: var(--space-4);
+	border-left: 2px solid var(--comment-depth-5);
+}
+
+.c-comment[data-depth="1"] { border-left-color: var(--comment-depth-1); }
+.c-comment[data-depth="2"] { border-left-color: var(--comment-depth-2); }
+.c-comment[data-depth="3"] { border-left-color: var(--comment-depth-3); }
+.c-comment[data-depth="4"] { border-left-color: var(--comment-depth-4); }
+
+.c-comment__row {
+	display: flex;
+	gap: var(--space-3);
+}
+
+.c-comment__avatar {
+	flex-shrink: 0;
+	width: 30px;
+	height: 30px;
+	border-radius: 50%;
+	object-fit: cover;
+	background: var(--ui-surface-2);
+	border: 1px solid var(--ui-border-subtle);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-family: var(--font-mono);
+	font-size: 0.65rem;
+	font-weight: 600;
+	color: var(--post-anchor);
+}
+
+.c-comment__body-col {
+	min-width: 0;
+	flex: 1 1 auto;
+}
+
+.c-comment__meta {
+	display: flex;
+	align-items: baseline;
+	gap: var(--space-3);
+	margin-bottom: var(--space-1);
+}
+
+.c-comment__author {
+	font-weight: 600;
+	font-size: 0.85rem;
+	color: var(--post-anchor);
+}
+
+.c-comment__meta time {
+	font-family: var(--font-mono);
+	font-size: 0.72rem;
+	color: var(--text-muted);
+}
+
+.c-comment__text {
+	font-size: 0.9rem;
+	line-height: 1.6;
+	color: var(--post-anchor);
+	white-space: pre-wrap;
+	margin-bottom: var(--space-2);
+}
+
+.c-comment__deleted {
+	font-size: 0.85rem;
+	font-style: italic;
+	color: var(--text-muted);
+}
+
+.c-comment__actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--space-4);
+}
+
+.c-comment__reply-toggle summary {
+	display: inline-block;
+	font-size: 0.8rem;
+	font-weight: 600;
+	color: var(--text-secondary);
+	cursor: pointer;
+	list-style: none;
+}
+
+.c-comment__reply-toggle summary::-webkit-details-marker {
+	display: none;
+}
+
+.c-comment__reply-toggle summary::marker {
+	content: "";
+}
+
+.c-comment__reply-toggle summary:hover {
+	color: var(--post-link-text);
+}
+
+/* Forces the reply form onto its own full-width row once opened, instead
+   of sharing the flex row with Delete — without this, .c-comment__actions'
+   other children (Delete) end up floating awkwardly beside the now-tall
+   <details> content instead of moving below it. Closed state is
+   unaffected: summary alone is small enough to sit inline with Delete. */
+.c-comment__reply-toggle[open] {
+	flex-basis: 100%;
+}
+
+.c-comment-form--reply {
+	margin-top: var(--space-2);
+	padding: var(--space-3);
+	background: var(--ui-surface-2);
+	border: 1px solid var(--ui-border-subtle);
+	border-radius: var(--ui-radius-sm);
+}
+
+.c-comment-form--reply__row {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+	margin-top: var(--space-2);
+}
+
+.c-comment-form--reply .c-comment-form__submit {
+	margin-top: 0;
+}
+
+.c-comment-form__cancel {
+	background: none;
+	border: none;
+	padding: 0;
+	font-size: 0.8rem;
+	font-weight: 600;
+	color: var(--text-secondary);
+	cursor: pointer;
+}
+
+.c-comment-form__cancel:hover {
+	color: var(--post-anchor);
+}
+
+.c-comment__delete-btn {
+	background: none;
+	border: none;
+	padding: 0;
+	font-size: 0.8rem;
+	font-weight: 600;
+	color: var(--text-secondary);
+	cursor: pointer;
+}
+
+.c-comment__delete-btn:hover {
+	color: #dc2626;
+}
+
+/* Same #dc2626 → #fca5a5 swap .c-auth__error makes in manage.css — the
+   solid light-mode red is too low-contrast against a dark surface. */
+@media (prefers-color-scheme: dark) {
+	html:not([data-theme="light"]) .c-comment-form__error { color: #fca5a5; background: rgba(239, 68, 68, 0.12); }
+	html:not([data-theme="light"]) .c-comment__delete-btn:hover { color: #fca5a5; }
+}
+
+[data-theme="dark"] .c-comment-form__error { color: #fca5a5; background: rgba(239, 68, 68, 0.12); }
+[data-theme="dark"] .c-comment__delete-btn:hover { color: #fca5a5; }
 
 /* ── Related articles ── */
 

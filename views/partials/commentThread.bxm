@@ -1,0 +1,62 @@
+<bx:output>
+<!--- Renders one row from CommentService.getCommentThread()'s flat,
+      depth-annotated list — indentation comes from `comment.depth` alone,
+      no nesting/recursion needed since the list is already in display
+      order. Included once per item from a plain <bx:loop item="comment">
+      in views/posts/show.bxm; data.currentUser/data.csrfToken/data.post
+      come from that same view's own render data, same as how
+      trendingSidebar.bxm reaches data.trendingPosts regardless of which
+      top-level view included it.
+
+      Also used standalone by routes/Comments.bx to render a single new
+      comment's fragment for the AJAX response (see public/assets/js/
+      comments.js) — data-depth mirrors --comment-depth so that script can
+      find the right insertion point without parsing inline CSS. --->
+<div class="c-comment" id="comment-#encodeForHTMLAttribute( comment.id )#" data-depth="#comment.depth#" style="--comment-depth: #min( comment.depth, 6 )#">
+	<div class="c-comment__row">
+		<bx:if len( comment.avatarUrl ) && !comment.isDeleted>
+			<img src="#encodeForHTMLAttribute( comment.avatarUrl )#" alt="" class="c-comment__avatar">
+		<bx:elseif !comment.isDeleted>
+			<div class="c-comment__avatar">#encodeForHTML( len( comment.avatarLabel ) ? comment.avatarLabel : left( comment.displayName, 2 ).uCase() )#</div>
+		</bx:if>
+
+		<div class="c-comment__body-col">
+			<bx:if comment.isDeleted>
+				<p class="c-comment__deleted">[deleted]</p>
+			<bx:else>
+				<div class="c-comment__meta">
+					<span class="c-comment__author">#encodeForHTML( comment.displayName )#</span>
+					<time datetime="#encodeForHTMLAttribute( dateTimeFormat( comment.created, "yyyy-mm-dd'T'HH:nn:ss'Z'" ) )#" data-local-time data-local-format="relative">#dateFormat( comment.created, "mmm d, yyyy" )#</time>
+				</div>
+				<p class="c-comment__text">#encodeForHTML( comment.body )#</p>
+
+				<div class="c-comment__actions">
+					<bx:if !isNull( data.currentUser )>
+						<details class="c-comment__reply-toggle">
+							<summary>Reply</summary>
+							<form method="post" action="/comments" class="c-comment-form c-comment-form--reply" data-comment-form data-parent-id="#encodeForHTMLAttribute( comment.id )#">
+								<input type="hidden" name="_csrf" value="#encodeForHTMLAttribute( data.csrfToken )#">
+								<input type="hidden" name="post_id" value="#encodeForHTMLAttribute( data.post.getId() )#">
+								<input type="hidden" name="parent_id" value="#encodeForHTMLAttribute( comment.id )#">
+								<input type="hidden" name="redirect" value="#encodeForHTMLAttribute( data.post.getPostUrl() )#">
+								<textarea name="body" class="c-comment-form__input" rows="2" required></textarea>
+								<div class="c-comment-form--reply__row">
+									<button type="submit" class="c-comment-form__submit">Reply</button>
+									<button type="button" class="c-comment-form__cancel" data-comment-cancel>Cancel</button>
+								</div>
+							</form>
+						</details>
+					</bx:if>
+					<bx:if !isNull( data.currentUser ) && ( data.currentUser.id == comment.userId || data.currentUser.role == "admin" )>
+						<form method="post" action="/comments/#encodeForURL( comment.id )#/delete" class="c-comment__delete-form" data-comment-delete-form>
+							<input type="hidden" name="_csrf" value="#encodeForHTMLAttribute( data.csrfToken )#">
+							<input type="hidden" name="redirect" value="#encodeForHTMLAttribute( data.post.getPostUrl() )#">
+							<button type="submit" class="c-comment__delete-btn">Delete</button>
+						</form>
+					</bx:if>
+				</div>
+			</bx:if>
+		</div>
+	</div>
+</div>
+</bx:output>

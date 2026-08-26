@@ -825,6 +825,39 @@ a.c-breadcrumb__link:hover {
 	max-width: 90ch;
 }
 
+/* ── Site footer ── */
+
+.c-site-footer {
+	margin-top: var(--space-8);
+	padding: var(--space-6) 0;
+	border-top: 1px solid var(--ui-border-subtle);
+}
+
+.c-site-footer__inner {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-3);
+	font-size: 0.8125rem;
+	color: var(--text-muted);
+}
+
+.c-site-footer__links {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-5);
+}
+
+.c-site-footer__links a {
+	color: var(--text-muted);
+	text-decoration: none;
+}
+
+.c-site-footer__links a:hover {
+	color: var(--post-link-text);
+}
+
 /* ── Error pages (404, 500) ── */
 
 .c-404,

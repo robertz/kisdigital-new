@@ -16,6 +16,8 @@ class {
 
 		this.router.get( "/", ( req, res ) => index( req, res ) );
 		this.router.get( "/about", ( req, res ) => about( req, res ) );
+		this.router.get( "/privacy", ( req, res ) => privacy( req, res ) );
+		this.router.get( "/terms", ( req, res ) => terms( req, res ) );
 
 		return this;
 	}
@@ -42,6 +44,24 @@ class {
 			meta         : variables.siteDefaults.defaultMeta( req.path ),
 			author       : variables.authorService.getFirstAuthor(),
 			latestPosts  : variables.postService.getLatestPosts()
+		} );
+	}
+
+	// route: /privacy
+	function privacy( req, res ){
+		res.render( "main/privacy", {
+			pageTitle    : "Privacy Policy",
+			canonicalUrl : variables.siteDefaults.canonicalUrl( req.path ),
+			meta         : variables.siteDefaults.defaultMeta( req.path )
+		} );
+	}
+
+	// route: /terms
+	function terms( req, res ){
+		res.render( "main/terms", {
+			pageTitle    : "Terms of Service",
+			canonicalUrl : variables.siteDefaults.canonicalUrl( req.path ),
+			meta         : variables.siteDefaults.defaultMeta( req.path )
 		} );
 	}
 

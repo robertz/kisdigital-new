@@ -31,8 +31,9 @@ class {
 	variables.projectDocService  = "";
 	variables.projectDocRenderer = "";
 	variables.projectRegistry    = "";
+	variables.googleOAuthClient  = "";
 
-	function init( required authService, required postService, required authorService, required settingsService, required postRenderer, required r2Client, r2UploadPrefix = "posts", required insightsService, required serverMonitor, required projectDocService, required projectDocRenderer ){
+	function init( required authService, required postService, required authorService, required settingsService, required postRenderer, required r2Client, r2UploadPrefix = "posts", required insightsService, required serverMonitor, required projectDocService, required projectDocRenderer, required googleOAuthClient ){
 		variables.authService     = arguments.authService;
 		variables.postService     = arguments.postService;
 		variables.authorService   = arguments.authorService;
@@ -45,6 +46,7 @@ class {
 		variables.projectDocService  = arguments.projectDocService;
 		variables.projectDocRenderer = arguments.projectDocRenderer;
 		variables.projectRegistry    = new models.util.ProjectRegistry();
+		variables.googleOAuthClient  = arguments.googleOAuthClient;
 
 		// Bare method references passed as route handlers lose their binding to
 		// this instance (BoxLang's Router ends up calling them unbound), so every
@@ -165,9 +167,10 @@ class {
 		var flash = flashConsume( req );
 
 		res.render( "manage/login", {
-			pageTitle : "Sign In",
-			error     : flash.loginError ?: "",
-			csrfToken : req.csrfToken()
+			pageTitle          : "Sign In",
+			error              : flash.loginError ?: "",
+			csrfToken          : req.csrfToken(),
+			googleSignInEnabled: variables.googleOAuthClient.isConfigured()
 		} );
 	}
 
@@ -209,7 +212,14 @@ class {
 
 		var user = variables.authService.authenticate( userEmail, userPassword );
 
-		if ( user.isEmpty() ){
+		// Practically unreachable for a role='commenter' row — see
+		// AuthService.findOrCreateGoogleUser()'s own note on why its
+		// password can never actually verify — but kept as a real check
+		// rather than relying on that alone, same instinct as
+		// authenticate()'s constant-time-ish dummy-hash comparison: don't
+		// let a second layer's correctness depend entirely on a first
+		// layer never changing.
+		if ( user.isEmpty() || ( user.role != "admin" && user.role != "author" ) ){
 			_recordFailedLogin( accountKey );
 			println( "[auth] failed login attempt for '" & userEmail & "' from " & req.ip );
 			flashSet( req, { loginError: "Invalid email or password." } );

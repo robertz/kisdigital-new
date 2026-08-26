@@ -58,9 +58,13 @@
 
 						<div class="c-post__meta">
 							<bx:if len( data.post.getAuthorName() )>
-								<div class="c-post__author-avatar">
-									#encodeForHTML( data.post.getAuthorInitials() )#
-								</div>
+								<bx:if len( data.post.getAuthorAvatarUrl() )>
+									<img src="#encodeForHTMLAttribute( data.post.getAuthorAvatarUrl() )#" alt="" class="c-post__author-avatar">
+								<bx:else>
+									<div class="c-post__author-avatar">
+										#encodeForHTML( data.post.getAuthorInitials() )#
+									</div>
+								</bx:if>
 								<span>#encodeForHTML( data.post.getAuthorName() )#</span>
 								<span class="c-post__meta-sep">&middot;</span>
 							</bx:if>
@@ -118,41 +122,51 @@
 				</article>
 
 				<section class="c-comments">
-					<p class="section-label mb-4">Comments</p>
-					<div class="giscus"></div>
-					<script>
-						(function () {
-							var theme = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
-							var s = document.createElement('script');
-							s.src = 'https://giscus.app/client.js';
-							s.setAttribute('data-repo', 'robertz/kdfe-ssg');
-							s.setAttribute('data-repo-id', 'R_kgDOK8F-Yw');
-							s.setAttribute('data-category', 'Comments');
-							s.setAttribute('data-category-id', 'DIC_kwDOK8F-Y84CcVjP');
-							s.setAttribute('data-mapping', 'pathname');
-							s.setAttribute('data-strict', '0');
-							s.setAttribute('data-reactions-enabled', '1');
-							s.setAttribute('data-emit-metadata', '0');
-							s.setAttribute('data-input-position', 'bottom');
-							s.setAttribute('data-theme', theme);
-							s.setAttribute('data-lang', 'en');
-							s.setAttribute('crossorigin', 'anonymous');
-							s.async = true;
-							document.currentScript.parentNode.appendChild(s);
+					<p class="section-label mb-4" data-comment-count-label>Comments#( data.commentCount ? " (" & data.commentCount & ")" : "" )#</p>
 
-							// Update giscus when the site theme changes
-							new MutationObserver(function () {
-								var newTheme = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
-								var iframe = document.querySelector('iframe.giscus-frame');
-								if (iframe) {
-									iframe.contentWindow.postMessage(
-										{ giscus: { setConfig: { theme: newTheme } } },
-										'https://giscus.app'
-									);
-								}
-							}).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-						})();
-					</script>
+					<bx:if len( data.commentError ?: "" )>
+						<div class="c-comment-form__error" role="alert">#encodeForHTML( data.commentError )#</div>
+					</bx:if>
+
+					<bx:if !isNull( data.currentUser )>
+						<bx:if data.currentUser.role == "commenter">
+						<p class="c-comments__account">
+							Signed in as <strong>#encodeForHTML( data.currentUser.displayName )#</strong>
+							&middot; <a href="/auth/logout?redirect=#encodeForURL( data.post.getPostUrl() )#">Sign out</a>
+						</p>
+						</bx:if>
+						<form method="post" action="/comments" class="c-comment-form c-comment-form--top" data-comment-form data-parent-id="">
+							<input type="hidden" name="_csrf" value="#encodeForHTMLAttribute( data.csrfToken )#">
+							<input type="hidden" name="post_id" value="#encodeForHTMLAttribute( data.post.getId() )#">
+							<input type="hidden" name="parent_id" value="">
+							<input type="hidden" name="redirect" value="#encodeForHTMLAttribute( data.post.getPostUrl() )#">
+							<textarea name="body" class="c-comment-form__input" rows="3" placeholder="Add a comment&hellip;" required></textarea>
+							<button type="submit" class="c-comment-form__submit">Comment</button>
+						</form>
+					<bx:else>
+						<p class="c-comments__signin">
+							<a href="/auth/google?redirect=#encodeForURL( data.post.getPostUrl() )#" class="c-comments__google-btn">
+								<svg width="16" height="16" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+									<path fill="##4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.259h2.908c1.702-1.567 2.684-3.874 2.684-6.617z"/>
+									<path fill="##34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332C2.438 15.983 5.482 18 9 18z"/>
+									<path fill="##FBBC05" d="M3.964 10.71A5.41 5.41 0 013.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 000 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/>
+									<path fill="##EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.438 2.017.957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"/>
+								</svg>
+								Sign in with Google
+							</a>
+							<span>to leave a comment.</span>
+						</p>
+						<p class="c-comments__legal">
+							By signing in you agree to the <a href="/terms">Terms of Service</a> and <a href="/privacy">Privacy Policy</a>.
+						</p>
+					</bx:if>
+
+					<div class="c-comment-list" data-comment-list>
+						<p class="c-comments__empty" data-comment-empty #( data.commentThread.len() ? 'hidden' : '' )#>No comments yet &mdash; be the first.</p>
+						<bx:loop array="#data.commentThread#" item="comment">
+							<bx:include template="../partials/commentThread.bxm">
+						</bx:loop>
+					</div>
 				</section>
 
 				<bx:if data.relatedPosts.len()>
@@ -176,9 +190,13 @@
 					<p class="c-post-sidebar__label">Author</p>
 					<div class="c-post-sidebar__widget mb-5">
 						<div class="d-flex align-items-center gap-3 mb-3">
-							<div class="c-post-sidebar__author-avatar">
-								#encodeForHTML( data.post.getAuthorInitials() )#
-							</div>
+							<bx:if len( data.post.getAuthorAvatarUrl() )>
+								<img src="#encodeForHTMLAttribute( data.post.getAuthorAvatarUrl() )#" alt="" class="c-post-sidebar__author-avatar">
+							<bx:else>
+								<div class="c-post-sidebar__author-avatar">
+									#encodeForHTML( data.post.getAuthorInitials() )#
+								</div>
+							</bx:if>
 							<div class="text-body fw-bold">#encodeForHTML( data.post.getAuthorName() )#</div>
 						</div>
 						<bx:if len( data.post.getAuthorAbout() )>
@@ -209,4 +227,5 @@
 	</div>
 </section>
 </bx:output>
+<script src="/assets/js/comments.js"></script>
 <bx:include template="../partials/_foot.bxm">
