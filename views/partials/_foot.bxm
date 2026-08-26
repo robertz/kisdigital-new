@@ -25,6 +25,33 @@
 })();
 
 (function () {
+	var html   = document.documentElement;
+	var toggle = document.getElementById('manage-nav-toggle');
+	var icon   = document.getElementById('manage-nav-toggle-icon');
+	if (!toggle) return;
+
+	function applyCollapsed(collapsed) {
+		if (collapsed) {
+			html.setAttribute('data-manage-nav-collapsed', 'true');
+		} else {
+			html.removeAttribute('data-manage-nav-collapsed');
+		}
+		localStorage.setItem('manageNavCollapsed', collapsed ? '1' : '0');
+		toggle.setAttribute('aria-expanded', String(!collapsed));
+		toggle.setAttribute('aria-label', collapsed ? 'Expand sidebar' : 'Collapse sidebar');
+		icon.className = collapsed ? 'bi bi-chevron-double-right' : 'bi bi-chevron-double-left';
+	}
+
+	// Reflects whatever _head.bxm's early script already applied (or the
+	// default expanded state) rather than assuming expanded.
+	applyCollapsed(html.getAttribute('data-manage-nav-collapsed') === 'true');
+
+	toggle.addEventListener('click', function () {
+		applyCollapsed(html.getAttribute('data-manage-nav-collapsed') !== 'true');
+	});
+})();
+
+(function () {
 	var menuToggle = document.getElementById('mobile-menu-toggle');
 	var menuIcon   = document.getElementById('mobile-menu-icon');
 	var menu       = document.getElementById('mobile-menu');

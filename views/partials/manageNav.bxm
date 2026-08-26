@@ -1,37 +1,46 @@
 <bx:output>
 <nav class="c-manage-nav">
-	<span class="c-manage-nav__heading">KISDigital CMS</span>
-	<a href="/manage" class="c-manage-nav__link #( ( data.manageSection ?: '' ) == 'dashboard' ? 'c-manage-nav__link--active' : '' )#">
-		<i class="bi bi-speedometer2"></i> Dashboard
+	<div class="c-manage-nav__top">
+		<span class="c-manage-nav__heading">KISDigital CMS</span>
+		<!--- Collapsed/expanded state lives on <html data-manage-nav-collapsed>,
+		      set before paint by the inline script in _head.bxm (same technique
+		      as data-theme) and toggled here by the script in _foot.bxm — see
+		      those for why, and public/assets/css/manage.css for the CSS side. --->
+		<button type="button" class="c-manage-nav__collapse-toggle" id="manage-nav-toggle" aria-label="Collapse sidebar" aria-expanded="true">
+			<i class="bi bi-chevron-double-left" id="manage-nav-toggle-icon"></i>
+		</button>
+	</div>
+	<a href="/manage" class="c-manage-nav__link #( ( data.manageSection ?: '' ) == 'dashboard' ? 'c-manage-nav__link--active' : '' )#" title="Dashboard">
+		<i class="bi bi-speedometer2"></i> <span class="c-manage-nav__label">Dashboard</span>
 	</a>
-	<a href="/manage/posts" class="c-manage-nav__link #( ( data.manageSection ?: '' ) == 'posts' ? 'c-manage-nav__link--active' : '' )#">
-		<i class="bi bi-file-text"></i> Posts
+	<a href="/manage/posts" class="c-manage-nav__link #( ( data.manageSection ?: '' ) == 'posts' ? 'c-manage-nav__link--active' : '' )#" title="Posts">
+		<i class="bi bi-file-text"></i> <span class="c-manage-nav__label">Posts</span>
 	</a>
-	<a href="/manage/authors" class="c-manage-nav__link #( ( data.manageSection ?: '' ) == 'authors' ? 'c-manage-nav__link--active' : '' )#">
-		<i class="bi bi-people"></i> Authors
+	<a href="/manage/authors" class="c-manage-nav__link #( ( data.manageSection ?: '' ) == 'authors' ? 'c-manage-nav__link--active' : '' )#" title="Authors">
+		<i class="bi bi-people"></i> <span class="c-manage-nav__label">Authors</span>
 	</a>
-	<a href="/manage/media" class="c-manage-nav__link #( ( data.manageSection ?: '' ) == 'media' ? 'c-manage-nav__link--active' : '' )#">
-		<i class="bi bi-images"></i> Media
+	<a href="/manage/media" class="c-manage-nav__link #( ( data.manageSection ?: '' ) == 'media' ? 'c-manage-nav__link--active' : '' )#" title="Media">
+		<i class="bi bi-images"></i> <span class="c-manage-nav__label">Media</span>
 	</a>
-	<a href="/manage/insights" class="c-manage-nav__link #( ( data.manageSection ?: '' ) == 'insights' ? 'c-manage-nav__link--active' : '' )#">
-		<i class="bi bi-bar-chart"></i> Insights
+	<a href="/manage/insights" class="c-manage-nav__link #( ( data.manageSection ?: '' ) == 'insights' ? 'c-manage-nav__link--active' : '' )#" title="Insights">
+		<i class="bi bi-bar-chart"></i> <span class="c-manage-nav__label">Insights</span>
 	</a>
 	<bx:if ( data.manageUser.role ?: "" ) == "admin">
-	<a href="/manage/project-docs" class="c-manage-nav__link #( ( data.manageSection ?: '' ) == 'projectDocs' ? 'c-manage-nav__link--active' : '' )#">
-		<i class="bi bi-journal-code"></i> Project Docs
+	<a href="/manage/project-docs" class="c-manage-nav__link #( ( data.manageSection ?: '' ) == 'projectDocs' ? 'c-manage-nav__link--active' : '' )#" title="Project Docs">
+		<i class="bi bi-journal-code"></i> <span class="c-manage-nav__label">Project Docs</span>
 	</a>
 	</bx:if>
-	<a href="/manage/logs" class="c-manage-nav__link #( ( data.manageSection ?: '' ) == 'logs' ? 'c-manage-nav__link--active' : '' )#">
-		<i class="bi bi-list-ul"></i> Request Log
+	<a href="/manage/logs" class="c-manage-nav__link #( ( data.manageSection ?: '' ) == 'logs' ? 'c-manage-nav__link--active' : '' )#" title="Request Log">
+		<i class="bi bi-list-ul"></i> <span class="c-manage-nav__label">Request Log</span>
 	</a>
-	<a href="/manage/server" class="c-manage-nav__link #( ( data.manageSection ?: '' ) == 'server' ? 'c-manage-nav__link--active' : '' )#">
-		<i class="bi bi-hdd-stack"></i> Server
+	<a href="/manage/server" class="c-manage-nav__link #( ( data.manageSection ?: '' ) == 'server' ? 'c-manage-nav__link--active' : '' )#" title="Server">
+		<i class="bi bi-hdd-stack"></i> <span class="c-manage-nav__label">Server</span>
 	</a>
-	<a href="/manage/settings" class="c-manage-nav__link #( ( data.manageSection ?: '' ) == 'settings' ? 'c-manage-nav__link--active' : '' )#">
-		<i class="bi bi-gear"></i> Settings
+	<a href="/manage/settings" class="c-manage-nav__link #( ( data.manageSection ?: '' ) == 'settings' ? 'c-manage-nav__link--active' : '' )#" title="Settings">
+		<i class="bi bi-gear"></i> <span class="c-manage-nav__label">Settings</span>
 	</a>
-	<a href="/manage/logout" class="c-manage-nav__link c-manage-nav__link--signout">
-		<i class="bi bi-box-arrow-right"></i> Sign out
+	<a href="/manage/logout" class="c-manage-nav__link c-manage-nav__link--signout" title="Sign out">
+		<i class="bi bi-box-arrow-right"></i> <span class="c-manage-nav__label">Sign out</span>
 	</a>
 </nav>
 </bx:output>

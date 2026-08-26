@@ -209,13 +209,45 @@
 	gap: var(--space-1);
 }
 
+.c-manage-nav__top {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-2);
+	padding: var(--space-3) var(--space-3) var(--space-2);
+}
+
 .c-manage-nav__heading {
 	font-size: 0.6875rem;
 	font-weight: 700;
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
 	color: var(--text-secondary);
-	padding: var(--space-3) var(--space-3) var(--space-2);
+	/* Keeps a single-line height even once .c-manage-nav__heading itself is
+	   hidden in the collapsed state below, so the toggle button doesn't
+	   jump vertically. */
+	white-space: nowrap;
+}
+
+.c-manage-nav__collapse-toggle {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	width: 26px;
+	height: 26px;
+	background: none;
+	border: none;
+	border-radius: var(--ui-radius-sm);
+	color: var(--text-secondary);
+	font-size: 0.8rem;
+	cursor: pointer;
+	transition: background 120ms ease, color 120ms ease;
+}
+
+.c-manage-nav__collapse-toggle:hover {
+	background: var(--ui-surface-2);
+	color: var(--post-anchor);
 }
 
 .c-manage-nav__link {
@@ -243,6 +275,35 @@
 
 .c-manage-nav__link--signout {
 	margin-top: auto;
+}
+
+/* ── Collapsed sidebar (desktop only — .c-manage-nav is already a
+   horizontal bar below 768px, where "collapse to icons" doesn't apply) ──
+   State lives on <html data-manage-nav-collapsed>, not a class on
+   .c-manage-nav itself, so the CSS here matches what _head.bxm's inline
+   script sets before paint (see that file for why — same technique as
+   data-theme, to avoid a flash of the wrong state on load). */
+@media (min-width: 768px) {
+	html[data-manage-nav-collapsed="true"] .c-manage-nav {
+		width: 64px;
+		padding-left: var(--space-2);
+		padding-right: var(--space-2);
+		transition: width 160ms ease;
+	}
+
+	html[data-manage-nav-collapsed="true"] .c-manage-nav__top {
+		justify-content: center;
+	}
+
+	html[data-manage-nav-collapsed="true"] .c-manage-nav__heading,
+	html[data-manage-nav-collapsed="true"] .c-manage-nav__label {
+		display: none;
+	}
+
+	html[data-manage-nav-collapsed="true"] .c-manage-nav__link {
+		justify-content: center;
+		padding: var(--space-2);
+	}
 }
 
 .c-manage-main {
@@ -2778,8 +2839,10 @@
 		align-items: center;
 	}
 
-	/* Hide text label — not enough room in horizontal mode */
-	.c-manage-nav__heading {
+	/* Hide the heading + collapse toggle — not enough room in horizontal
+	   mode, and collapse-to-icons is a desktop-only affordance (this
+	   breakpoint is already icon+label side-by-side in a scrollable bar). */
+	.c-manage-nav__top {
 		display: none;
 	}
 
