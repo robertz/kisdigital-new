@@ -156,6 +156,9 @@
 							</a>
 							<span>to leave a comment.</span>
 						</p>
+						<p class="c-comments__legal">
+							By signing in you agree to the <a href="/terms">Terms of Service</a> and <a href="/privacy">Privacy Policy</a>.
+						</p>
 					</bx:if>
 
 					<div class="c-comment-list" data-comment-list>

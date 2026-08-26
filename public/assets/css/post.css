@@ -345,6 +345,21 @@
 	color: var(--post-anchor);
 }
 
+.c-comments__legal {
+	margin-top: var(--space-2);
+	color: var(--text-muted);
+	font-size: 0.75rem;
+}
+
+.c-comments__legal a {
+	color: var(--text-muted);
+	text-decoration: underline;
+}
+
+.c-comments__legal a:hover {
+	color: var(--post-link-text);
+}
+
 /* Only shown for a Google-only commenter session, not an admin/author's
    manage_user session browsing the public site — those already have a
    visible signed-in state elsewhere (the header's Dashboard link, the
