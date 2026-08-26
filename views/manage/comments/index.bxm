@@ -1,0 +1,134 @@
+<bx:include template="../../partials/_head.bxm">
+<bx:output>
+<div class="c-manage">
+
+	<!--- Sidebar nav --->
+	<bx:include template="../../partials/manageNav.bxm">
+
+	<!--- Main content --->
+	<main class="c-manage-main">
+
+		<bx:if len( data.success )>
+			<div class="c-manage-alert c-manage-alert--success">
+				<i class="bi bi-check-circle-fill"></i>
+				#encodeForHTML( data.success )#
+			</div>
+		</bx:if>
+
+		<div class="c-manage-posts">
+
+			<div class="c-manage-header">
+				<div class="c-manage-header__lead">
+					<span class="c-manage-header__eyebrow">Content</span>
+					<h1 class="c-manage-header__title">
+						Comments
+						<span class="c-manage-header__count">#numberFormat( data.paging.total )#</span>
+					</h1>
+					<p class="c-manage-header__sub">All comments across every post, newest first — a stopgap listing until proper moderation tools exist.</p>
+				</div>
+			</div>
+
+			<bx:if !data.paging.comments.len()>
+
+				<div class="c-manage-panel__empty">
+					<i class="bi bi-chat-left-text"></i>
+					<h2>No comments yet</h2>
+					<p>Comments left on posts will show up here.</p>
+				</div>
+
+			<bx:else>
+
+				<div class="c-manage-panel">
+					<div class="c-manage-table-wrap">
+						<table class="c-manage-table">
+							<thead>
+								<tr>
+									<th>Comment</th>
+									<th>Post</th>
+									<th>By</th>
+									<th>Posted</th>
+									<th></th>
+								</tr>
+							</thead>
+							<tbody>
+								<bx:loop array="#data.paging.comments#" item="comment">
+									<tr>
+										<td>
+											<bx:if comment.isDeleted>
+												<span class="c-status-badge c-status-badge--archived">Deleted</span>
+											<bx:else>
+												<bx:if comment.isReply>
+													<i class="bi bi-reply-fill c-manage-table__cell-muted" title="Reply"></i>
+												</bx:if>
+												#encodeForHTML( left( comment.body, 200 ) )##( len( comment.body ) > 200 ? '…' : '' )#
+											</bx:if>
+										</td>
+										<td>
+											<a href="/manage/posts/#encodeForURL( comment.postId )#/edit" class="c-manage-table__title">
+												#encodeForHTML( comment.postTitle )#
+											</a>
+										</td>
+										<td class="c-manage-table__cell-muted">
+											#encodeForHTML( comment.authorName )#<br>
+											<small>#encodeForHTML( comment.authorEmail )#</small>
+										</td>
+										<td class="c-manage-table__cell-muted">
+											#dateTimeFormat( comment.created, "d mmm yyyy, h:nn tt" )#
+										</td>
+										<td>
+											<bx:if !comment.isDeleted>
+												<form method="post" action="/manage/comments/#encodeForURL( comment.id )#/delete" onsubmit="return confirm('Delete this comment? This can\'t be undone.');">
+													<input type="hidden" name="_csrf" value="#encodeForHTMLAttribute( data.csrfToken )#">
+													<input type="hidden" name="page" value="#data.paging.page#">
+													<button type="submit" class="c-manage-table__icon-btn" title="Delete comment">
+														<i class="bi bi-trash text-muted"></i>
+													</button>
+												</form>
+											</bx:if>
+										</td>
+									</tr>
+								</bx:loop>
+							</tbody>
+						</table>
+					</div>
+
+					<bx:if data.paging.totalPages gt 1>
+						<footer class="c-manage-panel__footer">
+							<span class="c-manage-panel__page-info">
+								Page <strong>#data.paging.page#</strong> of <strong>#data.paging.totalPages#</strong>
+							</span>
+							<div class="c-pagination">
+								<bx:if data.paging.page gt 1>
+									<a class="c-pagination__btn" href="/manage/comments?page=#data.paging.page - 1#" aria-label="Previous page">
+										<i class="bi bi-chevron-left"></i>
+									</a>
+								<bx:else>
+									<span class="c-pagination__btn c-pagination__btn--disabled"><i class="bi bi-chevron-left"></i></span>
+								</bx:if>
+
+								<bx:loop from="1" to="#data.paging.totalPages#" index="pg">
+									<a class="c-pagination__btn #pg == data.paging.page ? 'c-pagination__btn--active' : ''#" href="/manage/comments?page=#pg#">
+										#pg#
+									</a>
+								</bx:loop>
+
+								<bx:if data.paging.page lt data.paging.totalPages>
+									<a class="c-pagination__btn" href="/manage/comments?page=#data.paging.page + 1#" aria-label="Next page">
+										<i class="bi bi-chevron-right"></i>
+									</a>
+								<bx:else>
+									<span class="c-pagination__btn c-pagination__btn--disabled"><i class="bi bi-chevron-right"></i></span>
+								</bx:if>
+							</div>
+						</footer>
+					</bx:if>
+				</div>
+
+			</bx:if>
+
+		</div>
+
+	</main>
+</div>
+</bx:output>
+<bx:include template="../../partials/_foot.bxm">

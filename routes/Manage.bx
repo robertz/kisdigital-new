@@ -32,8 +32,9 @@ class {
 	variables.projectDocRenderer = "";
 	variables.projectRegistry    = "";
 	variables.googleOAuthClient  = "";
+	variables.commentService     = "";
 
-	function init( required authService, required postService, required authorService, required settingsService, required postRenderer, required r2Client, r2UploadPrefix = "posts", required insightsService, required serverMonitor, required projectDocService, required projectDocRenderer, required googleOAuthClient ){
+	function init( required authService, required postService, required authorService, required settingsService, required postRenderer, required r2Client, r2UploadPrefix = "posts", required insightsService, required serverMonitor, required projectDocService, required projectDocRenderer, required googleOAuthClient, required commentService ){
 		variables.authService     = arguments.authService;
 		variables.postService     = arguments.postService;
 		variables.authorService   = arguments.authorService;
@@ -47,6 +48,7 @@ class {
 		variables.projectDocRenderer = arguments.projectDocRenderer;
 		variables.projectRegistry    = new models.util.ProjectRegistry();
 		variables.googleOAuthClient  = arguments.googleOAuthClient;
+		variables.commentService     = arguments.commentService;
 
 		// Bare method references passed as route handlers lose their binding to
 		// this instance (BoxLang's Router ends up calling them unbound), so every
@@ -103,6 +105,9 @@ class {
 		this.router.post( "/manage/project-docs/preview", admin, ( req, res ) => previewProjectDoc( req, res ) );
 		this.router.post( "/manage/project-docs/:id/delete", admin, ( req, res ) => deleteProjectDoc( req, res ) );
 		this.router.post( "/manage/project-docs/:id/move", admin, ( req, res ) => moveProjectDoc( req, res ) );
+
+		this.router.get( "/manage/comments", admin, ( req, res ) => commentsIndex( req, res ) );
+		this.router.post( "/manage/comments/:id/delete", admin, ( req, res ) => deleteManageComment( req, res ) );
 
 		this.router.get( "/manage/insights", admin, ( req, res ) => insightsIndex( req, res ) );
 		this.router.get( "/manage/logs", admin, ( req, res ) => logsIndex( req, res ) );
@@ -940,6 +945,46 @@ class {
 			cleanSegments.append( s );
 		}
 		return cleanSegments.len() ? cleanSegments.toList( "/" ) & "/" : "";
+	}
+
+	// ── Comments ─────────────────────────────────────────────────────────────
+	// Stopgap moderation view — CommentService has no approve/spam workflow
+	// (see db/migrations/0009_add_comment_table.sql's status enum), so this is
+	// just a paginated, all-posts listing with soft-delete until something
+	// more purpose-built replaces it.
+
+	// GET /manage/comments
+	function commentsIndex( req, res ){
+		var rawPage     = req.query.page ?: "";
+		var currentPage = isNumeric( rawPage ) && rawPage > 0 ? int( rawPage ) : 1;
+
+		var flash  = flashConsume( req );
+		var paging = variables.commentService.getManageComments( currentPage, 20 );
+
+		res.render( "manage/comments/index", {
+			pageTitle     : "Comments",
+			manageSection : "comments",
+			paging        : paging,
+			csrfToken     : req.csrfToken(),
+			success       : flash.success ?: ""
+		} );
+	}
+
+	// POST /manage/comments/:id/delete
+	function deleteManageComment( req, res ){
+		var commentId = req.params.id ?: "";
+		if ( len( trim( commentId ) ) ){
+			variables.commentService.deleteComment( commentId, req.session.manage_user.id, req.session.manage_user.role );
+		}
+
+		if ( isAjax( req ) ){
+			res.json( { success: true } );
+			return;
+		}
+
+		var page = req.body.page ?: 1;
+		flashSet( req, { success: "Comment deleted." } );
+		res.redirect( "/manage/comments?page=" & page );
 	}
 
 	// ── Visitor insights (RequestLog) ───────────────────────────────────────
