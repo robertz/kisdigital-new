@@ -1,9 +1,22 @@
 import { build, context } from "esbuild";
 import { writeFileSync, mkdirSync, rmSync, readdirSync, unlinkSync } from "fs";
 import { basename, join } from "path";
+import { execFileSync } from "child_process";
 
 const isDev = process.argv.includes("--dev");
 const outdir = "public/assets/dist";
+
+// Both of these are synchronous pre-steps that write plain CSS files into
+// public/assets/css/ (bootstrap-generated.css, icons-generated.css) before
+// esbuild ever resolves site.css's own @import of them — esbuild bundles
+// CSS via @import natively but doesn't compile Sass or generate anything
+// itself, so those files have to already exist on disk first. Re-run on
+// every build (including --dev's watch rebuilds don't re-trigger these,
+// only the initial run — see below) rather than checked into git, so a
+// future icon added to markup/JS or a Bootstrap version bump is picked up
+// automatically.
+execFileSync("node", ["scripts/build-bootstrap.mjs"], { stdio: "inherit" });
+execFileSync("node", ["scripts/build-icons.mjs"], { stdio: "inherit" });
 
 /** Remove all build artifacts from the output directory. */
 function cleanDist() {

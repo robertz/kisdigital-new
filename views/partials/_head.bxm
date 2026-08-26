@@ -32,31 +32,27 @@
 <link rel="apple-touch-icon-precomposed" href="/assets/images/apple-touch-icon-precomposed.png">
 
 <!--- Resource hints --->
-<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<!--- jsdelivr dropped: Bootstrap + Bootstrap Icons are now compiled into
+      site.css at build time (see public/assets/scss/bootstrap-custom.scss
+      and scripts/build-icons.mjs) instead of pulled from a CDN — a trimmed
+      subset of each (only what this site actually uses), self-hosted so
+      there's no separate-origin round trip and this app controls the
+      cache lifetime instead of jsdelivr's. --->
 <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 
 <!--- CSS --->
-<!--- Every stylesheet here except site.css is third-party, on a separate
-      origin (DNS+TLS+download per origin, serially, before first paint)
-      and none of them are needed for first paint: fonts fall back to the
-      stack in site.css until swapped in, Bootstrap/Icons style secondary
-      chrome (icons, utility classes) rather than the initial layout. All
-      three now use the same media=print swap trick already applied to
-      the Prism theme below, plus a <noscript> fallback for when there's
-      no JS to flip the media attribute. site.css itself stays
-      render-blocking (small, same-origin, needed for the header/layout
-      to not flash unstyled) and stays LAST in document order — deferred
-      or not, source order still decides which rule wins a specificity
-      tie once everything's applied, and site.css intentionally overrides
-      Bootstrap defaults. --->
+<!--- Google Fonts is the only remaining third-party stylesheet — separate
+      origin (DNS+TLS+download before first paint) and not needed for
+      first paint (site.css's own font stack covers it until swapped in),
+      so it uses the same media=print swap trick already applied to the
+      Prism theme below, plus a <noscript> fallback for when there's no JS
+      to flip the media attribute. site.css itself stays render-blocking
+      (small, same-origin, needed for the header/layout to not flash
+      unstyled). --->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" media="print" onload="this.media='all'">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"></noscript>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css" integrity="sha384-rbsA2VBKQhggwzxH7pPCaAqO46MgnOM80zW1RWuH61DGLwZJEdK2Kadq2F9CUG65" crossorigin="anonymous" media="print" onload="this.media='all'">
-<noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css" integrity="sha384-rbsA2VBKQhggwzxH7pPCaAqO46MgnOM80zW1RWuH61DGLwZJEdK2Kadq2F9CUG65" crossorigin="anonymous"></noscript>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css" integrity="sha384-He3RckdFB2wffiHOcESa3sf4Ida+ni/fw9SSzAcfY2EPnU1zkK/sLUzw2C5Tyuhj" crossorigin="anonymous" media="print" onload="this.media='all'">
-<noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css" integrity="sha384-He3RckdFB2wffiHOcESa3sf4Ida+ni/fw9SSzAcfY2EPnU1zkK/sLUzw2C5Tyuhj" crossorigin="anonymous"></noscript>
 <!--- Only styles code blocks, and prism.min.js below is already deferred
       (so highlighting doesn't apply until after load regardless) — load
       this off the critical rendering path via the standard media=print

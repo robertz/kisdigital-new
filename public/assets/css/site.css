@@ -1,3 +1,10 @@
+/* Generated at build time (see esbuild.config.mjs + scripts/build-*.mjs) —
+   not checked into git. Bootstrap first so this site's own CSS below keeps
+   winning the cascade on any specificity tie, same order the CDN <link>s
+   used to load in. */
+@import 'bootstrap-generated.css';
+@import 'icons-generated.css';
+
 @import 'root.css';
 @import 'home.css';
 @import 'post.css';

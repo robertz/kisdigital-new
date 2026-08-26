@@ -6,7 +6,12 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY esbuild.config.mjs ./
+COPY scripts scripts
+# views/ is scanned (not shipped) by scripts/build-icons.mjs to find which
+# bi-* icon classes are actually used — see that script's own comment.
+COPY views views
 COPY public/assets/css public/assets/css
+COPY public/assets/scss public/assets/scss
 COPY public/assets/js public/assets/js
 RUN npm run build
 

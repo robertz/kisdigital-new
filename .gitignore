@@ -7,5 +7,7 @@ tests/results/
 !.env.example
 docker-compose.override.yml
 public/assets/dist/
+public/assets/css/bootstrap-generated.css
+public/assets/css/icons-generated.css
 uploads/
 .DS_Store

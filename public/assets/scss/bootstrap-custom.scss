@@ -1,0 +1,50 @@
+// Trimmed Bootstrap 5.2.3 entry point — compiled by scripts/build-bootstrap.mjs
+// into public/assets/css/bootstrap-generated.css on every build (see
+// esbuild.config.mjs), replacing the full ~230KB bootstrap.min.css CDN
+// bundle this site used to load in full for a handful of things it
+// actually uses: the box-sizing/typography reset (Reboot — the site's own
+// CSS has no reset of its own and silently depended on this), the grid
+// (container/row/col-*, including the .g-* gutter utilities grid's own
+// mixins generate), the base .btn shape (colors come from this site's own
+// btn-primary-custom/btn-outline-custom, not Bootstrap's .btn-primary etc.
+// — so buttons.scss's per-theme-color variants are dead weight here, but
+// small enough not to bother stripping), and the utility classes actually
+// used in views/**/*.bxm (d-flex, text-muted, spacing, etc.).
+//
+// Left out entirely: forms, navbar, dropdown, modal, card, table, badge,
+// alert, pagination, breadcrumb, accordion, carousel, tooltip/popover,
+// offcanvas, toasts, spinners, close button, list-group — grepped for
+// real usage (not just substring matches — several of those component
+// names show up as substrings of this site's own c-* classes, e.g.
+// c-manage-table/c-status-badge/c-pagination/c-manage-alert, which are
+// fully custom and don't use Bootstrap's versions at all) and found none.
+// If a future page starts using one of these, add its @import here rather
+// than reaching for the CDN again.
+
+// Imported as "bootstrap/scss/..." (resolved via the loadPaths passed in
+// scripts/build-bootstrap.mjs) rather than a relative node_modules path —
+// that's what makes Sass treat these as an external dependency and
+// actually honor quietDeps below; a relative-path @import counts as "your
+// own" stylesheet and floods the build log with Bootstrap 5.2.3's own
+// (harmless) deprecation warnings for its now-legacy Sass syntax.
+@import "bootstrap/scss/functions";
+@import "bootstrap/scss/variables";
+@import "bootstrap/scss/maps";
+@import "bootstrap/scss/mixins";
+@import "bootstrap/scss/utilities";
+
+@import "bootstrap/scss/root";
+@import "bootstrap/scss/reboot";
+@import "bootstrap/scss/containers";
+@import "bootstrap/scss/grid";
+@import "bootstrap/scss/buttons";
+@import "bootstrap/scss/transitions";
+
+// type.scss also gives us headings/lead/display-*/blockquote sizing this
+// site doesn't use (it styles those itself) — just the one class actually
+// referenced (views/main/index.bxm), rather than importing the whole partial.
+.small {
+	font-size: 0.875em;
+}
+
+@import "bootstrap/scss/utilities/api";
