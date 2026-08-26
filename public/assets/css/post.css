@@ -313,9 +313,36 @@
 	font-size: 0.9rem;
 }
 
-.c-comments__signin a {
-	color: var(--post-link-text);
+.c-comments__signin {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: var(--space-3);
+}
+
+/* Same treatment as the real Google sign-in button on /manage/login
+   (.c-auth__google-btn) — reused here as its own class rather than
+   shared, since that one is styled to fill a narrow centered auth card
+   at width:100%, which would look oversized inline in the wider post
+   content column this sits in. */
+.c-comments__google-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-2);
+	padding: 8px var(--space-4);
+	background: var(--ui-surface-2);
+	border: 1px solid var(--ui-border-subtle);
+	border-radius: var(--ui-radius-sm);
+	color: var(--post-anchor);
+	font-size: 0.85rem;
 	font-weight: 600;
+	text-decoration: none;
+	transition: border-color 120ms ease;
+}
+
+.c-comments__google-btn:hover {
+	border-color: var(--post-link-text);
+	color: var(--post-anchor);
 }
 
 /* ── Comment form (shared by the top-level composer and each reply toggle) ── */
