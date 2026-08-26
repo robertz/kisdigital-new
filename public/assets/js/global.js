@@ -7,11 +7,6 @@ const DTGlobal = function() {
 	let swipeInstalled = false
 	let activeCommentSort = 'top'
 
-	const historyHandler = () => {
-		let hist = window.dismal.h || ''
-		if(hist.length)	window.history.replaceState({}, '', hist)
-	}
-
 	const showtime = () => {
 		let displays = [... document.querySelectorAll('[data-ts]')]
 		displays.forEach(ele => {
@@ -689,7 +684,6 @@ const DTGlobal = function() {
 	// init
 	return {
 		init: function() {
-			historyHandler()
 			showtime()
 			forumSelectHandler()
 			pullToRefreshHandler()
