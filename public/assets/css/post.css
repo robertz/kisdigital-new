@@ -451,6 +451,7 @@
 
 .c-comment__actions {
 	display: flex;
+	flex-wrap: wrap;
 	align-items: center;
 	gap: var(--space-4);
 }
@@ -468,12 +469,54 @@
 	display: none;
 }
 
+.c-comment__reply-toggle summary::marker {
+	content: "";
+}
+
 .c-comment__reply-toggle summary:hover {
 	color: var(--post-link-text);
 }
 
-.c-comment__delete-form {
-	display: inline;
+/* Forces the reply form onto its own full-width row once opened, instead
+   of sharing the flex row with Delete — without this, .c-comment__actions'
+   other children (Delete) end up floating awkwardly beside the now-tall
+   <details> content instead of moving below it. Closed state is
+   unaffected: summary alone is small enough to sit inline with Delete. */
+.c-comment__reply-toggle[open] {
+	flex-basis: 100%;
+}
+
+.c-comment-form--reply {
+	margin-top: var(--space-2);
+	padding: var(--space-3);
+	background: var(--ui-surface-2);
+	border: 1px solid var(--ui-border-subtle);
+	border-radius: var(--ui-radius-sm);
+}
+
+.c-comment-form--reply__row {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+	margin-top: var(--space-2);
+}
+
+.c-comment-form--reply .c-comment-form__submit {
+	margin-top: 0;
+}
+
+.c-comment-form__cancel {
+	background: none;
+	border: none;
+	padding: 0;
+	font-size: 0.8rem;
+	font-weight: 600;
+	color: var(--text-secondary);
+	cursor: pointer;
+}
+
+.c-comment-form__cancel:hover {
+	color: var(--post-anchor);
 }
 
 .c-comment__delete-btn {

@@ -113,6 +113,69 @@ class {
 	}
 
 	/**
+	 * Fetches a single comment (plus its computed depth) for rendering as an
+	 * AJAX-created fragment — same struct shape as one item from
+	 * getCommentThread(), so routes/Comments.bx can render it through the
+	 * same views/partials/commentThread.bxm partial. Depth is computed by
+	 * walking the parent_id chain one row at a time rather than loading the
+	 * whole thread, which is fine at this site's nesting depth/volume.
+	 *
+	 * @param {string} commentId - The comment to fetch.
+	 * @return {struct} { id, postId, displayName, avatarUrl, avatarLabel,
+	 *         userId, body, isDeleted, created, depth }, or null if not found.
+	 */
+	function getComment( required string commentId ){
+		var rows = queryExecute(
+			"SELECT
+				C.id,
+				C.post_id,
+				C.parent_id,
+				C.user_id,
+				C.body,
+				C.status,
+				C.created,
+				U.display_name,
+				U.avatar_label,
+				U.avatar_url
+			FROM Comment C
+			INNER JOIN User U ON U.id = C.user_id
+			WHERE C.id = :id
+			LIMIT 1",
+			{ "id": { value: arguments.commentId, cfsqltype: "cf_sql_varchar" } },
+			{ returnType: "array" }
+		);
+
+		if ( !rows.len() ) return javacast( "null", "" );
+		var row = rows[ 1 ];
+
+		var depth    = 0;
+		var parentId = row.parent_id ?: "";
+		while ( len( parentId ) ){
+			var parentRows = queryExecute(
+				"SELECT parent_id FROM Comment WHERE id = :id LIMIT 1",
+				{ "id": { value: parentId, cfsqltype: "cf_sql_varchar" } },
+				{ returnType: "array" }
+			);
+			if ( !parentRows.len() ) break;
+			depth++;
+			parentId = parentRows[ 1 ].parent_id ?: "";
+		}
+
+		return {
+			"id"          : row.id,
+			"postId"      : row.post_id,
+			"displayName" : row.display_name,
+			"avatarUrl"   : row.avatar_url   ?: "",
+			"avatarLabel" : row.avatar_label ?: "",
+			"userId"      : row.user_id,
+			"body"        : row.status == "deleted" ? "" : row.body,
+			"isDeleted"   : row.status == "deleted",
+			"created"     : row.created,
+			"depth"       : depth
+		};
+	}
+
+	/**
 	 * @param {string} postId - The post UUID.
 	 * @return {numeric} Count of non-deleted comments on the post — a
 	 *         deleted comment still occupies a thread slot (see
