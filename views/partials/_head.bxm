@@ -4,6 +4,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-NG47J3H3M8"></script>
+<script>
+	window.dataLayer = window.dataLayer || [];
+	function gtag(){dataLayer.push(arguments);}
+	gtag('js', new Date());
+
+	gtag('config', 'G-NG47J3H3M8');
+</script>
+
 <!--- Theme + manage-sidebar init: runs before render to prevent a flash of
       the wrong state — data-manage-nav-collapsed is inert outside
       /manage (there's no .c-manage-nav for it to style there), so setting
