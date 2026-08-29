@@ -1,0 +1,121 @@
+/**
+ * /games/pixel-canvas — a live collaborative pixel canvas (r/place-style),
+ * built specifically to exercise res.sse()'s broadcast/fan-out pattern
+ * (see [Server-Sent Events](/projects/boxlang-express/docs/server-sent-events))
+ * against real concurrent traffic rather than just the docs' own toy example.
+ *
+ * The game page itself is a static file (public/games/pixel-canvas/index.html),
+ * served automatically by the app's existing boxExpressStatic middleware — only
+ * the live bits need real routes:
+ *
+ *   GET  /games/pixel-canvas/stream — opens an SSE connection. Sends the
+ *        current grid once as an "init" event, then a "pixel" event for
+ *        every placement anyone makes from then on, including the caller's
+ *        own — this is what makes a placement show up instantly without a
+ *        page reload, on this tab and everyone else's.
+ *   POST /games/pixel-canvas/place — places one pixel and broadcasts it.
+ *
+ * Grid state is a single flat array of color-index integers, held in
+ * memory on this route instance (constructed once in app.bxs, so it's
+ * shared across every request the same way the SSE docs' own `subscribers`
+ * example is) — not persisted to a database. A restart/redeploy clears the
+ * canvas back to blank. That's an accepted trade-off for what this exists
+ * to demonstrate: keeping it in-memory keeps the SSE mechanics themselves
+ * the only moving part worth reading, rather than mixing in a persistence
+ * layer that has nothing to do with SSE.
+ */
+class {
+
+	variables.siteDefaults = "";
+
+	// 48x48 grid, flat-indexed (i = y * GRID_SIZE + x). Color values are
+	// indexes into the same 16-color palette the client renders — see
+	// public/games/pixel-canvas/js/app.js's PALETTE array, which must stay
+	// in sync with this list by position.
+	variables.GRID_SIZE = 48;
+	variables.grid       = [];
+	variables.subscribers = {}; // connection id -> emitter, per the SSE docs' broadcast pattern
+
+	function init( required siteDefaults ){
+		variables.siteDefaults = arguments.siteDefaults;
+
+		var cellCount = variables.GRID_SIZE * variables.GRID_SIZE;
+		for ( var i = 1; i <= cellCount; i++ ){
+			variables.grid.append( 0 ); // 0 = white, palette index
+		}
+
+		this.router = boxExpressRouter();
+
+		// Placements are cheap to spam (one POST, no page interaction needed),
+		// so this is the one place on the whole site with a public POST route
+		// that isn't behind /manage's auth — a per-session cooldown via the
+		// same rate-limit middleware already documented for /login keeps one
+		// visitor from flooding every connected tab's stream.
+		this.router.use(
+			"/games/pixel-canvas/place",
+			boxExpressRateLimit( {
+				windowMs    : 3000,
+				max         : 1,
+				keyGenerator: ( req ) => req.sessionID,
+				message     : { error: true, message: "One pixel at a time — try again in a moment." }
+			} )
+		);
+
+		// routes/Manage.bx's own boxExpressCsrf() ends up applying site-wide, not
+		// just to /manage/* — it's mounted via `app.use(managerRouter)` with no
+		// path prefix, so its no-path `this.router.use(boxExpressCsrf())` runs
+		// on every request, this route's POST included. The static game page
+		// (public/games/pixel-canvas/) can't have a token templated into it the
+		// way a res.render()'d view would, so it fetches one here on load and
+		// sends it back as X-CSRF-Token on the actual placement.
+		this.router.get( "/games/pixel-canvas/token", ( req, res ) => token( req, res ) );
+		this.router.get( "/games/pixel-canvas/stream", ( req, res ) => stream( req, res ) );
+		this.router.post( "/games/pixel-canvas/place", ( req, res ) => place( req, res ) );
+
+		return this;
+	}
+
+	// GET /games/pixel-canvas/token
+	function token( req, res ){
+		res.json( { csrfToken: req.csrfToken() } );
+	}
+
+	// GET /games/pixel-canvas/stream
+	function stream( req, res ){
+		res.sse( ( emitter ) => {
+			var id = createUUID();
+			variables.subscribers[ id ] = emitter;
+
+			emitter.send( { gridSize: variables.GRID_SIZE, grid: variables.grid }, "init" );
+
+			try {
+				while ( !emitter.isClosed() ){
+					sleep( 1000 ); // placements broadcast from place() below; this just waits for disconnect
+				}
+			} finally {
+				structDelete( variables.subscribers, id );
+			}
+		} );
+	}
+
+	// POST /games/pixel-canvas/place — body: { i: <0-based cell index>, color: <0-15 palette index> }
+	function place( req, res ){
+		var i     = int( req.body.i     ?: -1 );
+		var color = int( req.body.color ?: -1 );
+		var cellCount = variables.GRID_SIZE * variables.GRID_SIZE;
+
+		if ( i < 0 || i >= cellCount || color < 0 || color > 15 ){
+			res.status( 400 ).json( { success: false, error: "Invalid cell or color." } );
+			return;
+		}
+
+		variables.grid[ i + 1 ] = color; // BoxLang arrays are 1-based; the client's flat index is 0-based
+
+		for ( var subId in variables.subscribers ){
+			variables.subscribers[ subId ].send( { i: i, color: color }, "pixel" );
+		}
+
+		res.json( { success: true } );
+	}
+
+}
