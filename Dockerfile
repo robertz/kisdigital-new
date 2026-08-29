@@ -27,15 +27,16 @@ RUN npm run build
 # isn't needed at all. Same Ubuntu 24.04 base as commandbox:boxlang, at
 # roughly a third of the image size (611MB vs 1.53GB before any app layers).
 #
-# Pinned to a digest, not the floating `:cli` tag: v1.17.0+58 (published
-# 2026-08-29) broke template-path resolution whenever reloadOnChange is off
-# (i.e. ENV=production only — local dev sets reloadOnChange on, so this never
-# showed up there) — every res.render() failed with "The template path
-# [...] could not be found", for every view, confirmed by pulling this exact
-# tag fresh and reproducing the failure locally with an otherwise-identical
-# build. This digest is the last version confirmed working (v1.16.0+57).
-# Bump it deliberately once a fixed BoxLang release is confirmed good.
-FROM ortussolutions/boxlang@sha256:2878aafafd9a087dab3efb6d3903de889544b8be809d993dc9784a4cbedd0ce6
+# Was pinned to a digest (v1.16.0+57) after v1.17.0+58 broke every res.render()
+# call with "The template path [...] could not be found" — turned out to be
+# intentional BoxLang 1.17.0 hardening (it stopped resolving an absolute
+# `include` path unless it's backed by a registered mapping; confirmed by an
+# Ortus maintainer, see ortus-boxlang/BoxLang#610), not a BoxLang bug. The
+# real fix belonged in boxlang-express itself — app.set("views", dir) now
+# registers that mapping (and clears the request context's stale config
+# cache so the mapping actually takes effect) — released as boxlang-express
+# 0.2.3, verified end-to-end against BoxLang 1.17.0+58. Safe to float again.
+FROM ortussolutions/boxlang:cli
 
 ENV APP_DIR=/app
 WORKDIR $APP_DIR
@@ -80,7 +81,7 @@ ENV BOXLANG_MODULES=boxlang-express,bx-mysql,bx-markdown,bx-password-encrypt,bx-
 # that cache — change it any time a module needs a guaranteed fresh pull
 # (e.g. right after publishing a fix to ForgeBox), not just when chasing a
 # stale build.
-ARG MODULE_CACHE_BUST=2026-08-23
+ARG MODULE_CACHE_BUST=2026-08-29
 RUN install-bx-module "$BOXLANG_MODULES" --local
 
 COPY app.bxs boxlang.json ./
