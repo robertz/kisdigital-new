@@ -1,12 +1,14 @@
 // Generates public/assets/css/icons-generated.css — a CSS-mask replacement
 // for the Bootstrap Icons webfont/CDN CSS this site used to load in full
-// (2000+ glyphs) for the ~90 it actually uses. Scans views/**/*.bxm and
-// public/assets/js/*.js for literal "bi-*" class names (including ones
-// picked dynamically at runtime, e.g. a ternary between two class strings —
-// both branches are still literal text in the source, so a plain grep-style
-// scan finds them same as a static one) and emits one mask rule per icon
-// actually referenced, so a future icon added to markup/JS is picked up
-// automatically on the next build with no separate step to remember.
+// (2000+ glyphs) for the ~90 it actually uses. Scans views/**/*.bxm,
+// public/assets/js/*.js, and models/**/*.bx for literal "bi-*" class names
+// (including ones picked dynamically at runtime, e.g. a ternary between two
+// class strings, or interpolated from a data file like ProjectRegistry.bx's
+// icon field — every case is still literal text somewhere in the source, so
+// a plain grep-style scan finds them same as a static one) and emits one
+// mask rule per icon actually referenced, so a future icon added to
+// markup/JS/models is picked up automatically on the next build with no
+// separate step to remember.
 //
 // Markup keeps using <i class="bi bi-star-fill">, same as before — only the
 // CSS backing those classes changes, from @font-face + ::before{content:"\fNNN"}
@@ -32,6 +34,7 @@ function walk(dir, exts, out = []) {
 const sourceFiles = [
 	...walk(join(root, "views"), [".bxm"]),
 	...walk(join(root, "public/assets/js"), [".js"]),
+	...walk(join(root, "models"), [".bx"]),
 ];
 
 const iconNames = new Set();
