@@ -28,6 +28,12 @@ class {
 			tagline : "A schema-agnostic ColdBox module that serves a GraphQL API from SDL files you supply."
 		},
 		{
+			slug    : "bx-graphql",
+			name    : "bx-graphql",
+			icon    : "bi-diagram-2",
+			tagline : "The pure-BoxLang sibling to coldbox-graphql — no ColdBox, no WireBox, no HTTP framework required."
+		},
+		{
 			slug    : "dnd-game-v2",
 			name    : "dnd-game-v2",
 			icon    : "bi-dice-5",
