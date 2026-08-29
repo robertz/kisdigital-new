@@ -1,10 +1,5 @@
 /**
  * The registered /projects showcase entries (slug/name/icon/tagline).
- * Extracted out of routes/Projects.bx so routes/Manage.bx's project-docs
- * admin UI can also read it (for the "which project" picker) without one
- * route class reaching into another. Intentionally still hardcoded, not
- * DB-backed — adding/removing a whole project is rare enough that it isn't
- * worth the same admin-editable treatment as project doc *content*.
  */
 class {
 
@@ -26,6 +21,12 @@ class {
 			name    : "coldbox-graphql",
 			icon    : "bi-diagram-3",
 			tagline : "A schema-agnostic ColdBox module that serves a GraphQL API from SDL files you supply."
+		},
+		{
+			slug    : "bx-graphql",
+			name    : "bx-graphql",
+			icon    : "bi-diagram-2",
+			tagline : "The pure-BoxLang sibling to coldbox-graphql — no ColdBox, no WireBox, no HTTP framework required."
 		},
 		{
 			slug    : "dnd-game-v2",

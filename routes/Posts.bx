@@ -124,6 +124,12 @@ class {
 			post          : post,
 			isPreview     : isPreview,
 			postBodyHtml  : variables.postRenderer.render( post.getBody() ),
+			// Prism (CSS+JS) is only pulled into _head.bxm for posts that
+			// actually have a fenced code block to highlight — no other
+			// page ever needs it (see PostRenderer.bx/ProjectDocRenderer.bx:
+			// project docs rewrite fenced blocks into this site's own
+			// non-JS .bx-code styling instead).
+			hasCodeBlocks : find( "```", post.getBody() ) > 0,
 			trendingPosts : variables.postService.getTrendingPosts(),
 			relatedPosts  : variables.postService.getRelatedPosts( post.getId(), post.getTags() ),
 			commentThread : variables.commentService.getCommentThread( post.getId() ),

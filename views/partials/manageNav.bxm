@@ -26,8 +26,8 @@
 		<i class="bi bi-bar-chart"></i> <span class="c-manage-nav__label">Insights</span>
 	</a>
 	<bx:if ( data.manageUser.role ?: "" ) == "admin">
-	<a href="/manage/project-docs" class="c-manage-nav__link #( ( data.manageSection ?: '' ) == 'projectDocs' ? 'c-manage-nav__link--active' : '' )#" title="Project Docs">
-		<i class="bi bi-journal-code"></i> <span class="c-manage-nav__label">Project Docs</span>
+	<a href="/manage/comments" class="c-manage-nav__link #( ( data.manageSection ?: '' ) == 'comments' ? 'c-manage-nav__link--active' : '' )#" title="Comments">
+		<i class="bi bi-chat-left-text"></i> <span class="c-manage-nav__label">Comments</span>
 	</a>
 	</bx:if>
 	<a href="/manage/logs" class="c-manage-nav__link #( ( data.manageSection ?: '' ) == 'logs' ? 'c-manage-nav__link--active' : '' )#" title="Request Log">

@@ -261,4 +261,76 @@ class {
 		return true;
 	}
 
+	/**
+	 * Paginated, all-posts comment listing for /manage/comments — a stopgap
+	 * moderation view (no approve/spam workflow exists yet, see the migration's
+	 * status enum: 'visible'/'deleted' only) until something more purpose-built
+	 * replaces it. Newest first, joined out to the post title/slug and
+	 * commenter name so the admin table needs no further lookups per row.
+	 *
+	 * @param {numeric} page     - 1-based page number.
+	 * @param {numeric} pageSize - Rows per page.
+	 * @return {struct} { comments: array of structs, total, page, pageSize, totalPages }
+	 */
+	function getManageComments( numeric page = 1, numeric pageSize = 20 ){
+		var offset = ( arguments.page - 1 ) * arguments.pageSize;
+
+		var total = queryExecute(
+			"SELECT COUNT(*) AS cnt FROM Comment",
+			{},
+			{ returnType: "array" }
+		)[ 1 ].cnt;
+
+		var rows = queryExecute(
+			"SELECT
+				C.id,
+				C.post_id,
+				C.parent_id,
+				C.user_id,
+				C.body,
+				C.status,
+				C.created,
+				U.display_name,
+				U.email,
+				P.title AS post_title,
+				P.slug AS post_slug,
+				P.publish_date AS post_publish_date
+			FROM Comment C
+			INNER JOIN User U ON U.id = C.user_id
+			INNER JOIN Post P ON P.id = C.post_id
+			ORDER BY C.created DESC
+			LIMIT :lim OFFSET :offset",
+			{
+				"lim"   : { value: arguments.pageSize, cfsqltype: "cf_sql_integer" },
+				"offset": { value: offset,             cfsqltype: "cf_sql_integer" }
+			},
+			{ returnType: "array" }
+		);
+
+		return {
+			"comments"  : rows.map( ( row ) => {
+				return {
+					"id"         : row.id,
+					"postId"     : row.post_id,
+					"postTitle"  : row.post_title,
+					// Same URL shape as PostBean.getPostUrl() — duplicated rather
+					// than loading a full PostBean per row for one derived field.
+					"postUrl"    : isDate( row.post_publish_date ?: "" )
+						? "/posts/#year( row.post_publish_date )#/#numberFormat( month( row.post_publish_date ), '00' )#/#encodeForURL( row.post_slug )#"
+						: "/posts/#encodeForURL( row.post_slug )#",
+					"isReply"    : len( row.parent_id ?: "" ) > 0,
+					"authorName" : row.display_name,
+					"authorEmail": row.email,
+					"body"       : row.body,
+					"isDeleted"  : row.status == "deleted",
+					"created"    : row.created
+				};
+			} ),
+			"total"     : total,
+			"page"      : arguments.page,
+			"pageSize"  : arguments.pageSize,
+			"totalPages": ceiling( max( total, 1 ) / arguments.pageSize )
+		};
+	}
+
 }

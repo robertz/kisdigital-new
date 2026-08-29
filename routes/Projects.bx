@@ -2,22 +2,25 @@
  * /projects — a showcase of side projects, each with an overview page and,
  * for the ones with enough content to warrant it, a multi-page docs section.
  *
- * Doc pages are database-backed (see models/services/ProjectDocService.bx +
- * models/util/ProjectDocRenderer.bx), editable via /manage/project-docs
- * instead of hand-edited .bxm template files + a deploy per change. Which
- * projects have a docs section is now a DB question (does ProjectDoc have
- * any rows for that project_slug), not a hardcoded whitelist.
+ * Doc pages are static: page metadata in models/util/ProjectDocRegistry.bx,
+ * each page's markdown body in views/projects/{slug}/docs/{page_slug}.md,
+ * rendered through ProjectDocRenderer at request time. Previously database-
+ * backed (editable via /manage/project-docs with no deploy needed) — moved
+ * back to files because the DB-editing workflow wasn't working out: doc
+ * prose living only in the database meant it had no version history, no
+ * diff-based review, and no way to edit it alongside the code changes it
+ * documents.
  */
 class {
 
 	variables.siteDefaults       = "";
 	variables.projectRegistry    = "";
-	variables.projectDocService  = "";
+	variables.projectDocRegistry = "";
 	variables.projectDocRenderer = "";
 
-	function init( required siteDefaults, required projectDocService, required projectDocRenderer ){
+	function init( required siteDefaults, required projectDocRegistry, required projectDocRenderer ){
 		variables.siteDefaults       = arguments.siteDefaults;
-		variables.projectDocService  = arguments.projectDocService;
+		variables.projectDocRegistry = arguments.projectDocRegistry;
 		variables.projectDocRenderer = arguments.projectDocRenderer;
 		variables.projectRegistry    = new models.util.ProjectRegistry();
 
@@ -62,13 +65,13 @@ class {
 		var slug = req.params.slug ?: "";
 		var page = req.params.page ?: "";
 
-		if ( !variables.projectDocService.projectHasDocs( slug ) ){
+		if ( !variables.projectDocRegistry.projectHasDocs( slug ) ){
 			next();
 			return;
 		}
 
 		var project  = variables.projectRegistry.findProject( slug );
-		var docsList = variables.projectDocService.getDocsForProject( slug );
+		var docsList = variables.projectDocRegistry.getDocsForProject( slug );
 		var docIndex = -1;
 
 		for ( var i = 1; i <= docsList.len(); i++ ){
@@ -83,19 +86,20 @@ class {
 			return;
 		}
 
-		var current = new models.ProjectDocBean().loadBySlug( slug, page );
-		var prevDoc = docIndex > 1 ? docsList[ docIndex - 1 ] : "";
-		var nextDoc = docIndex < docsList.len() ? docsList[ docIndex + 1 ] : "";
+		var current  = docsList[ docIndex ];
+		var bodyPath = expandPath( "./views/projects/" & slug & "/docs/" & page & ".md" );
+		var prevDoc  = docIndex > 1 ? docsList[ docIndex - 1 ] : "";
+		var nextDoc  = docIndex < docsList.len() ? docsList[ docIndex + 1 ] : "";
 
 		res.render( "projects/_docsShell", {
-			pageTitle    : current.getTitle() & " — " & project.name,
+			pageTitle    : current.title & " — " & project.name,
 			canonicalUrl : variables.siteDefaults.canonicalUrl( req.path ),
 			meta         : variables.siteDefaults.defaultMeta( req.path ),
 			projectSlug  : slug,
 			projectName  : project.name,
 			docs         : docsList,
 			currentSlug  : page,
-			docBodyHtml  : variables.projectDocRenderer.render( current.getBody() ),
+			docBodyHtml  : variables.projectDocRenderer.render( fileRead( bodyPath ) ),
 			prevDoc      : prevDoc,
 			nextDoc      : nextDoc
 		} );

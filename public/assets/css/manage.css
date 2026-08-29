@@ -2634,8 +2634,14 @@
 
 .c-dashboard-sparkline__stats {
 	display: flex;
-	gap: var(--space-6);
+	flex-direction: column;
+	gap: var(--space-5);
 	flex-shrink: 0;
+}
+
+.c-dashboard-sparkline__stats-row {
+	display: flex;
+	gap: var(--space-6);
 }
 
 .c-dashboard-sparkline__stat {

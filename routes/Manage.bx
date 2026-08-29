@@ -28,12 +28,10 @@ class {
 	variables.r2UploadPrefix  = "posts";
 	variables.insightsService = "";
 	variables.serverMonitor = "";
-	variables.projectDocService  = "";
-	variables.projectDocRenderer = "";
-	variables.projectRegistry    = "";
 	variables.googleOAuthClient  = "";
+	variables.commentService     = "";
 
-	function init( required authService, required postService, required authorService, required settingsService, required postRenderer, required r2Client, r2UploadPrefix = "posts", required insightsService, required serverMonitor, required projectDocService, required projectDocRenderer, required googleOAuthClient ){
+	function init( required authService, required postService, required authorService, required settingsService, required postRenderer, required r2Client, r2UploadPrefix = "posts", required insightsService, required serverMonitor, required googleOAuthClient, required commentService ){
 		variables.authService     = arguments.authService;
 		variables.postService     = arguments.postService;
 		variables.authorService   = arguments.authorService;
@@ -43,10 +41,8 @@ class {
 		variables.r2Client        = arguments.r2Client;
 		variables.insightsService = arguments.insightsService;
 		variables.serverMonitor = arguments.serverMonitor;
-		variables.projectDocService  = arguments.projectDocService;
-		variables.projectDocRenderer = arguments.projectDocRenderer;
-		variables.projectRegistry    = new models.util.ProjectRegistry();
 		variables.googleOAuthClient  = arguments.googleOAuthClient;
+		variables.commentService     = arguments.commentService;
 
 		// Bare method references passed as route handlers lose their binding to
 		// this instance (BoxLang's Router ends up calling them unbound), so every
@@ -96,13 +92,8 @@ class {
 		this.router.post( "/manage/media/upload-url", admin, ( req, res ) => mediaUploadUrl( req, res ) );
 		this.router.post( "/manage/media/create-folder", admin, ( req, res ) => mediaCreateFolder( req, res ) );
 
-		this.router.get( "/manage/project-docs", admin, ( req, res ) => projectDocsList( req, res ) );
-		this.router.get( "/manage/project-docs/new", admin, ( req, res ) => newProjectDoc( req, res ) );
-		this.router.get( "/manage/project-docs/:id/edit", admin, ( req, res ) => editProjectDoc( req, res ) );
-		this.router.post( "/manage/project-docs/save", admin, ( req, res ) => saveProjectDoc( req, res ) );
-		this.router.post( "/manage/project-docs/preview", admin, ( req, res ) => previewProjectDoc( req, res ) );
-		this.router.post( "/manage/project-docs/:id/delete", admin, ( req, res ) => deleteProjectDoc( req, res ) );
-		this.router.post( "/manage/project-docs/:id/move", admin, ( req, res ) => moveProjectDoc( req, res ) );
+		this.router.get( "/manage/comments", admin, ( req, res ) => commentsIndex( req, res ) );
+		this.router.post( "/manage/comments/:id/delete", admin, ( req, res ) => deleteManageComment( req, res ) );
 
 		this.router.get( "/manage/insights", admin, ( req, res ) => insightsIndex( req, res ) );
 		this.router.get( "/manage/logs", admin, ( req, res ) => logsIndex( req, res ) );
@@ -299,7 +290,8 @@ class {
 	/**
 	 * Turns a day-by-day view-totals array into what the dashboard's Chart.js
 	 * traffic graph needs: parallel labels/values arrays, the period total,
-	 * and the single busiest day for the stat boxes beside the chart.
+	 * the single busiest day, and today's own count for the stat boxes
+	 * beside the chart.
 	 */
 	private function buildTrafficChartData( required array dailyTotals ){
 		var maxViews = 0;
@@ -314,12 +306,18 @@ class {
 			values.append( row.total_views );
 		}
 
+		// getDailyTotals() always appends today as its last row (a live,
+		// uncached query — see that function), so the last value here is
+		// today's count so far, not a cached/completed day's total.
+		var todayViews = arguments.dailyTotals.len() ? arguments.dailyTotals[ arguments.dailyTotals.len() ].total_views : 0;
+
 		return {
-			"labels"   : labels,
-			"values"   : values,
-			"total"    : total,
-			"maxViews" : maxViews,
-			"days"     : arguments.dailyTotals.len()
+			"labels"    : labels,
+			"values"    : values,
+			"total"     : total,
+			"maxViews"  : maxViews,
+			"todayViews": todayViews,
+			"days"      : arguments.dailyTotals.len()
 		};
 	}
 
@@ -514,153 +512,6 @@ class {
 			success       : arguments.success,
 			csrfToken     : req.csrfToken(),
 			r2UploadPrefix: variables.r2UploadPrefix
-		} );
-	}
-
-	// ── Project Docs ─────────────────────────────────────────────────────────
-
-	// GET /manage/project-docs
-	function projectDocsList( req, res ){
-		var flash = flashConsume( req );
-		res.render( "manage/projectDocs/index", {
-			pageTitle     : "Project Docs",
-			manageSection : "projectDocs",
-			grouped       : variables.projectDocService.getAllDocsGroupedByProject(),
-			projects      : variables.projectRegistry.getProjects(),
-			csrfToken     : req.csrfToken(),
-			success       : flash.success ?: ""
-		} );
-	}
-
-	// GET /manage/project-docs/new?project=slug — the project query param
-	// pre-selects the dropdown when arriving from a project's "Add page" link.
-	function newProjectDoc( req, res ){
-		var bean = new models.ProjectDocBean();
-		bean.setProjectSlug( req.query.project ?: "" );
-		renderProjectDocForm( req, res, bean, true );
-	}
-
-	// GET /manage/project-docs/:id/edit
-	function editProjectDoc( req, res ){
-		var docId = req.params.id ?: "";
-		if ( !len( trim( docId ) ) ){
-			res.redirect( "/manage/project-docs" );
-			return;
-		}
-
-		var doc = new models.ProjectDocBean().loadById( docId );
-		if ( !doc.exists() ){
-			res.redirect( "/manage/project-docs" );
-			return;
-		}
-
-		var flash = flashConsume( req );
-		renderProjectDocForm( req, res, doc, false, "", flash.success ?: "" );
-	}
-
-	// POST /manage/project-docs/save
-	function saveProjectDoc( req, res ){
-		var isNew  = !len( trim( req.body.doc_id ?: "" ) );
-		var errors = validateProjectDocForm( req );
-
-		if ( errors.len() ){
-			if ( isAjax( req ) && !isNew ){
-				res.status( 422 ).json( { success: false, error: errors[ 1 ] } );
-				return;
-			}
-			renderProjectDocForm( req, res, projectDocFromForm( req ), isNew, errors[ 1 ] );
-			return;
-		}
-
-		var bean  = projectDocFromForm( req );
-		var docId = variables.projectDocService.saveDoc( bean );
-
-		if ( isNew ){
-			res.redirect( "/manage/project-docs/" & docId & "/edit" );
-			return;
-		}
-
-		if ( isAjax( req ) ){
-			res.json( { success: true, message: "Page saved." } );
-			return;
-		}
-
-		flashSet( req, { success: "Page saved." } );
-		res.redirect( "/manage/project-docs/" & docId & "/edit" );
-	}
-
-	// POST /manage/project-docs/preview — renders the submitted (unsaved)
-	// markdown body exactly like the public doc page would, for the editor's
-	// Write/Preview toggle. Never touches the database.
-	function previewProjectDoc( req, res ){
-		try {
-			res.json( { success: true, html: variables.projectDocRenderer.render( req.body.body ?: "" ) } );
-		} catch ( any e ) {
-			res.status( 422 ).json( { success: false, error: "Couldn't render preview: " & e.message } );
-		}
-	}
-
-	// POST /manage/project-docs/:id/delete
-	function deleteProjectDoc( req, res ){
-		var docId = req.params.id ?: "";
-		if ( len( trim( docId ) ) ){
-			variables.projectDocService.deleteDoc( docId );
-		}
-
-		if ( isAjax( req ) ){
-			res.json( { success: true } );
-			return;
-		}
-
-		flashSet( req, { success: "Page deleted." } );
-		res.redirect( "/manage/project-docs" );
-	}
-
-	// POST /manage/project-docs/:id/move — { direction: "up" | "down" }, used
-	// by the plain up/down arrow buttons on the admin list (no drag-and-drop
-	// library — simpler, and this list is never long enough to need it).
-	function moveProjectDoc( req, res ){
-		var docId     = req.params.id ?: "";
-		var direction = req.body.direction ?: "";
-		if ( len( trim( docId ) ) && listFindNoCase( "up,down", direction ) ){
-			variables.projectDocService.moveDoc( docId, direction );
-		}
-
-		if ( isAjax( req ) ){
-			res.json( { success: true } );
-			return;
-		}
-
-		res.redirect( "/manage/project-docs" );
-	}
-
-	private function validateProjectDocForm( req ){
-		var errors = [];
-		if ( !len( trim( req.body.project_slug ?: "" ) ) ) errors.append( "Project is required." );
-		if ( !len( trim( req.body.title ?: "" ) ) ) errors.append( "Title is required." );
-		return errors;
-	}
-
-	private function projectDocFromForm( req ){
-		var bean = new models.ProjectDocBean();
-		bean.setId(          req.body.doc_id       ?: "" );
-		bean.setProjectSlug( req.body.project_slug ?: "" );
-		bean.setPageSlug(    req.body.page_slug     ?: "" );
-		bean.setTitle(       req.body.title         ?: "" );
-		bean.setBody(        req.body.body          ?: "" );
-		return bean;
-	}
-
-	private function renderProjectDocForm( req, res, required doc, required boolean isNew, string error = "", string success = "" ){
-		res.render( "manage/projectDocs/form", {
-			pageTitle     : arguments.isNew ? "New Doc Page" : "Edit Doc Page",
-			manageSection : "projectDocs",
-			doc           : arguments.doc,
-			isNew         : arguments.isNew,
-			projects      : variables.projectRegistry.getProjects(),
-			error         : arguments.error,
-			success       : arguments.success,
-			csrfToken     : req.csrfToken()
 		} );
 	}
 
@@ -940,6 +791,46 @@ class {
 			cleanSegments.append( s );
 		}
 		return cleanSegments.len() ? cleanSegments.toList( "/" ) & "/" : "";
+	}
+
+	// ── Comments ─────────────────────────────────────────────────────────────
+	// Stopgap moderation view — CommentService has no approve/spam workflow
+	// (see db/migrations/0009_add_comment_table.sql's status enum), so this is
+	// just a paginated, all-posts listing with soft-delete until something
+	// more purpose-built replaces it.
+
+	// GET /manage/comments
+	function commentsIndex( req, res ){
+		var rawPage     = req.query.page ?: "";
+		var currentPage = isNumeric( rawPage ) && rawPage > 0 ? int( rawPage ) : 1;
+
+		var flash  = flashConsume( req );
+		var paging = variables.commentService.getManageComments( currentPage, 20 );
+
+		res.render( "manage/comments/index", {
+			pageTitle     : "Comments",
+			manageSection : "comments",
+			paging        : paging,
+			csrfToken     : req.csrfToken(),
+			success       : flash.success ?: ""
+		} );
+	}
+
+	// POST /manage/comments/:id/delete
+	function deleteManageComment( req, res ){
+		var commentId = req.params.id ?: "";
+		if ( len( trim( commentId ) ) ){
+			variables.commentService.deleteComment( commentId, req.session.manage_user.id, req.session.manage_user.role );
+		}
+
+		if ( isAjax( req ) ){
+			res.json( { success: true } );
+			return;
+		}
+
+		var page = req.body.page ?: 1;
+		flashSet( req, { success: "Comment deleted." } );
+		res.redirect( "/manage/comments?page=" & page );
 	}
 
 	// ── Visitor insights (RequestLog) ───────────────────────────────────────

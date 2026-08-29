@@ -6,7 +6,14 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY esbuild.config.mjs ./
+COPY scripts scripts
+# views/ and models/ are scanned (not shipped) by scripts/build-icons.mjs
+# to find which bi-* icon classes are actually used — see that script's
+# own comment.
+COPY views views
+COPY models models
 COPY public/assets/css public/assets/css
+COPY public/assets/scss public/assets/scss
 COPY public/assets/js public/assets/js
 RUN npm run build
 
@@ -19,6 +26,16 @@ RUN npm run build
 # install-bx-module does the same job natively (see below), so CommandBox
 # isn't needed at all. Same Ubuntu 24.04 base as commandbox:boxlang, at
 # roughly a third of the image size (611MB vs 1.53GB before any app layers).
+#
+# Was pinned to a digest (v1.16.0+57) after v1.17.0+58 broke every res.render()
+# call with "The template path [...] could not be found" — turned out to be
+# intentional BoxLang 1.17.0 hardening (it stopped resolving an absolute
+# `include` path unless it's backed by a registered mapping; confirmed by an
+# Ortus maintainer, see ortus-boxlang/BoxLang#610), not a BoxLang bug. The
+# real fix belonged in boxlang-express itself — app.set("views", dir) now
+# registers that mapping (and clears the request context's stale config
+# cache so the mapping actually takes effect) — released as boxlang-express
+# 0.2.3, verified end-to-end against BoxLang 1.17.0+58. Safe to float again.
 FROM ortussolutions/boxlang:cli
 
 ENV APP_DIR=/app
@@ -64,7 +81,7 @@ ENV BOXLANG_MODULES=boxlang-express,bx-mysql,bx-markdown,bx-password-encrypt,bx-
 # that cache — change it any time a module needs a guaranteed fresh pull
 # (e.g. right after publishing a fix to ForgeBox), not just when chasing a
 # stale build.
-ARG MODULE_CACHE_BUST=2026-08-23
+ARG MODULE_CACHE_BUST=2026-08-29
 RUN install-bx-module "$BOXLANG_MODULES" --local
 
 COPY app.bxs boxlang.json ./

@@ -5,6 +5,9 @@
 		"dev": "node esbuild.config.mjs --dev"
 	},
 	"devDependencies": {
-		"esbuild": "^0.25.0"
+		"bootstrap": "^5.2.3",
+		"bootstrap-icons": "^1.13.1",
+		"esbuild": "^0.25.0",
+		"sass": "^1.103.1"
 	}
 }

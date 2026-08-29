@@ -1,0 +1,89 @@
+<bx:include template="../../partials/_head.bxm">
+<bx:output>
+<div class="container py-5">
+	<div class="c-project-hero">
+		<p class="c-project-hero__eyebrow">Project</p>
+		<h1 class="c-project-hero__title">bx-graphql</h1>
+		<p class="c-project-hero__tagline">A schema-agnostic GraphQL server for native <a href="https://boxlang.io" target="_blank" rel="noopener" class="c-post-link">BoxLang</a>, wrapping <a href="https://www.graphql-java.com/" target="_blank" rel="noopener" class="c-post-link">graphql-java</a> (vendored, v26.0). Ships with zero domain schema of its own — it parses your <code>.graphqls</code> files, wires resolvers by convention, and hands back a plain <code>{data, errors}</code> struct. No ColdBox, no WireBox, no HTTP framework required — the pure-BoxLang sibling to <a href="/projects/coldbox-graphql" class="c-post-link">coldbox-graphql</a>.</p>
+		<div class="c-project-hero__actions">
+			<a href="https://github.com/robertz/bx-graphql" target="_blank" rel="noopener" class="btn btn-primary-custom">View on GitHub</a>
+			<a href="https://github.com/robertz/bx-graphql-demo" target="_blank" rel="noopener" class="btn btn-outline-custom">Run the Demo</a>
+		</div>
+	</div>
+
+	<div class="c-project-features">
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-file-earmark-code"></i> Schema-first</p>
+			<p class="c-project-feature__body">Drop <code>.graphqls</code> files in a directory, point <code>schemaPaths</code> at it — every file is parsed and merged into one schema automatically, forward references across files included.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-magic"></i> Convention over config</p>
+			<p class="c-project-feature__body">A resolver class is only needed for fields with custom logic — everything else falls back to <code>PropertyDataFetcher</code> against a plain struct.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-boxes"></i> Zero framework</p>
+			<p class="c-project-feature__body">A global <code>bxGraphQL()</code> BIF, auto-registered on module load. <code>execute()</code> never touches HTTP — wiring <code>POST /graphql</code> up is entirely your app's own router's job.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-cpu"></i> Auto-loaded jars</p>
+			<p class="c-project-feature__body">BoxLang's own module system loads the vendored <code>libs/</code> jars onto the module's classloader — no separate classloader-registration step, unlike the ColdBox edition of this module.</p>
+		</div>
+	</div>
+
+	<div class="c-post__body c-docs-body">
+
+		<h2>Install</h2>
+		<pre class="bx-code"><span class="bx-code-label">bash</span><code>box install bx-graphql</code></pre>
+		<p>Requires BoxLang <strong>1.15.0+</strong>. This module only runs on BoxLang — it isn't tested against Lucee or Adobe ColdFusion.</p>
+
+		<h2>Demo</h2>
+		<p><a href="https://github.com/robertz/bx-graphql-demo" target="_blank" rel="noopener" class="c-post-link">bx-graphql-demo</a> is a runnable, fully offline example — bx-graphql served over HTTP by <a href="/projects/boxlang-express" class="c-post-link">boxlang-express</a>, exposing a small seed dataset (users, posts, comments) shaped like the classic <a href="https://jsonplaceholder.typicode.com/" target="_blank" rel="noopener" class="c-post-link">JSONPlaceholder</a> API through a single <code class="bx-inline">/graphql</code> endpoint, plus a built-in browser query console for poking at it without a separate GraphQL client.</p>
+		<pre class="bx-code"><span class="bx-code-label">bash</span><code>git clone https://github.com/robertz/bx-graphql-demo.git
+cd bx-graphql-demo
+box install
+boxlang app.bxs</code></pre>
+		<p>Then open <code class="bx-inline">http://localhost:3000/</code> for the query console, or hit the API directly:</p>
+		<pre class="bx-code"><span class="bx-code-label">bash</span><code>curl -s localhost:3000/graphql -H "Content-Type: application/json" \
+	-d '{"query":"{ post(id: \"1\") { title comments { name body } } }"}'</code></pre>
+		<p>The schema (<code class="bx-inline">User</code>, <code class="bx-inline">Post</code>, <code class="bx-inline">Comment</code>, plus nested <code class="bx-inline">Address</code>/<code class="bx-inline">Company</code> on <code class="bx-inline">User</code>) mirrors JSONPlaceholder's own relationships — a post belongs to a user, a comment belongs to a post — with root fields for each direction (<code class="bx-inline">users</code>, <code class="bx-inline">postsByUser(userId)</code>, <code class="bx-inline">commentsByPost(postId)</code>, and so on). One <code class="bx-inline">{TypeName}Resolver.bx</code> per type handles the fields that need real lookups (e.g. <code class="bx-inline">User.posts</code>, <code class="bx-inline">Post.comments</code>); everything else — <code class="bx-inline">Post.title</code>, <code class="bx-inline">Comment.body</code>, etc. — resolves straight off the seed record via <code class="bx-inline">PropertyDataFetcher</code>, no resolver code needed. All data is local, static JSON, so it runs with no dependency on the real JSONPlaceholder API.</p>
+
+		<h2>Quick start</h2>
+		<pre class="bx-code"><span class="bx-code-label">javascript</span><code>graphQLService = bxGraphQL( {
+	"schemaPaths"         : [ expandPath( "/graphql/schema" ) ],
+	"resolverBasePackage" : "models.resolvers"
+} )
+
+result = graphQLService.execute(
+	query          = '{ widget(id: "1") { name } }',
+	queryVariables = {},
+	context        = ""
+)
+// result == { "data" : { "widget" : { "name" : "..." } }, "errors" : [] }</code></pre>
+		<p><code class="bx-inline">GraphQLService</code> builds the graphql-java engine once, at construction time — build it once (app startup) and reuse it. <code class="bx-inline">new bxModules.bxgraphql.models.GraphQLService( settings )</code> works identically if you'd rather be explicit about where <code class="bx-inline">bxGraphQL()</code> comes from.</p>
+
+		<h2>Resolver convention</h2>
+		<p>For a schema type <code class="bx-inline">TypeName</code> with field <code class="bx-inline">fieldName</code>, the module looks for <code class="bx-inline">{resolverBasePackage}/{TypeName}Resolver.bx</code> and, if it exists and implements a <code class="bx-inline">fieldName()</code> method, calls it. Otherwise it falls back to graphql-java's <code class="bx-inline">PropertyDataFetcher</code> — reading a same-named key off the parent object. Resolver methods receive four named arguments:</p>
+		<pre class="bx-code"><span class="bx-code-label">javascript</span><code>any function fieldName( any source, struct args, any context, any env ){
+	// source  — the parent object; NULL for root Query/Mutation fields
+	// args    — the field's GraphQL arguments, as a plain struct/array
+	// context — whatever was passed as `context` to execute()
+	// env     — the raw graphql.schema.DataFetchingEnvironment, for advanced use
+}</code></pre>
+		<p><code class="bx-inline">Mutation</code> gets no special treatment — it's just another type name to the same convention, with top-level mutation fields executing serially per the GraphQL spec rather than in parallel like queries.</p>
+
+		<h2>Not yet implemented</h2>
+		<ul>
+			<li>Custom scalars</li>
+			<li>Interface/union <code class="bx-inline">TypeResolver</code> wiring — every object type gets its own convention-based resolver, but resolving <em>which</em> concrete type implements an interface/union at runtime isn't wired up</li>
+			<li>An introspection on/off toggle (introspection is always available, per graphql-java's default)</li>
+		</ul>
+
+		<h2>Tests</h2>
+		<p><a href="https://testbox.ortusbooks.com/" target="_blank" rel="noopener" class="c-post-link">TestBox</a> specs, run headlessly — no server needed:</p>
+		<pre class="bx-code"><span class="bx-code-label">bash</span><code>boxlang setup-tests.bxs   ## once per checkout
+boxlang run-tests.bxs     ## every time after that</code></pre>
+
+	</div>
+</div>
+</bx:output>
+<bx:include template="../../partials/_foot.bxm">
