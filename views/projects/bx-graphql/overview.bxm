@@ -7,6 +7,7 @@
 		<p class="c-project-hero__tagline">A schema-agnostic GraphQL server for native <a href="https://boxlang.io" target="_blank" rel="noopener" class="c-post-link">BoxLang</a>, wrapping <a href="https://www.graphql-java.com/" target="_blank" rel="noopener" class="c-post-link">graphql-java</a> (vendored, v26.0). Ships with zero domain schema of its own — it parses your <code>.graphqls</code> files, wires resolvers by convention, and hands back a plain <code>{data, errors}</code> struct. No ColdBox, no WireBox, no HTTP framework required — the pure-BoxLang sibling to <a href="/projects/coldbox-graphql" class="c-post-link">coldbox-graphql</a>.</p>
 		<div class="c-project-hero__actions">
 			<a href="https://github.com/robertz/bx-graphql" target="_blank" rel="noopener" class="btn btn-primary-custom">View on GitHub</a>
+			<a href="https://github.com/robertz/bx-graphql-demo" target="_blank" rel="noopener" class="btn btn-outline-custom">Run the Demo</a>
 		</div>
 	</div>
 
@@ -34,6 +35,17 @@
 		<h2>Install</h2>
 		<pre class="bx-code"><span class="bx-code-label">bash</span><code>box install bx-graphql</code></pre>
 		<p>Requires BoxLang <strong>1.15.0+</strong>. This module only runs on BoxLang — it isn't tested against Lucee or Adobe ColdFusion.</p>
+
+		<h2>Demo</h2>
+		<p><a href="https://github.com/robertz/bx-graphql-demo" target="_blank" rel="noopener" class="c-post-link">bx-graphql-demo</a> is a runnable, fully offline example — bx-graphql served over HTTP by <a href="/projects/boxlang-express" class="c-post-link">boxlang-express</a>, exposing a small seed dataset (users, posts, comments) shaped like the classic <a href="https://jsonplaceholder.typicode.com/" target="_blank" rel="noopener" class="c-post-link">JSONPlaceholder</a> API through a single <code class="bx-inline">/graphql</code> endpoint, plus a built-in browser query console for poking at it without a separate GraphQL client.</p>
+		<pre class="bx-code"><span class="bx-code-label">bash</span><code>git clone https://github.com/robertz/bx-graphql-demo.git
+cd bx-graphql-demo
+box install
+boxlang app.bxs</code></pre>
+		<p>Then open <code class="bx-inline">http://localhost:3000/</code> for the query console, or hit the API directly:</p>
+		<pre class="bx-code"><span class="bx-code-label">bash</span><code>curl -s localhost:3000/graphql -H "Content-Type: application/json" \
+	-d '{"query":"{ post(id: \"1\") { title comments { name body } } }"}'</code></pre>
+		<p>The schema (<code class="bx-inline">User</code>, <code class="bx-inline">Post</code>, <code class="bx-inline">Comment</code>, plus nested <code class="bx-inline">Address</code>/<code class="bx-inline">Company</code> on <code class="bx-inline">User</code>) mirrors JSONPlaceholder's own relationships — a post belongs to a user, a comment belongs to a post — with root fields for each direction (<code class="bx-inline">users</code>, <code class="bx-inline">postsByUser(userId)</code>, <code class="bx-inline">commentsByPost(postId)</code>, and so on). One <code class="bx-inline">{TypeName}Resolver.bx</code> per type handles the fields that need real lookups (e.g. <code class="bx-inline">User.posts</code>, <code class="bx-inline">Post.comments</code>); everything else — <code class="bx-inline">Post.title</code>, <code class="bx-inline">Comment.body</code>, etc. — resolves straight off the seed record via <code class="bx-inline">PropertyDataFetcher</code>, no resolver code needed. All data is local, static JSON, so it runs with no dependency on the real JSONPlaceholder API.</p>
 
 		<h2>Quick start</h2>
 		<pre class="bx-code"><span class="bx-code-label">javascript</span><code>graphQLService = bxGraphQL( {
