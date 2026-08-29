@@ -1,10 +1,5 @@
 /**
  * The registered /projects showcase entries (slug/name/icon/tagline).
- * Extracted out of routes/Projects.bx so routes/Manage.bx's project-docs
- * admin UI can also read it (for the "which project" picker) without one
- * route class reaching into another. Intentionally still hardcoded, not
- * DB-backed — adding/removing a whole project is rare enough that it isn't
- * worth the same admin-editable treatment as project doc *content*.
  */
 class {
 

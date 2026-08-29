@@ -1,0 +1,62 @@
+/**
+ * The registered project docs pages (project_slug -> ordered array of
+ * {page_slug, title}). Replaces the database-backed ProjectDocService —
+ * editing doc content in the DB via /manage/project-docs meant a page's
+ * prose lived nowhere in version control and couldn't be reviewed as a
+ * diff, so this went back to plain files: page metadata here, each page's
+ * markdown body in views/projects/{slug}/docs/{page_slug}.md, read via
+ * fileRead() by routes/Projects.bx and rendered through the same
+ * ProjectDocRenderer as before.
+ */
+class {
+
+	variables.docs = {
+		"boxlang-express": [
+			{ page_slug: "getting-started",   title: "Getting Started" },
+			{ page_slug: "config",            title: "Configuration" },
+			{ page_slug: "routing",           title: "Routing" },
+			{ page_slug: "middleware",        title: "Middleware" },
+			{ page_slug: "request-response",  title: "Request & Response" },
+			{ page_slug: "views",             title: "Views & Templates" },
+			{ page_slug: "sessions",          title: "Sessions" },
+			{ page_slug: "static-files",      title: "Static Files & Uploads" },
+			{ page_slug: "errors",            title: "Error Handling" },
+			{ page_slug: "lifecycle",         title: "Process Lifecycle" }
+		],
+		"boxlang-ssg": [
+			{ page_slug: "getting-started",     title: "Getting Started" },
+			{ page_slug: "authoring-content",   title: "Authoring Content" },
+			{ page_slug: "collections-data",    title: "Collections & Data" },
+			{ page_slug: "pagination",          title: "Pagination" },
+			{ page_slug: "configuration",       title: "Configuration" }
+		],
+		"coldbox-graphql": [
+			{ page_slug: "getting-started",        title: "Getting Started" },
+			{ page_slug: "schema-files",           title: "Schema Files" },
+			{ page_slug: "module-settings",        title: "Module Settings" },
+			{ page_slug: "resolvers",              title: "Resolvers" },
+			{ page_slug: "custom-scalars",         title: "Custom Scalars" },
+			{ page_slug: "http-endpoint",          title: "HTTP Endpoint" },
+			{ page_slug: "introspection",          title: "Introspection & SDL" },
+			{ page_slug: "engine-compatibility",   title: "Engine Compatibility" },
+			{ page_slug: "testing",                title: "Testing" }
+		]
+	};
+
+	/**
+	 * @param {string} projectSlug - The project's slug.
+	 * @return {array} Ordered array of {page_slug, title}, or an empty array if the project has no docs.
+	 */
+	function getDocsForProject( required string projectSlug ){
+		return variables.docs[ arguments.projectSlug ] ?: [];
+	}
+
+	/**
+	 * @param {string} projectSlug - The project's slug.
+	 * @return {boolean} Whether this project has any doc pages at all.
+	 */
+	function projectHasDocs( required string projectSlug ){
+		return variables.docs.keyExists( arguments.projectSlug ) && variables.docs[ arguments.projectSlug ].len() > 0;
+	}
+
+}

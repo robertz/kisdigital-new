@@ -30,11 +30,6 @@
 		<i class="bi bi-chat-left-text"></i> <span class="c-manage-nav__label">Comments</span>
 	</a>
 	</bx:if>
-	<bx:if ( data.manageUser.role ?: "" ) == "admin">
-	<a href="/manage/project-docs" class="c-manage-nav__link #( ( data.manageSection ?: '' ) == 'projectDocs' ? 'c-manage-nav__link--active' : '' )#" title="Project Docs">
-		<i class="bi bi-journal-code"></i> <span class="c-manage-nav__label">Project Docs</span>
-	</a>
-	</bx:if>
 	<a href="/manage/logs" class="c-manage-nav__link #( ( data.manageSection ?: '' ) == 'logs' ? 'c-manage-nav__link--active' : '' )#" title="Request Log">
 		<i class="bi bi-list-ul"></i> <span class="c-manage-nav__label">Request Log</span>
 	</a>
