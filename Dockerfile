@@ -24,7 +24,16 @@ RUN npm run build
 # install-bx-module does the same job natively (see below), so CommandBox
 # isn't needed at all. Same Ubuntu 24.04 base as commandbox:boxlang, at
 # roughly a third of the image size (611MB vs 1.53GB before any app layers).
-FROM ortussolutions/boxlang:cli
+#
+# Pinned to a digest, not the floating `:cli` tag: v1.17.0+58 (published
+# 2026-08-29) broke template-path resolution whenever reloadOnChange is off
+# (i.e. ENV=production only — local dev sets reloadOnChange on, so this never
+# showed up there) — every res.render() failed with "The template path
+# [...] could not be found", for every view, confirmed by pulling this exact
+# tag fresh and reproducing the failure locally with an otherwise-identical
+# build. This digest is the last version confirmed working (v1.16.0+57).
+# Bump it deliberately once a fixed BoxLang release is confirmed good.
+FROM ortussolutions/boxlang@sha256:2878aafafd9a087dab3efb6d3903de889544b8be809d993dc9784a4cbedd0ce6
 
 ENV APP_DIR=/app
 WORKDIR $APP_DIR
