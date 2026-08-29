@@ -15,6 +15,18 @@ Pass `{ block: false }` for non-blocking startup — useful for a test suite, or
 
 `{ backlog: n }` sets the TCP accept-queue depth (default `1024`), passed through to Undertow's `org.xnio.Options.BACKLOG` — how many pending connections the OS holds before refusing new ones outright, independent of how fast requests are actually handled. This defaults higher than Undertow's own default: a burst of concurrent connections well within what the virtual-thread executor can actually handle could otherwise get refused with a connection reset instead of queued. Rarely needs touching — a reverse proxy in front (already required, since this server never terminates TLS itself) usually queues connections before this limit is reached.
 
+## Monitoring the running server
+
+`app.getConnectorStatistics()` returns live HTTP-layer metrics straight from Undertow's own listener — active connections/requests, total request count, bytes sent/received, error count, processing time. Returns `null` before `listen()` has run or after `close()`.
+
+```bxs
+app.get( "/admin/stats", ( req, res ) => {
+    res.json( app.getConnectorStatistics() )
+} )
+```
+
+`listen()` turns on `UndertowOptions.ENABLE_STATISTICS` unconditionally (off by default in Undertow itself, but the per-request tracking overhead is negligible next to everything else already happening per request here) — without it, `getConnectorStatistics()` would just return `null` always instead of real numbers. Useful for a server-monitoring dashboard alongside JVM/OS-level metrics (memory, CPU, GC), which don't see anything at the HTTP layer.
+
 ## Graceful shutdown (Ctrl-C / SIGTERM)
 
 The server registers a JVM shutdown hook when it starts, so `Ctrl-C` or `SIGTERM` always triggers a clean `close()` — the listening socket is released and the dev-mode file watcher (if enabled) is stopped, whichever way the process ends. `close()` itself is safe to call more than once.

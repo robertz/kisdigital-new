@@ -62,7 +62,7 @@ app.get( "/greet-hbs/:name", ( req, res ) => {
 Included paths resolve relative to the including template's own directory, same as a plain CFML/BoxLang `include` — no special wiring from the framework is needed.
 
 > [!NOTE] How this page is put together
-> This doc page's sidebar isn't hardcoded per page — the route handler pulls an ordered array of `{page_slug, title}` topics from the database once per request and passes it, along with which one is current, into a single shared `_docsShell.bxm` shell. The shell loops the array to render the sidebar's active-state links, then interpolates the current page's pre-rendered HTML — pre-rendered once server-side through the markdown renderer, not `<bx:include>`d per page, since the content itself is stored as markdown in the database rather than as a `.bxm` file — the same "shared shell, dynamic content" pattern shown above, just sourced from a database row instead of a template file.
+> This doc page's sidebar isn't hardcoded per page — the route handler reads an ordered array of `{page_slug, title}` topics from a static per-project registry and passes it, along with which one is current, into a single shared `_docsShell.bxm` shell. The shell loops the array to render the sidebar's active-state links, then interpolates the current page's pre-rendered HTML — pre-rendered once server-side through the markdown renderer, not `<bx:include>`d per page, since the content itself is stored as a `.md` file (read via `fileRead()`) rather than a `.bxm` file — the same "shared shell, dynamic content" pattern shown above, just sourced from a markdown file instead of an inline template.
 
 ## app.locals / res.locals
 

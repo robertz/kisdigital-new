@@ -20,7 +20,7 @@ The full req.* and res.* API available inside every handler.
 | `req.protocol` / `req.secure` | Always `"http"` / `false` — BoxExpress's own `HttpServer` never terminates TLS — unless `trust proxy` is on and the request carries `X-Forwarded-Proto: https` |
 | `req.hostname` | The `Host` header (or `X-Forwarded-Host` with `trust proxy` on) with any `:port` stripped |
 | `req.session` / `req.sessionID` | Populated by `boxExpressSession()` — see [Sessions](/projects/boxlang-express/docs/sessions) |
-| `req.rawExchange()` | Escape hatch to the underlying `com.sun.net.httpserver.HttpExchange` |
+| `req.rawExchange()` | Escape hatch to the underlying `io.undertow.server.HttpServerExchange` |
 
 ## The response object
 
@@ -41,6 +41,7 @@ Every terminal method funnels through the same internal path that writes headers
 | `res.sendFile(path, options)` | Sends a file inline, with ETag/Last-Modified 304 support; `options.root` sandboxes the path against directory-escape |
 | `res.download(path, filename)` | `sendFile()` that forces `Content-Disposition: attachment` |
 | `res.render(view, data)` | Renders a view — see [Views & Templates](/projects/boxlang-express/docs/views) |
+| `res.sse(callback)` | Opens a long-lived Server-Sent Events stream — see [Server-Sent Events](/projects/boxlang-express/docs/server-sent-events) |
 | `res.dump(data)` | Sends BoxLang's rich, collapsible `dump()` HTML view of a variable as the response — useful for quick debugging routes |
 | `res.getStatusCode()` | Returns the eventual status code — reflects the real outcome even when a route never called `status()` directly, since every non-`200` terminal method routes through it internally. For request-logging middleware registered first via `app.use()`, which otherwise can't observe a request's outcome |
 | `res.getBytesWritten()` | Returns the body byte count sent so far; `0` for a response still in flight |

@@ -17,6 +17,7 @@ class {
 			{ page_slug: "routing",           title: "Routing" },
 			{ page_slug: "middleware",        title: "Middleware" },
 			{ page_slug: "request-response",  title: "Request & Response" },
+			{ page_slug: "server-sent-events", title: "Server-Sent Events" },
 			{ page_slug: "views",             title: "Views & Templates" },
 			{ page_slug: "sessions",          title: "Sessions" },
 			{ page_slug: "static-files",      title: "Static Files & Uploads" },
