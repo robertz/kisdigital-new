@@ -1,0 +1,196 @@
+/**
+ * /games/chat — a small Slack-like chat room, built to exercise
+ * boxlang-express's raw `app.ws()` (see [WebSockets](/projects/boxlang-express/docs/websockets))
+ * against real concurrent traffic: multiple channels, join/leave presence,
+ * and a broadcast-to-many pattern, but deliberately without the bells and
+ * whistles a real chat app would have — no auth, no DMs, no typing
+ * indicators, no history beyond what's in memory.
+ *
+ * `app.ws()` only exists on the top-level app (not Router), so this class
+ * takes `app` directly rather than exposing a `.router` the way every other
+ * routes/*.bx class does — there's no HTTP surface here at all. The game
+ * page itself is a static file (public/games/chat/index.html), served by
+ * the app's existing boxExpressStatic middleware.
+ *
+ * Protocol — one JSON object per text frame, in both directions:
+ *   client -> server
+ *     { "type": "join",    channel, name }   switch channel (also used to join initially)
+ *     { "type": "message", text }            send to whichever channel this connection last joined
+ *   server -> client
+ *     { "type": "joined",  channel, history, roster }   sent only to the connection that just joined
+ *     { "type": "message", channel, from, text, ts }     broadcast to a channel
+ *     { "type": "system",  channel, text, ts }           join/leave notices, broadcast to a channel
+ *     { "type": "roster",  channel, members }            broadcast on membership change
+ *     { "type": "error",   message }                     sent only to the offending connection
+ *
+ * Identity has no session/auth behind it — a name is just whatever string
+ * the client sent in its last "join". Fine for a demo; the moment this
+ * needed to be real, `join` would need to check something.
+ */
+class {
+
+	variables.app      = "";
+	variables.CHANNELS = [ "general", "random", "dev" ];
+
+	variables.MAX_NAME_LEN    = 24;
+	variables.MAX_MESSAGE_LEN = 500;
+	variables.MAX_HISTORY     = 50;
+	variables.MIN_MESSAGE_GAP_MS = 400;
+
+	function init( required app ){
+		variables.app = arguments.app;
+
+		// channel name -> { members: { connectionId -> name }, history: [ {from,text,ts}, ... ] }
+		variables.rooms = {};
+		for ( var name in variables.CHANNELS ){
+			variables.rooms[ name ] = { members: {}, history: [] };
+		}
+
+		variables.app.ws( "/games/chat/socket", ( connection ) => onConnect( connection ) );
+
+		return this;
+	}
+
+	// One of these runs per open connection — everything below is closed over
+	// its own `state` struct, so connections never see each other's local state.
+	function onConnect( connection ){
+		var state = { id: createUUID(), channel: "", name: "", lastMessageAt: 0 };
+
+		connection.onMessage( ( text ) => onMessage( connection, state, text ) );
+		connection.onClose( ( code, reason ) => onClose( connection, state ) );
+	}
+
+	function onMessage( connection, state, text ){
+		var payload = "";
+		try {
+			payload = JSONDeserialize( text );
+		} catch ( any e ){
+			connection.send( { "type": "error", message: "Malformed message." } );
+			return;
+		}
+
+		var msgType = payload.type ?: "";
+
+		if ( msgType == "join" ){
+			handleJoin( connection, state, payload );
+		} else if ( msgType == "message" ){
+			handleSend( connection, state, payload );
+		} else {
+			connection.send( { "type": "error", message: "Unknown message type." } );
+		}
+	}
+
+	function handleJoin( connection, state, payload ){
+		var channel = trim( payload.channel ?: "" );
+		var name    = trim( left( payload.name ?: "", variables.MAX_NAME_LEN ) );
+
+		if ( !variables.CHANNELS.contains( channel ) ){
+			connection.send( { "type": "error", message: "No such channel." } );
+			return;
+		}
+		if ( !name.len() ){
+			connection.send( { "type": "error", message: "Pick a name first." } );
+			return;
+		}
+
+		// Leave whatever channel this connection was previously in (if any)
+		// before joining the new one — a plain "join" doubles as "switch".
+		if ( state.channel.len() ){
+			leaveChannel( connection, state );
+		}
+
+		state.channel = channel;
+		state.name    = name;
+
+		var room = variables.rooms[ channel ];
+		lock name="chat-#channel#" type="exclusive" timeout="5" {
+			room.members[ state.id ] = { connection: connection, name: name };
+		}
+
+		connection.send( {
+			"type"  : "joined",
+			channel : channel,
+			history : room.history,
+			roster  : rosterFor( channel )
+		} );
+
+		broadcastSystem( channel, name & " joined ##" & channel );
+		broadcastRoster( channel );
+	}
+
+	function handleSend( connection, state, payload ){
+		if ( !state.channel.len() ){
+			connection.send( { "type": "error", message: "Join a channel first." } );
+			return;
+		}
+
+		var now = getTickCount();
+		if ( now - state.lastMessageAt < variables.MIN_MESSAGE_GAP_MS ){
+			connection.send( { "type": "error", message: "You're sending messages too fast." } );
+			return;
+		}
+
+		var text = trim( left( payload.text ?: "", variables.MAX_MESSAGE_LEN ) );
+		if ( !text.len() ){
+			return;
+		}
+		state.lastMessageAt = now;
+
+		var entry = { from: state.name, text: text, ts: dateTimeFormat( now(), "iso8601" ) };
+		var room  = variables.rooms[ state.channel ];
+
+		lock name="chat-#state.channel#" type="exclusive" timeout="5" {
+			room.history.append( entry );
+			if ( room.history.len() > variables.MAX_HISTORY ){
+				room.history.deleteAt( 1 );
+			}
+		}
+
+		broadcast( state.channel, { "type": "message", channel: state.channel, from: entry.from, text: entry.text, ts: entry.ts } );
+	}
+
+	function onClose( connection, state ){
+		if ( state.channel.len() ){
+			leaveChannel( connection, state );
+		}
+	}
+
+	// Removes this connection from its current channel and announces it —
+	// used both on an explicit channel switch and on disconnect.
+	function leaveChannel( connection, state ){
+		var channel = state.channel;
+		var room    = variables.rooms[ channel ];
+
+		lock name="chat-#channel#" type="exclusive" timeout="5" {
+			structDelete( room.members, state.id );
+		}
+		state.channel = "";
+
+		broadcastSystem( channel, state.name & " left ##" & channel );
+		broadcastRoster( channel );
+	}
+
+	function rosterFor( channel ){
+		var names = [];
+		for ( var connId in variables.rooms[ channel ].members ){
+			names.append( variables.rooms[ channel ].members[ connId ].name );
+		}
+		return names;
+	}
+
+	function broadcast( channel, data ){
+		var room = variables.rooms[ channel ];
+		for ( var connId in room.members ){
+			room.members[ connId ].connection.send( data );
+		}
+	}
+
+	function broadcastSystem( channel, text ){
+		broadcast( channel, { "type": "system", channel: channel, text: text, ts: dateTimeFormat( now(), "iso8601" ) } );
+	}
+
+	function broadcastRoster( channel ){
+		broadcast( channel, { "type": "roster", channel: channel, members: rosterFor( channel ) } );
+	}
+
+}

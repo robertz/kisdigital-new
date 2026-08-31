@@ -20,6 +20,13 @@ class {
 			icon    : "bi-grid-3x3-gap",
 			tagline : "A live, shared pixel canvas — place a pixel, watch everyone else's show up in real time over Server-Sent Events.",
 			href    : "/games/pixel-canvas/"
+		},
+		{
+			slug    : "chat",
+			name    : "Chat",
+			icon    : "bi-chat-dots",
+			tagline : "A small Slack-like chat room across a few channels, built to exercise boxlang-express's raw WebSocket support.",
+			href    : "/games/chat/"
 		}
 	];
 

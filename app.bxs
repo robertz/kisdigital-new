@@ -178,6 +178,7 @@ app.use( new routes.Feeds( sitemapService ).router )
 app.use( new routes.Projects( siteDefaults, projectDocRegistry, projectDocRenderer ).router )
 app.use( new routes.Games( siteDefaults ).router )
 app.use( new routes.PixelCanvas( siteDefaults ).router )
+new routes.Chat( app )
 app.use( new routes.Manage( authService, postService, authorService, settingsService, postRenderer, r2Client, getSystemSetting( "R2_UPLOAD_PREFIX", "posts" ), insightsService, serverMonitor, googleOAuthClient, commentService ).router )
 
 // ── 404 / 500 (themed, matching the site's own look) ────────────────────
