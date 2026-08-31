@@ -51,6 +51,12 @@ class {
 			name    : "boxlang-stomp-chat",
 			icon    : "bi-chat-dots",
 			tagline : "A Slack-like multi-channel chat app on BoxLang + SocketBox STOMP, with a no-build-step Vue 3 frontend."
+		},
+		{
+			slug    : "stripe-development",
+			name    : "stripe-development",
+			icon    : "bi-credit-card",
+			tagline : "A local dashboard, playground, and webhook receiver for exercising the Stripe API in test mode — no Stripe SDK dependency."
 		}
 	];
 

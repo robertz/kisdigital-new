@@ -1,0 +1,90 @@
+<bx:include template="../../partials/_head.bxm">
+<bx:output>
+<div class="container py-5">
+	<div class="c-project-hero">
+		<p class="c-project-hero__eyebrow">Project</p>
+		<h1 class="c-project-hero__title">stripe-development</h1>
+		<p class="c-project-hero__tagline">A lightweight local dashboard, playground, and webhook receiver for exercising the Stripe API in test mode — built directly against the Stripe REST API, no SDK dependency, on <a href="https://boxlang.io" target="_blank" rel="noopener" class="c-post-link">BoxLang</a> and BoxExpress.</p>
+		<div class="c-project-hero__actions">
+			<a href="https://github.com/robertz/stripe-development" target="_blank" rel="noopener" class="btn btn-primary-custom">View on GitHub</a>
+		</div>
+	</div>
+
+	<div class="c-project-features">
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-speedometer2"></i> Dashboard</p>
+			<p class="c-project-feature__body">Read-only overview of a Stripe test account — balances, charges, customers, subscriptions, invoices, payouts, disputes, checkout sessions, payment methods, and both the raw Stripe event log and the app's own received webhook events.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-joystick"></i> Playground</p>
+			<p class="c-project-feature__body">Forms that fire real create/update/cancel calls against Stripe test mode and show the raw JSON response.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-webhook"></i> Webhook receiver</p>
+			<p class="c-project-feature__body">Verifies Stripe webhook signatures, guards against replay, and persists recent deliveries at <code class="bx-inline">POST /webhooks/stripe</code>.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-shield-lock"></i> Live-mode lockout</p>
+			<p class="c-project-feature__body">If the configured Stripe key is in live mode, every Playground write is refused automatically. The dashboard still works, since it only reads.</p>
+		</div>
+	</div>
+
+	<div class="c-post__body c-docs-body">
+
+		<h2>Requirements</h2>
+		<ul>
+			<li>The <a href="https://boxlang.io" target="_blank" rel="noopener" class="c-post-link">BoxLang</a> runtime (<code class="bx-inline">boxlang</code> on your <code class="bx-inline">PATH</code>)</li>
+			<li>A Stripe account with a test-mode secret key</li>
+			<li>(Optional) the <a href="https://stripe.com/docs/stripe-cli" target="_blank" rel="noopener" class="c-post-link">Stripe CLI</a> for local webhook testing</li>
+		</ul>
+
+		<h2>Setup</h2>
+		<p>Create a <code class="bx-inline">.env</code> file at the project root:</p>
+		<pre class="bx-code"><span class="bx-code-label">env</span><code>ENV=development
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...</code></pre>
+		<p><code class="bx-inline">STRIPE_WEBHOOK_SECRET</code> is only needed for webhook testing — see below for where that value comes from.</p>
+
+		<h2>Running it</h2>
+		<pre class="bx-code"><span class="bx-code-label">bash</span><code>boxlang app.bxs</code></pre>
+		<p>Then open <code class="bx-inline">http://localhost:3000</code>.</p>
+
+		<h2>Testing webhooks</h2>
+		<p>With the app running, forward Stripe events to it with the Stripe CLI:</p>
+		<pre class="bx-code"><span class="bx-code-label">bash</span><code>stripe listen --forward-to localhost:3000/webhooks/stripe</code></pre>
+		<p>Copy the signing secret it prints (<code class="bx-inline">whsec_...</code>) into <code class="bx-inline">.env</code> as <code class="bx-inline">STRIPE_WEBHOOK_SECRET</code> — it generates a new one each time it starts, so restart <code class="bx-inline">boxlang app.bxs</code> after updating it. Then fire a test event:</p>
+		<pre class="bx-code"><span class="bx-code-label">bash</span><code>stripe trigger charge.succeeded</code></pre>
+		<p>Accepted deliveries show up in the dashboard's "Recent webhook events" section.</p>
+
+		<h2>Running tests</h2>
+		<p><code class="bx-inline">tests.bxs</code> is a small, dependency-free regression suite for <code class="bx-inline">StripeWebhookHandler.bx</code> (signature verification, replay protection, secret rotation, persistence) — no network calls involved.</p>
+		<pre class="bx-code"><span class="bx-code-label">bash</span><code>boxlang tests.bxs</code></pre>
+		<p>Exits non-zero on any failure.</p>
+
+		<h2>Project layout</h2>
+		<pre class="bx-code"><code>app.bxs                     Bootstrap: creates the app, wires up helpers and routes, listens on :3000
+bootstrap/stripe.bxs        Builds the StripeClient + webhook handler, checks live-mode
+helpers/
+  Formatting.bx              Pure display formatting (money, dates, status badge classes)
+  Annotators.bx              Attaches formatted fields onto raw Stripe list responses
+  Playground.bx              Shared playground render/guard logic (CSRF data, live-mode block)
+routes/
+  *Routes.bx                 One class per Stripe resource (charges, customers, invoices, ...)
+  WebhookRoutes.bx           POST /webhooks/stripe
+  DashboardRoutes.bx         GET /
+  PlaygroundRoutes.bx        GET /playground
+views/
+  *.bxm                      One template per page
+  partials/nav.bxm           Shared navbar + Quick nav dropdown
+  partials/breadcrumb.bxm    Shared breadcrumb trail
+StripeClient.bx              Thin wrapper over the Stripe REST API — no SDK dependency
+StripeWebhookHandler.bx      Signature verification + event persistence
+public/                      Static assets, including the developer guide</code></pre>
+
+		<h2>Developer guide</h2>
+		<p>A fuller developer guide — dashboard walkthrough, the full Playground action list, Stripe CLI webhook testing steps, and how to add a new resource route — lives as static pages under <code class="bx-inline">public/docs/</code> in the repo, and is one click away from any page in the running app via the Quick nav &rarr; Developer guide link.</p>
+
+	</div>
+</div>
+</bx:output>
+<bx:include template="../../partials/_foot.bxm">
