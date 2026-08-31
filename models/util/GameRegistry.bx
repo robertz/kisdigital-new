@@ -27,6 +27,13 @@ class {
 			icon    : "bi-chat-dots",
 			tagline : "A small Slack-like chat room across a few channels, built to exercise boxlang-express's raw WebSocket support.",
 			href    : "/games/chat/"
+		},
+		{
+			slug    : "stomp-chat",
+			name    : "STOMP Chat",
+			icon    : "bi-shield-lock",
+			tagline : "A single-room chat over boxlang-express's STOMP layer that requires signing in — the socket itself checks your session, not just the page.",
+			href    : "/games/stomp-chat"
 		}
 	];
 

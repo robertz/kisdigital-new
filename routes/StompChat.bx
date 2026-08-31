@@ -1,0 +1,114 @@
+/**
+ * /games/stomp-chat — a single-room chat over boxlang-express's STOMP
+ * pub/sub layer (boxExpressStomp()), gated behind the site's own login —
+ * deliberately separate from routes/Chat.bx's anonymous raw-app.ws() demo,
+ * both to keep that one's "no auth at all" story intact and to show the
+ * other end of the spectrum: every CONNECT/SUBSCRIBE/SEND on this socket
+ * re-checks a real site session, not just the page load.
+ *
+ * Needs both an HTTP route (the gated page itself) and a direct app.ws()
+ * registration (STOMP's handler()), so — like routes/Chat.bx — this class
+ * takes `app` rather than exposing only a `.router`; app.bxs still mounts
+ * `.router` via app.use() for the HTTP side.
+ *
+ * Session lookup: app.ws() connections bypass the whole use() middleware
+ * chain (see boxlang-express's WebSockets doc), so there's no req.session
+ * on a WS connection — session identity is resolved by hand instead, by
+ * reading the same "connect.sid" cookie boxExpressSession() sets
+ * (app.bxs) off connection.cookies (boxlang-express's WebSocketConnection
+ * exposes the handshake's headers/cookies precisely for this) and looking
+ * it up in the same sessionCache the app's own session middleware reads
+ * from — same store, same cookie, two different code paths into it.
+ *
+ * Trust boundary: authenticate()/authorize() gate whether a connection can
+ * CONNECT/SUBSCRIBE/SEND at all — a logged-out visitor's socket never gets
+ * that far. What they don't do is stamp a SEND's body server-side:
+ * boxExpressStomp() forwards a SEND frame's body to subscribers verbatim,
+ * with no hook to rewrite it, so the "from" name in a message is supplied
+ * by the client (from its own real display name, known because the
+ * gated page above only ever renders for a session that has one) rather
+ * than stamped by the broker per message. A logged-out visitor cannot
+ * open this socket at all; a logged-in one could still type a different
+ * display string into their own outgoing message, the same trust
+ * boundary as any authenticated form's freeform text field, not a
+ * broker-enforced identity claim.
+ */
+class {
+
+	variables.app          = "";
+	variables.siteDefaults = "";
+	variables.sessionStore = "";
+	variables.DESTINATION  = "/topic/stomp-lounge";
+
+	function init( required app, required siteDefaults ){
+		variables.app          = arguments.app;
+		variables.siteDefaults = arguments.siteDefaults;
+		variables.sessionStore = boxExpressCacheStore( "sessionCache" );
+
+		this.router = boxExpressRouter();
+		this.router.get( "/games/stomp-chat", ( req, res, next ) => page( req, res, next ) );
+
+		var stomp = boxExpressStomp( {
+			authenticate: ( login, passcode, host, connection ) => authenticate( connection ),
+			authorize   : ( login, destination, access, connection ) => authorize( destination, connection )
+		} );
+
+		variables.app.ws( "/games/stomp-chat/socket", stomp.handler() );
+
+		return this;
+	}
+
+	// GET /games/stomp-chat — same "sign in with Google, then come back
+	// here" pattern routes/Manage.bx uses for /manage, but via the
+	// general-purpose /auth/google (routes/Auth.bx) rather than the
+	// CMS-only login, since any signed-in visitor should see this, not
+	// just staff.
+	function page( req, res, next ){
+		var commenter = req.session.commenter ?: "";
+		if ( !isStruct( commenter ) || !len( commenter.id ?: "" ) ){
+			res.redirect( "/auth/google?redirect=/games/stomp-chat" );
+			return;
+		}
+
+		res.render( "games/stomp-chat", {
+			pageTitle    : "STOMP Chat",
+			canonicalUrl : variables.siteDefaults.canonicalUrl( req.path ),
+			meta         : variables.siteDefaults.defaultMeta( req.path ),
+			displayName  : commenter.display_name
+		} );
+	}
+
+	// Resolves the site session (or null) for a WebSocket connection from
+	// its handshake cookies — the same "connect.sid" -> sessionCache
+	// lookup boxExpressSession()'s own middleware does internally, just
+	// invoked by hand since app.ws() never runs that middleware.
+	function sessionFor( connection ){
+		var sessionId = connection.cookies[ "connect.sid" ] ?: "";
+		if ( !len( sessionId ) ){
+			return javacast( "null", "" );
+		}
+		return variables.sessionStore.get( sessionId );
+	}
+
+	// STOMP CONNECT — login/passcode/host are ignored entirely; a browser
+	// connecting to this same-origin socket already carries the real
+	// session cookie automatically, so that's the only credential that
+	// matters here.
+	function authenticate( connection ){
+		var sessionData = sessionFor( connection );
+		return !isNull( sessionData ) && isStruct( sessionData.commenter ?: "" ) && len( sessionData.commenter.id ?: "" );
+	}
+
+	// STOMP SUBSCRIBE/SEND — re-checked per action (not just once at
+	// CONNECT), so a session that gets destroyed mid-connection (an
+	// explicit sign-out in another tab) stops working on this one's very
+	// next action rather than staying live until reconnect. Only one
+	// destination exists at all; anything else is refused outright.
+	function authorize( destination, connection ){
+		if ( destination != variables.DESTINATION ){
+			return false;
+		}
+		return authenticate( connection );
+	}
+
+}
