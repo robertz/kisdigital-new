@@ -63,9 +63,20 @@ class {
 	// general-purpose /auth/google (routes/Auth.bx) rather than the
 	// CMS-only login, since any signed-in visitor should see this, not
 	// just staff.
+	//
+	// "Signed in" means either req.session.commenter (a regular visitor)
+	// OR req.session.manage_user (staff — an admin/author's Google account
+	// gets THAT session, never commenter, per routes/Auth.bx). Checking
+	// commenter alone locked staff out of their own page: an admin signing
+	// in got manage_user set, still failed this check, and got bounced
+	// straight back to /auth/google — which Google silently re-approves
+	// for an already-consented account (prompt=none), producing a true
+	// redirect loop rather than a second login prompt. Confirmed live
+	// (Safari's "too many redirects" against exactly that URL) before
+	// this fix.
 	function page( req, res, next ){
-		var commenter = req.session.commenter ?: "";
-		if ( !isStruct( commenter ) || !len( commenter.id ?: "" ) ){
+		var displayName = displayNameFor( req.session );
+		if ( !len( displayName ) ){
 			res.redirect( "/auth/google?redirect=/games/stomp-chat" );
 			return;
 		}
@@ -74,8 +85,25 @@ class {
 			pageTitle    : "STOMP Chat",
 			canonicalUrl : variables.siteDefaults.canonicalUrl( req.path ),
 			meta         : variables.siteDefaults.defaultMeta( req.path ),
-			displayName  : commenter.display_name
+			displayName  : displayName
 		} );
+	}
+
+	// The display name off whichever of the two independent session
+	// populations is present — "" if neither is. Shared by page() (a real
+	// req.session) and authenticate()/authorize() below (a session struct
+	// read back from sessionCache, same shape).
+	function displayNameFor( sessionData ){
+		if ( isNull( sessionData ) ){
+			return "";
+		}
+		if ( isStruct( sessionData.commenter ?: "" ) && len( sessionData.commenter.id ?: "" ) ){
+			return sessionData.commenter.display_name;
+		}
+		if ( isStruct( sessionData.manage_user ?: "" ) && len( sessionData.manage_user.id ?: "" ) ){
+			return sessionData.manage_user.display_name;
+		}
+		return "";
 	}
 
 	// Resolves the site session (or null) for a WebSocket connection from
@@ -95,8 +123,7 @@ class {
 	// session cookie automatically, so that's the only credential that
 	// matters here.
 	function authenticate( connection ){
-		var sessionData = sessionFor( connection );
-		return !isNull( sessionData ) && isStruct( sessionData.commenter ?: "" ) && len( sessionData.commenter.id ?: "" );
+		return len( displayNameFor( sessionFor( connection ) ) ) > 0;
 	}
 
 	// STOMP SUBSCRIBE/SEND — re-checked per action (not just once at
