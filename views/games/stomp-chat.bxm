@@ -26,7 +26,7 @@
 
 		<main class="sc-main">
 			<div class="sc-topbar">
-				<span class="sc-channel-title">###encodeForHTML( data.currentChannel )#</span>
+				<span class="sc-channel-title"><span class="sc-channel-hash">##</span>#encodeForHTML( data.currentChannel )#</span>
 				<span class="sc-status" id="status">connecting&hellip;</span>
 				<span class="sc-me">Signed in as <strong>#encodeForHTML( data.displayName )#</strong> &middot; <a href="/auth/logout?redirect=/games/stomp-chat">sign out</a></span>
 			</div>
@@ -35,12 +35,15 @@
 
 			<form class="sc-composer" id="composer">
 				<input type="text" id="composerInput" class="sc-composer-input" maxlength="500" placeholder="Message ###encodeForHTMLAttribute( data.currentChannel )#" autocomplete="off">
-				<button type="submit" class="sc-composer-send">Send</button>
+				<button type="submit" class="sc-composer-send">
+					<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+					Send
+				</button>
 			</form>
 		</main>
 
 		<aside class="sc-presence">
-			<p class="sc-pane-title">Online</p>
+			<p class="sc-pane-title">Online <span class="sc-presence-count" id="presenceCount"></span></p>
 			<ul class="sc-presence-list" id="presenceList"></ul>
 		</aside>
 	</div>
@@ -50,33 +53,52 @@
 
 <style>
 	.sc-app {
-		margin-top: 24px;
-		border: 1px solid var(--main-border-color);
-		border-radius: var(--ui-radius-md);
+		--sc-accent-a: ##7c3aed;
+		--sc-accent-b: ##06b6d4;
+		--sc-gradient: linear-gradient(135deg, var(--sc-accent-a), var(--sc-accent-b));
+		position: relative;
+		margin-top: 28px;
+		border-radius: 20px;
+		border: 1px solid var(--ui-border-subtle);
 		background: var(--ui-surface-1);
+		box-shadow: 0 24px 60px -28px rgba(124, 58, 237, 0.45), var(--ui-shadow-sm);
 		overflow: hidden;
 		display: flex;
-		min-height: 480px;
+		min-height: 520px;
+	}
+	.sc-app::before {
+		content: "";
+		position: absolute;
+		top: 0; left: 0; right: 0;
+		height: 4px;
+		background: var(--sc-gradient);
 	}
 
 	/* ── Left: channels ── */
 	.sc-channels {
-		width: 180px;
+		width: 190px;
 		flex: 0 0 auto;
-		border-right: 1px solid var(--main-border-color);
+		border-right: 1px solid var(--ui-border-subtle);
 		background: var(--ui-surface-2);
-		padding: 14px 12px;
+		padding: 20px 14px 14px;
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
+		gap: 12px;
 	}
 	.sc-pane-title {
 		margin: 0;
-		font-size: 0.75rem;
-		font-weight: 700;
+		font-size: 0.7rem;
+		font-weight: 800;
 		text-transform: uppercase;
-		letter-spacing: 0.04em;
+		letter-spacing: 0.08em;
 		color: var(--text-muted);
+		display: flex;
+		align-items: center;
+		gap: 6px;
+	}
+	.sc-presence-count {
+		font-weight: 700;
+		color: var(--sc-accent-a);
 	}
 	.sc-channel-list {
 		display: flex;
@@ -85,42 +107,47 @@
 	}
 	.sc-channel-link {
 		display: block;
-		padding: 6px 8px;
-		border-radius: var(--ui-radius-sm);
-		font-size: 0.9rem;
+		padding: 7px 10px;
+		border-radius: 10px;
+		font-size: 0.88rem;
+		font-weight: 500;
 		color: var(--text-secondary);
 		text-decoration: none;
+		border-left: 3px solid transparent;
+		transition: background 0.15s ease, color 0.15s ease;
 	}
 	.sc-channel-link:hover { background: var(--ui-border-subtle); }
 	.sc-channel-link.is-active {
-		background: var(--ui-surface-1);
-		color: var(--post-link-text);
-		font-weight: 600;
+		background: linear-gradient(90deg, rgba(124, 58, 237, 0.14), rgba(6, 182, 212, 0.05));
+		color: var(--sc-accent-a);
+		font-weight: 700;
+		border-left-color: var(--sc-accent-a);
 	}
 	.sc-new-channel {
 		margin-top: auto;
 		display: flex;
-		gap: 4px;
+		gap: 6px;
 	}
 	.sc-new-channel-input {
 		flex: 1 1 auto;
 		min-width: 0;
 		background: var(--ui-surface-1);
 		border: 1px solid var(--main-border-color);
-		border-radius: var(--ui-radius-sm);
+		border-radius: 10px;
 		color: inherit;
-		padding: 6px 8px;
+		padding: 7px 10px;
 		font-size: 0.8rem;
 	}
-	.sc-new-channel-input:focus { outline: none; border-color: var(--post-link-text); }
+	.sc-new-channel-input:focus { outline: none; border-color: var(--sc-accent-a); }
 	.sc-new-channel-add {
-		background: var(--post-link-text);
+		background: var(--sc-gradient);
 		border: none;
-		border-radius: var(--ui-radius-sm);
+		border-radius: 10px;
 		color: ##fff;
 		font-weight: 700;
-		width: 28px;
+		width: 30px;
 		cursor: pointer;
+		box-shadow: 0 4px 12px -4px rgba(124, 58, 237, 0.6);
 	}
 	.sc-new-channel-error {
 		margin: 0;
@@ -139,89 +166,203 @@
 		display: flex;
 		align-items: center;
 		gap: 12px;
-		padding: 12px 16px;
-		border-bottom: 1px solid var(--main-border-color);
+		padding: 16px 20px;
+		border-bottom: 1px solid var(--ui-border-subtle);
 	}
-	.sc-channel-title { font-weight: 700; }
+	.sc-channel-title { font-weight: 800; font-size: 1.05rem; }
+	.sc-channel-hash { color: var(--sc-accent-a); margin-right: 1px; }
 	.sc-status {
-		font-size: 0.8rem;
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		font-size: 0.78rem;
+		font-weight: 600;
 		color: var(--text-secondary);
-		padding: 2px 8px;
+		padding: 3px 10px;
 		border-radius: 999px;
 		background: var(--ui-surface-2);
 		border: 1px solid var(--ui-border-subtle);
 	}
-	.sc-status[data-state="live"] { color: ##2f9e5b; border-color: rgba(47, 158, 91, 0.35); }
-	.sc-status[data-state="error"] { color: ##d64545; border-color: rgba(214, 69, 69, 0.35); }
+	.sc-status::before {
+		content: "";
+		width: 6px;
+		height: 6px;
+		border-radius: 50%;
+		background: currentColor;
+	}
+	.sc-status[data-state="live"] { color: ##2f9e5b; border-color: rgba(47, 158, 91, 0.3); background: rgba(47, 158, 91, 0.08); }
+	.sc-status[data-state="live"]::before { animation: sc-pulse 1.7s infinite; }
+	.sc-status[data-state="error"] { color: ##d64545; border-color: rgba(214, 69, 69, 0.3); background: rgba(214, 69, 69, 0.08); }
+	@keyframes sc-pulse {
+		0%   { box-shadow: 0 0 0 0 rgba(47, 158, 91, 0.55); }
+		70%  { box-shadow: 0 0 0 6px rgba(47, 158, 91, 0); }
+		100% { box-shadow: 0 0 0 0 rgba(47, 158, 91, 0); }
+	}
 	.sc-me {
 		margin-left: auto;
-		font-size: 0.85rem;
+		font-size: 0.82rem;
 		color: var(--text-secondary);
+		white-space: nowrap;
 	}
-	.sc-me a { color: var(--post-link-text); }
+	.sc-me a { color: var(--sc-accent-a); }
 	.sc-messages {
 		flex: 1 1 auto;
 		overflow-y: auto;
-		padding: 16px;
+		padding: 20px;
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: 12px;
 	}
-	.sc-msg {
+
+	.sc-avatar {
+		flex: 0 0 auto;
+		width: 30px;
+		height: 30px;
+		border-radius: 50%;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 0.68rem;
+		font-weight: 800;
+		color: ##fff;
+		letter-spacing: -0.02em;
+	}
+
+	.sc-msg-row {
+		display: flex;
+		align-items: flex-end;
+		gap: 8px;
+		max-width: 78%;
+		animation: sc-msg-in 0.22s ease;
+	}
+	.sc-msg-row.is-own {
+		flex-direction: row-reverse;
+		align-self: flex-end;
+	}
+	@keyframes sc-msg-in {
+		from { opacity: 0; transform: translateY(6px); }
+		to   { opacity: 1; transform: translateY(0); }
+	}
+	.sc-bubble {
+		padding: 8px 13px;
+		border-radius: 16px;
+		border-bottom-left-radius: 4px;
+		background: var(--ui-surface-2);
 		font-size: 0.9rem;
-		line-height: 1.4;
+		line-height: 1.45;
 	}
-	.sc-msg-from { font-weight: 600; color: var(--post-link-text); margin-right: 6px; }
-	.sc-msg-text { word-break: break-word; white-space: pre-wrap; }
-	.sc-msg.is-system { color: var(--text-muted); font-style: italic; font-size: 0.8rem; }
-	.sc-msg.is-error { color: ##d64545; font-size: 0.8rem; }
+	.sc-msg-row.is-own .sc-bubble {
+		background: var(--sc-gradient);
+		color: ##fff;
+		border-bottom-left-radius: 16px;
+		border-bottom-right-radius: 4px;
+	}
+	.sc-bubble-from {
+		display: block;
+		font-size: 0.7rem;
+		font-weight: 700;
+		opacity: 0.65;
+		margin-bottom: 2px;
+	}
+	.sc-bubble-text { word-break: break-word; white-space: pre-wrap; }
+
+	.sc-line-system, .sc-line-error {
+		align-self: center;
+		font-size: 0.78rem;
+		padding: 4px 12px;
+		border-radius: 999px;
+	}
+	.sc-line-system { color: var(--text-muted); background: var(--ui-surface-2); }
+	.sc-line-error { color: ##d64545; background: rgba(214, 69, 69, 0.1); }
+
 	.sc-composer {
 		display: flex;
-		gap: 8px;
-		padding: 12px 16px;
-		border-top: 1px solid var(--main-border-color);
+		gap: 10px;
+		padding: 16px 20px;
+		border-top: 1px solid var(--ui-border-subtle);
 	}
 	.sc-composer-input {
 		flex: 1 1 auto;
 		background: var(--ui-surface-2);
 		border: 1px solid var(--main-border-color);
-		border-radius: var(--ui-radius-sm);
+		border-radius: 999px;
 		color: inherit;
-		padding: 8px 12px;
+		padding: 10px 16px;
 		font-size: 0.9rem;
 	}
-	.sc-composer-input:focus { outline: none; border-color: var(--post-link-text); }
+	.sc-composer-input:focus { outline: none; border-color: var(--sc-accent-a); }
 	.sc-composer-send {
-		background: var(--post-link-text);
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		background: var(--sc-gradient);
 		border: none;
-		border-radius: var(--ui-radius-sm);
+		border-radius: 999px;
 		color: ##fff;
-		font-weight: 600;
-		padding: 0 18px;
+		font-weight: 700;
+		padding: 0 20px;
 		cursor: pointer;
+		box-shadow: 0 6px 16px -6px rgba(124, 58, 237, 0.55);
 	}
 
 	/* ── Right: presence ── */
 	.sc-presence {
-		width: 160px;
+		width: 180px;
 		flex: 0 0 auto;
-		border-left: 1px solid var(--main-border-color);
+		border-left: 1px solid var(--ui-border-subtle);
 		background: var(--ui-surface-2);
-		padding: 14px 12px;
+		padding: 20px 14px;
 	}
 	.sc-presence-list {
 		list-style: none;
-		margin: 10px 0 0;
+		margin: 12px 0 0;
 		padding: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: 8px;
+	}
+	.sc-presence-item {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 4px 6px;
+		border-radius: 10px;
 		font-size: 0.85rem;
 		color: var(--text-secondary);
 	}
+	.sc-presence-item:hover { background: var(--ui-border-subtle); }
+	.sc-presence-avatar {
+		position: relative;
+		flex: 0 0 auto;
+		width: 22px;
+		height: 22px;
+		border-radius: 50%;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 0.6rem;
+		font-weight: 800;
+		color: ##fff;
+	}
+	.sc-presence-avatar::after {
+		content: "";
+		position: absolute;
+		right: -1px;
+		bottom: -1px;
+		width: 7px;
+		height: 7px;
+		border-radius: 50%;
+		background: ##2f9e5b;
+		border: 2px solid var(--ui-surface-2);
+	}
+	.sc-presence-name {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
 
 	.sc-note {
-		margin-top: 12px;
+		margin-top: 14px;
 		font-size: 0.8rem;
 		color: var(--text-muted);
 		text-align: center;
@@ -232,10 +373,11 @@
 		.sc-channels, .sc-presence {
 			width: auto;
 			border: none;
-			border-bottom: 1px solid var(--main-border-color);
+			border-bottom: 1px solid var(--ui-border-subtle);
 		}
 		.sc-channel-list { flex-direction: row; flex-wrap: wrap; }
 		.sc-presence-list { flex-direction: row; flex-wrap: wrap; }
+		.sc-msg-row { max-width: 92%; }
 	}
 </style>
 
@@ -263,8 +405,25 @@
 	var RECONNECT_DELAY_MS = 2000;
 	var displayName = #JSONSerialize( data.displayName )#;
 
+	var AVATAR_COLORS = [ "##7c3aed", "##06b6d4", "##f59e0b", "##ef4444", "##10b981", "##ec4899", "##3b82f6", "##84cc16" ];
+
+	function avatarColor( name ) {
+		var hash = 0;
+		for ( var i = 0; i < name.length; i++ ) hash = ( hash * 31 + name.charCodeAt( i ) ) >>> 0;
+		return AVATAR_COLORS[ hash % AVATAR_COLORS.length ];
+	}
+
+	function initials( name ) {
+		var parts = name.trim().split( /\s+/ ).filter( Boolean );
+		if ( !parts.length ) return "?";
+		var s = parts[ 0 ][ 0 ];
+		if ( parts.length > 1 ) s += parts[ parts.length - 1 ][ 0 ];
+		return s.toUpperCase();
+	}
+
 	var statusEl = document.getElementById( "status" );
 	var presenceListEl = document.getElementById( "presenceList" );
+	var presenceCountEl = document.getElementById( "presenceCount" );
 	var messagesEl = document.getElementById( "messages" );
 	var composer = document.getElementById( "composer" );
 	var composerInput = document.getElementById( "composerInput" );
@@ -282,26 +441,60 @@
 		return div.innerHTML;
 	}
 
-	function addLine( className, html ) {
-		var line = document.createElement( "div" );
-		line.className = "sc-msg " + className;
-		line.innerHTML = html;
-		messagesEl.appendChild( line );
+	function scrollToBottom() {
 		messagesEl.scrollTop = messagesEl.scrollHeight;
 	}
 
 	function addMessage( from, text ) {
-		addLine( "", '<span class="sc-msg-from">' + escapeHtml( from ) + '</span><span class="sc-msg-text">' + escapeHtml( text ) + '</span>' );
+		var isOwn = from === displayName;
+		var row = document.createElement( "div" );
+		row.className = "sc-msg-row" + ( isOwn ? " is-own" : "" );
+
+		var avatar = document.createElement( "div" );
+		avatar.className = "sc-avatar";
+		avatar.style.background = avatarColor( from );
+		avatar.textContent = initials( from );
+
+		var bubble = document.createElement( "div" );
+		bubble.className = "sc-bubble";
+		bubble.innerHTML = ( isOwn ? "" : '<span class="sc-bubble-from">' + escapeHtml( from ) + '</span>' )
+			+ '<span class="sc-bubble-text">' + escapeHtml( text ) + '</span>';
+
+		row.appendChild( avatar );
+		row.appendChild( bubble );
+		messagesEl.appendChild( row );
+		scrollToBottom();
 	}
 
-	function addSystem( text ) { addLine( "is-system", escapeHtml( text ) ); }
-	function addError( text ) { addLine( "is-error", escapeHtml( text ) ); }
+	function addLine( className, text ) {
+		var line = document.createElement( "div" );
+		line.className = className;
+		line.textContent = text;
+		messagesEl.appendChild( line );
+		scrollToBottom();
+	}
+
+	function addSystem( text ) { addLine( "sc-line-system", text ); }
+	function addError( text ) { addLine( "sc-line-error", text ); }
 
 	function renderPresence( members ) {
+		presenceCountEl.textContent = members.length ? "(" + members.length + ")" : "";
 		presenceListEl.innerHTML = "";
 		members.forEach( function ( name ) {
 			var li = document.createElement( "li" );
-			li.textContent = name;
+			li.className = "sc-presence-item";
+
+			var avatar = document.createElement( "span" );
+			avatar.className = "sc-presence-avatar";
+			avatar.style.background = avatarColor( name );
+			avatar.textContent = initials( name );
+
+			var label = document.createElement( "span" );
+			label.className = "sc-presence-name";
+			label.textContent = name;
+
+			li.appendChild( avatar );
+			li.appendChild( label );
 			presenceListEl.appendChild( li );
 		} );
 	}
