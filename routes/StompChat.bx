@@ -1,15 +1,16 @@
 /**
- * /games/stomp-chat — a single-room chat over boxlang-express's STOMP
+ * /games/stomp-chat — a multi-channel chat over boxlang-express's STOMP
  * pub/sub layer (boxExpressStomp()), gated behind the site's own login —
  * deliberately separate from routes/Chat.bx's anonymous raw-app.ws() demo,
  * both to keep that one's "no auth at all" story intact and to show the
  * other end of the spectrum: every CONNECT/SUBSCRIBE/SEND on this socket
  * re-checks a real site session, not just the page load.
  *
- * Needs both an HTTP route (the gated page itself) and a direct app.ws()
- * registration (STOMP's handler()), so — like routes/Chat.bx — this class
- * takes `app` rather than exposing only a `.router`; app.bxs still mounts
- * `.router` via app.use() for the HTTP side.
+ * Needs both an HTTP route (the gated page, plus an admin-only channel-
+ * creation POST) and a direct app.ws() registration (STOMP's handler()),
+ * so — like routes/Chat.bx — this class takes `app` rather than exposing
+ * only a `.router`; app.bxs still mounts `.router` via app.use() for the
+ * HTTP side.
  *
  * Session lookup: app.ws() connections bypass the whole use() middleware
  * chain (see boxlang-express's WebSockets doc), so there's no req.session
@@ -33,31 +34,51 @@
  * boundary as any authenticated form's freeform text field, not a
  * broker-enforced identity claim.
  *
+ * Channels: variables.channels is a plain in-memory array — not
+ * persisted, cleared on the next deploy, same trade-off as every other
+ * demo under /games. Only an admin (req.session.manage_user.role ==
+ * "admin") can create one, via POST /games/stomp-chat/channels — CSRF-
+ * protected automatically (routes/Manage.bx mounts boxExpressCsrf() with
+ * no path prefix, so it already covers this route; req.csrfToken() just
+ * works here the same as it does on any /manage form).
+ *
+ * A connection only ever occupies one channel for its whole lifetime.
+ * Switching channels client-side means closing the socket and opening a
+ * fresh one subscribed to the new destination, rather than a STOMP
+ * UNSUBSCRIBE — boxExpressStomp() gives authorize() a hook for SUBSCRIBE
+ * and SEND, but none at all for UNSUBSCRIBE, so there's no clean way to
+ * hear "this connection just left channel X but kept the socket open."
+ * A full reconnect sidesteps that entirely: the old channel's presence
+ * cleanup runs through the normal onClose path (see onConnect()), and
+ * the new channel's presence add runs through the normal SUBSCRIBE path.
+ *
  * Presence: boxExpressStomp() has no concept of this itself (see the
  * WebSockets doc's "What this isn't") — it's tracked entirely in this
- * class, in variables.presence (connId -> displayName), added to on a
- * successful SUBSCRIBE (inside authorize(), the one point that already
- * knows both "this connection is joining the lounge" and who they are)
- * and removed on disconnect. The disconnect half needs a small trick:
- * WebSocketConnection.onClose() only holds a single callback slot (plain
- * assignment, not a list), and Stomp.bx's own handler() already claims it
- * for subscription cleanup — calling onClose() again ourselves would
- * silently overwrite that and leak Stomp's internal subscriber registry.
- * onConnect() below hands Stomp a thin wrapper connection instead of the
- * real one, whose onClose() appends to a local array whichever this
- * connection's own callbacks — both Stomp's cleanup and this class's
- * presence removal actually run, instead of the second registration
- * clobbering the first.
+ * class, per channel, in variables.presence (connId -> {channel,
+ * displayName}), added to on a successful SUBSCRIBE (inside authorize(),
+ * the one point that already knows both "this connection is joining a
+ * channel" and who they are) and removed on disconnect. The disconnect
+ * half needs a small trick: WebSocketConnection.onClose() only holds a
+ * single callback slot (plain assignment, not a list), and Stomp.bx's
+ * own handler() already claims it for subscription cleanup — calling
+ * onClose() again ourselves would silently overwrite that and leak
+ * Stomp's internal subscriber registry. onConnect() below hands Stomp a
+ * thin wrapper connection instead of the real one, whose onClose()
+ * appends to a local array instead of overwriting — both Stomp's cleanup
+ * and this class's presence removal actually run.
  */
 class {
 
-	variables.app          = "";
-	variables.siteDefaults = "";
-	variables.sessionStore = "";
-	variables.stomp         = "";
-	variables.presence      = {};
-	variables.presenceLock  = "stomp-chat-presence";
-	variables.DESTINATION   = "/topic/stomp-lounge";
+	variables.app             = "";
+	variables.siteDefaults    = "";
+	variables.sessionStore    = "";
+	variables.stomp           = "";
+	variables.channels        = [ "general" ];
+	variables.channelsLock    = "stomp-chat-channels";
+	variables.presence        = {};
+	variables.presenceLock    = "stomp-chat-presence";
+	variables.DEST_PREFIX     = "/topic/stomp-chat/";
+	variables.MAX_CHANNEL_LEN = 30;
 
 	function init( required app, required siteDefaults ){
 		variables.app          = arguments.app;
@@ -66,6 +87,7 @@ class {
 
 		this.router = boxExpressRouter();
 		this.router.get( "/games/stomp-chat", ( req, res, next ) => page( req, res, next ) );
+		this.router.post( "/games/stomp-chat/channels", ( req, res, next ) => createChannel( req, res, next ) );
 
 		variables.stomp = boxExpressStomp( {
 			authenticate: ( login, passcode, host, connection ) => authenticate( connection ),
@@ -109,9 +131,9 @@ class {
 		variables.stomp.handler()( wrapped );
 	}
 
-	// GET /games/stomp-chat — same "sign in with Google, then come back
-	// here" pattern routes/Manage.bx uses for /manage, but via the
-	// general-purpose /auth/google (routes/Auth.bx) rather than the
+	// GET /games/stomp-chat?channel=... — same "sign in with Google, then
+	// come back here" pattern routes/Manage.bx uses for /manage, but via
+	// the general-purpose /auth/google (routes/Auth.bx) rather than the
 	// CMS-only login, since any signed-in visitor should see this, not
 	// just staff.
 	//
@@ -132,12 +154,71 @@ class {
 			return;
 		}
 
+		var channelList    = channelsSnapshot();
+		var requested       = trim( req.query.channel ?: "" );
+		var currentChannel  = channelList.contains( requested ) ? requested : channelList[ 1 ];
+
 		res.render( "games/stomp-chat", {
-			pageTitle    : "STOMP Chat",
-			canonicalUrl : variables.siteDefaults.canonicalUrl( req.path ),
-			meta         : variables.siteDefaults.defaultMeta( req.path ),
-			displayName  : displayName
+			pageTitle      : "STOMP Chat",
+			canonicalUrl   : variables.siteDefaults.canonicalUrl( req.path ),
+			meta           : variables.siteDefaults.defaultMeta( req.path ),
+			displayName    : displayName,
+			channels       : channelList,
+			currentChannel : currentChannel,
+			isAdmin        : isAdminSession( req.session ),
+			csrfToken      : req.csrfToken()
 		} );
+	}
+
+	// POST /games/stomp-chat/channels — admin-only. CSRF is already
+	// enforced site-wide (see class docblock), so no separate check here.
+	function createChannel( req, res, next ){
+		if ( !isAdminSession( req.session ) ){
+			res.status( 403 ).json( { success: false, error: "Admins only." } );
+			return;
+		}
+
+		var name = _normalizeChannelName( req.body.name ?: "" );
+		if ( !len( name ) ){
+			res.status( 400 ).json( { success: false, error: "Invalid channel name." } );
+			return;
+		}
+
+		lock name="#variables.channelsLock#" type="exclusive" timeout="5" {
+			if ( variables.channels.contains( name ) ){
+				res.status( 409 ).json( { success: false, error: "That channel already exists." } );
+				return;
+			}
+			variables.channels.append( name );
+		}
+
+		res.json( { success: true, channel: name, channels: channelsSnapshot() } );
+	}
+
+	// Lowercase, dash-joined, alphanumeric-only, length-capped — "" if
+	// nothing usable survives. Deliberately restrictive rather than
+	// merely-safe: this name becomes part of a STOMP destination string
+	// (variables.DEST_PREFIX & name), so it stays out of any character
+	// class STOMP's own header escaping would otherwise have to think
+	// about at all.
+	private function _normalizeChannelName( raw ){
+		var name = lCase( trim( raw ) );
+		name = reReplace( name, "[^a-z0-9]+", "-", "all" );
+		name = reReplace( name, "^-+|-+$", "", "all" );
+		if ( !len( name ) ){
+			return "";
+		}
+		return left( name, variables.MAX_CHANNEL_LEN );
+	}
+
+	function channelsSnapshot(){
+		lock name="#variables.channelsLock#" type="readonly" timeout="5" {
+			return duplicate( variables.channels );
+		}
+	}
+
+	function isAdminSession( sessionData ){
+		return !isNull( sessionData ) && isStruct( sessionData.manage_user ?: "" ) && ( sessionData.manage_user.role ?: "" ) == "admin";
 	}
 
 	// The display name off whichever of the two independent session
@@ -180,16 +261,22 @@ class {
 	// STOMP SUBSCRIBE/SEND — re-checked per action (not just once at
 	// CONNECT), so a session that gets destroyed mid-connection (an
 	// explicit sign-out in another tab) stops working on this one's very
-	// next action rather than staying live until reconnect. Only one
-	// destination exists at all; anything else is refused outright.
+	// next action rather than staying live until reconnect. destination
+	// must be variables.DEST_PREFIX plus a channel currently in
+	// variables.channels — anything else is refused outright, including
+	// a channel that existed when the page was rendered but has since...
+	// (channels are never removed today, so that specific case can't
+	// actually happen yet, but the check is against live state regardless,
+	// not a snapshot taken at CONNECT time).
 	//
 	// A successful SUBSCRIBE also joins presence here — the one point
-	// that already has both "this connection is entering the lounge" and
+	// that already has both "this connection is entering channel X" and
 	// a resolved display name for it. SEND (access == "publish") doesn't
 	// touch presence at all; a connection can only join once, on its one
 	// SUBSCRIBE, not once per message.
 	function authorize( destination, access, connection ){
-		if ( destination != variables.DESTINATION ){
+		var channel = _channelFromDestination( destination );
+		if ( !len( channel ) ){
 			return false;
 		}
 		var displayName = displayNameFor( sessionFor( connection ) );
@@ -198,46 +285,71 @@ class {
 		}
 
 		if ( access == "subscribe" ){
-			onJoin( connection.connId, displayName );
+			onJoin( connection.connId, channel, displayName );
 		}
 
 		return true;
 	}
 
+	// mid()'s count computed exactly (not just "the rest of the string"),
+	// and a length check before any left()/mid() call at all — both
+	// following the same left()/right()/mid() zero-count landmine already
+	// documented in boxlang-express's own StompFrameCodec.bx.
+	function _channelFromDestination( destination ){
+		var prefixLen = len( variables.DEST_PREFIX );
+		if ( len( destination ) <= prefixLen ){
+			return "";
+		}
+		if ( left( destination, prefixLen ) != variables.DEST_PREFIX ){
+			return "";
+		}
+		var channel = mid( destination, prefixLen + 1, len( destination ) - prefixLen );
+		return channelsSnapshot().contains( channel ) ? channel : "";
+	}
+
 	// Adds this connection to presence, then broadcasts the updated
-	// roster — deferred via runAsync() rather than sent inline here.
-	// authorize() runs *before* Stomp.bx registers the subscription (see
-	// _handleSubscribe: it calls authorizeFn(), then only on a true
-	// return adds the subscriber to its own registry), so a synchronous
-	// stomp.send() from inside authorize() would race that registration
-	// and never reach the very connection that just joined — its first
-	// roster snapshot would always be missing itself. Confirmed directly:
-	// a synchronous version of this send worked for everyone already in
-	// the room but the joiner's own client never saw it. runAsync() pushes
-	// the actual send onto another thread, which loses that race every
-	// time against Stomp's own registration step (in-memory, no I/O,
-	// completes as soon as authorize() returns) immediately following.
-	function onJoin( connId, displayName ){
+	// roster for that channel — deferred via runAsync() rather than sent
+	// inline here. authorize() runs *before* Stomp.bx registers the
+	// subscription (see _handleSubscribe: it calls authorizeFn(), then
+	// only on a true return adds the subscriber to its own registry), so
+	// a synchronous stomp.send() from inside authorize() would race that
+	// registration and never reach the very connection that just joined —
+	// its first roster snapshot would always be missing itself. Confirmed
+	// directly: a synchronous version of this send worked for everyone
+	// already in the channel but the joiner's own client never saw it.
+	// runAsync() pushes the actual send onto another thread, which loses
+	// that race every time against Stomp's own registration step
+	// (in-memory, no I/O, completes as soon as authorize() returns)
+	// immediately following.
+	function onJoin( connId, channel, displayName ){
 		lock name="#variables.presenceLock#" type="exclusive" timeout="5" {
-			variables.presence[ connId ] = displayName;
+			variables.presence[ connId ] = { channel: channel, displayName: displayName };
 		}
 		runAsync( () => {
-			variables.stomp.send( variables.DESTINATION, { type: "presence", members: currentNames() } );
+			variables.stomp.send( variables.DEST_PREFIX & channel, { type: "presence", members: namesInChannel( channel ) } );
 		} );
 	}
 
 	function onLeave( connId ){
+		var channel = "";
 		lock name="#variables.presenceLock#" type="exclusive" timeout="5" {
-			structDelete( variables.presence, connId );
+			if ( structKeyExists( variables.presence, connId ) ){
+				channel = variables.presence[ connId ].channel;
+				structDelete( variables.presence, connId );
+			}
 		}
-		variables.stomp.send( variables.DESTINATION, { type: "presence", members: currentNames() } );
+		if ( len( channel ) ){
+			variables.stomp.send( variables.DEST_PREFIX & channel, { type: "presence", members: namesInChannel( channel ) } );
+		}
 	}
 
-	function currentNames(){
+	function namesInChannel( channel ){
 		var names = [];
 		lock name="#variables.presenceLock#" type="readonly" timeout="5" {
 			for ( var connId in variables.presence ){
-				names.append( variables.presence[ connId ] );
+				if ( variables.presence[ connId ].channel == channel ){
+					names.append( variables.presence[ connId ].displayName );
+				}
 			}
 		}
 		return names;
