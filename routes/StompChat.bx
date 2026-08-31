@@ -32,13 +32,32 @@
  * display string into their own outgoing message, the same trust
  * boundary as any authenticated form's freeform text field, not a
  * broker-enforced identity claim.
+ *
+ * Presence: boxExpressStomp() has no concept of this itself (see the
+ * WebSockets doc's "What this isn't") — it's tracked entirely in this
+ * class, in variables.presence (connId -> displayName), added to on a
+ * successful SUBSCRIBE (inside authorize(), the one point that already
+ * knows both "this connection is joining the lounge" and who they are)
+ * and removed on disconnect. The disconnect half needs a small trick:
+ * WebSocketConnection.onClose() only holds a single callback slot (plain
+ * assignment, not a list), and Stomp.bx's own handler() already claims it
+ * for subscription cleanup — calling onClose() again ourselves would
+ * silently overwrite that and leak Stomp's internal subscriber registry.
+ * onConnect() below hands Stomp a thin wrapper connection instead of the
+ * real one, whose onClose() appends to a local array whichever this
+ * connection's own callbacks — both Stomp's cleanup and this class's
+ * presence removal actually run, instead of the second registration
+ * clobbering the first.
  */
 class {
 
 	variables.app          = "";
 	variables.siteDefaults = "";
 	variables.sessionStore = "";
-	variables.DESTINATION  = "/topic/stomp-lounge";
+	variables.stomp         = "";
+	variables.presence      = {};
+	variables.presenceLock  = "stomp-chat-presence";
+	variables.DESTINATION   = "/topic/stomp-lounge";
 
 	function init( required app, required siteDefaults ){
 		variables.app          = arguments.app;
@@ -48,14 +67,46 @@ class {
 		this.router = boxExpressRouter();
 		this.router.get( "/games/stomp-chat", ( req, res, next ) => page( req, res, next ) );
 
-		var stomp = boxExpressStomp( {
+		variables.stomp = boxExpressStomp( {
 			authenticate: ( login, passcode, host, connection ) => authenticate( connection ),
-			authorize   : ( login, destination, access, connection ) => authorize( destination, connection )
+			authorize   : ( login, destination, access, connection ) => authorize( destination, access, connection )
 		} );
 
-		variables.app.ws( "/games/stomp-chat/socket", stomp.handler() );
+		variables.app.ws( "/games/stomp-chat/socket", ( connection ) => onConnect( connection ) );
 
 		return this;
+	}
+
+	// Wraps the real connection so this class can add its own onClose
+	// callback (presence removal) alongside Stomp's own (subscription
+	// cleanup) instead of one overwriting the other — see class docblock.
+	// Every other member just delegates straight through to the real
+	// connection; only onClose's behavior actually differs.
+	function onConnect( connection ){
+		var connId         = createUUID();
+		var closeCallbacks = [];
+
+		var wrapped = {
+			connId    : connId,
+			cookies   : connection.cookies,
+			headers   : connection.headers,
+			get       : ( name ) => connection.get( name ),
+			onMessage : ( cb ) => connection.onMessage( cb ),
+			onClose   : ( cb ) => closeCallbacks.append( cb ),
+			send      : ( data ) => connection.send( data ),
+			close     : () => connection.close(),
+			isClosed  : () => connection.isClosed()
+		};
+
+		connection.onClose( ( code, reason ) => {
+			for ( var cb in closeCallbacks ){
+				cb( code, reason );
+			}
+		} );
+
+		wrapped.onClose( ( code, reason ) => onLeave( connId ) );
+
+		variables.stomp.handler()( wrapped );
 	}
 
 	// GET /games/stomp-chat — same "sign in with Google, then come back
@@ -131,11 +182,65 @@ class {
 	// explicit sign-out in another tab) stops working on this one's very
 	// next action rather than staying live until reconnect. Only one
 	// destination exists at all; anything else is refused outright.
-	function authorize( destination, connection ){
+	//
+	// A successful SUBSCRIBE also joins presence here — the one point
+	// that already has both "this connection is entering the lounge" and
+	// a resolved display name for it. SEND (access == "publish") doesn't
+	// touch presence at all; a connection can only join once, on its one
+	// SUBSCRIBE, not once per message.
+	function authorize( destination, access, connection ){
 		if ( destination != variables.DESTINATION ){
 			return false;
 		}
-		return authenticate( connection );
+		var displayName = displayNameFor( sessionFor( connection ) );
+		if ( !len( displayName ) ){
+			return false;
+		}
+
+		if ( access == "subscribe" ){
+			onJoin( connection.connId, displayName );
+		}
+
+		return true;
+	}
+
+	// Adds this connection to presence, then broadcasts the updated
+	// roster — deferred via runAsync() rather than sent inline here.
+	// authorize() runs *before* Stomp.bx registers the subscription (see
+	// _handleSubscribe: it calls authorizeFn(), then only on a true
+	// return adds the subscriber to its own registry), so a synchronous
+	// stomp.send() from inside authorize() would race that registration
+	// and never reach the very connection that just joined — its first
+	// roster snapshot would always be missing itself. Confirmed directly:
+	// a synchronous version of this send worked for everyone already in
+	// the room but the joiner's own client never saw it. runAsync() pushes
+	// the actual send onto another thread, which loses that race every
+	// time against Stomp's own registration step (in-memory, no I/O,
+	// completes as soon as authorize() returns) immediately following.
+	function onJoin( connId, displayName ){
+		lock name="#variables.presenceLock#" type="exclusive" timeout="5" {
+			variables.presence[ connId ] = displayName;
+		}
+		runAsync( () => {
+			variables.stomp.send( variables.DESTINATION, { type: "presence", members: currentNames() } );
+		} );
+	}
+
+	function onLeave( connId ){
+		lock name="#variables.presenceLock#" type="exclusive" timeout="5" {
+			structDelete( variables.presence, connId );
+		}
+		variables.stomp.send( variables.DESTINATION, { type: "presence", members: currentNames() } );
+	}
+
+	function currentNames(){
+		var names = [];
+		lock name="#variables.presenceLock#" type="readonly" timeout="5" {
+			for ( var connId in variables.presence ){
+				names.append( variables.presence[ connId ] );
+			}
+		}
+		return names;
 	}
 
 }

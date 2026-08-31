@@ -10,6 +10,7 @@
 	<div class="sc-app">
 		<div class="sc-topbar">
 			<span class="sc-status" id="status">connecting&hellip;</span>
+			<span class="sc-roster" id="roster"></span>
 			<span class="sc-me">Signed in as <strong>#encodeForHTML( data.displayName )#</strong> &middot; <a href="/auth/logout?redirect=/games/stomp-chat">sign out</a></span>
 		</div>
 
@@ -50,6 +51,13 @@
 	}
 	.sc-status[data-state="live"] { color: ##2f9e5b; border-color: rgba(47, 158, 91, 0.35); }
 	.sc-status[data-state="error"] { color: ##d64545; border-color: rgba(214, 69, 69, 0.35); }
+	.sc-roster {
+		font-size: 0.8rem;
+		color: var(--text-secondary);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
 	.sc-me {
 		margin-left: auto;
 		font-size: 0.85rem;
@@ -120,6 +128,7 @@
 	var displayName = #JSONSerialize( data.displayName )#;
 
 	var statusEl = document.getElementById( "status" );
+	var rosterEl = document.getElementById( "roster" );
 	var messagesEl = document.getElementById( "messages" );
 	var composer = document.getElementById( "composer" );
 	var composerInput = document.getElementById( "composerInput" );
@@ -151,6 +160,12 @@
 
 	function addSystem( text ) { addLine( "is-system", escapeHtml( text ) ); }
 	function addError( text ) { addLine( "is-error", escapeHtml( text ) ); }
+
+	function renderRoster( members ) {
+		rosterEl.textContent = members.length
+			? members.length + " here: " + members.join( ", " )
+			: "just you";
+	}
 
 	// STOMP 1.2 frame wire format: "COMMAND\nheader:value\n\n<body>\0"
 	function sendFrame( command, headers, body ) {
@@ -191,7 +206,11 @@
 			} else if ( frame.command === "MESSAGE" ) {
 				try {
 					var data = JSON.parse( frame.body );
-					addMessage( data.from, data.text );
+					if ( data.type === "presence" ) {
+						renderRoster( data.members );
+					} else {
+						addMessage( data.from, data.text );
+					}
 				} catch ( e ) { /* ignore malformed body */ }
 			} else if ( frame.command === "ERROR" ) {
 				addError( frame.headers.message || "Connection error." );
@@ -211,7 +230,7 @@
 		ev.preventDefault();
 		var text = composerInput.value.trim();
 		if ( !text || !socket || socket.readyState !== WebSocket.OPEN ) return;
-		sendFrame( "SEND", { destination: DESTINATION, "content-type": "application/json" }, JSON.stringify( { from: displayName, text: text } ) );
+		sendFrame( "SEND", { destination: DESTINATION, "content-type": "application/json" }, JSON.stringify( { type: "message", from: displayName, text: text } ) );
 		composerInput.value = "";
 	} );
 
