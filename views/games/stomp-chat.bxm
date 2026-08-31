@@ -429,6 +429,7 @@
 	var composerInput = document.getElementById( "composerInput" );
 
 	var socket = null;
+	var connectingLine = null;
 
 	function setStatus( text, state ) {
 		statusEl.textContent = text;
@@ -472,10 +473,11 @@
 		line.textContent = text;
 		messagesEl.appendChild( line );
 		scrollToBottom();
+		return line;
 	}
 
-	function addSystem( text ) { addLine( "sc-line-system", text ); }
-	function addError( text ) { addLine( "sc-line-error", text ); }
+	function addSystem( text ) { return addLine( "sc-line-system", text ); }
+	function addError( text ) { return addLine( "sc-line-error", text ); }
 
 	function renderPresence( members ) {
 		presenceCountEl.textContent = members.length ? "(" + members.length + ")" : "";
@@ -534,6 +536,10 @@
 			var frame = parseFrame( ev.data );
 			if ( frame.command === "CONNECTED" ) {
 				setStatus( "live", "live" );
+				if ( connectingLine ) {
+					connectingLine.remove();
+					connectingLine = null;
+				}
 				sendFrame( "SUBSCRIBE", { destination: DESTINATION, id: "sub-0" } );
 			} else if ( frame.command === "MESSAGE" ) {
 				try {
@@ -601,7 +607,7 @@
 		} );
 	}
 
-	addSystem( "Connecting as " + displayName + "…" );
+	connectingLine = addSystem( "Connecting as " + displayName + "…" );
 	connect();
 })();
 </script>
