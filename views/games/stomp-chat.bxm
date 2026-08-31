@@ -12,7 +12,9 @@
 			<p class="sc-pane-title">Channels</p>
 			<nav class="sc-channel-list">
 				<bx:loop array="#data.channels#" item="channel">
-					<a href="/games/stomp-chat?channel=#encodeForHTMLAttribute( channel )#" class="sc-channel-link#( channel == data.currentChannel ? ' is-active' : '' )#">###encodeForHTML( channel )#</a>
+					<a href="/games/stomp-chat?channel=#encodeForHTMLAttribute( channel )#" data-channel="#encodeForHTMLAttribute( channel )#" class="sc-channel-link#( channel == data.currentChannel ? ' is-active' : '' )#">
+						<span class="sc-channel-link-name">###encodeForHTML( channel )#</span>
+					</a>
 				</bx:loop>
 			</nav>
 			<bx:if data.isAdmin>
@@ -39,6 +41,7 @@
 			</div>
 
 			<div class="sc-messages" id="messages"></div>
+			<p class="sc-typing" id="typingIndicator" hidden></p>
 
 			<form class="sc-composer" id="composer">
 				<input type="text" id="composerInput" class="sc-composer-input" maxlength="500" placeholder="Message ###encodeForHTMLAttribute( data.currentChannel )#" autocomplete="off">
@@ -114,7 +117,10 @@
 		gap: 2px;
 	}
 	.sc-channel-link {
-		display: block;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 6px;
 		padding: 7px 10px;
 		border-radius: 10px;
 		font-size: 0.88rem;
@@ -123,6 +129,21 @@
 		text-decoration: none;
 		border-left: 3px solid transparent;
 		transition: background 0.15s ease, color 0.15s ease;
+	}
+	.sc-channel-link-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.sc-channel-badge {
+		flex: 0 0 auto;
+		background: var(--sc-gradient);
+		color: ##fff;
+		font-size: 0.68rem;
+		font-weight: 800;
+		min-width: 16px;
+		height: 16px;
+		border-radius: 999px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0 4px;
 	}
 	.sc-channel-link:hover { background: var(--ui-border-subtle); }
 	.sc-channel-link.is-active {
@@ -344,6 +365,16 @@
 	.sc-line-system { color: var(--text-muted); background: var(--ui-surface-2); }
 	.sc-line-error { color: ##d64545; background: rgba(214, 69, 69, 0.1); }
 
+	.sc-typing {
+		margin: 0;
+		padding: 0 20px 4px;
+		font-size: 0.78rem;
+		font-style: italic;
+		color: var(--text-muted);
+		min-height: 1.2em;
+	}
+	.sc-typing[hidden] { display: none; }
+
 	.sc-composer {
 		display: flex;
 		gap: 10px;
@@ -483,7 +514,10 @@
 	var MY_USER_ID = #JSONSerialize( data.userId )#;
 	var DM_PREFIX = "/queue/stomp-chat/dm/";
 	var MY_INBOX = DM_PREFIX + MY_USER_ID;
+	var ACTIVITY_DEST = "/topic/stomp-chat-activity";
 	var RECONNECT_DELAY_MS = 2000;
+	var TYPING_TIMEOUT_MS = 3000;
+	var TYPING_SEND_THROTTLE_MS = 2000;
 	var displayName = #JSONSerialize( data.displayName )#;
 
 	var AVATAR_COLORS = [ "##7c3aed", "##06b6d4", "##f59e0b", "##ef4444", "##10b981", "##ec4899", "##3b82f6", "##84cc16" ];
@@ -510,6 +544,7 @@
 	var presenceListEl = document.getElementById( "presenceList" );
 	var presenceCountEl = document.getElementById( "presenceCount" );
 	var messagesEl = document.getElementById( "messages" );
+	var typingIndicatorEl = document.getElementById( "typingIndicator" );
 	var composer = document.getElementById( "composer" );
 	var composerInput = document.getElementById( "composerInput" );
 
@@ -523,6 +558,9 @@
 	var view = { type: "channel" };
 	var channelMessages = [];
 	var dmThreads = {}; // userId -> { displayName, messages: [{from,text}], unread }
+	var unreadByChannel = {}; // channel -> count, for channels this connection isn't subscribed to
+	var typingNames = {}; // displayName -> timeout id, for whichever destination is currently active
+	var lastTypingSentAt = 0;
 
 	function setStatus( text, state ) {
 		statusEl.textContent = text;
@@ -622,9 +660,68 @@
 		} );
 	}
 
+	// Renders (or clears) the unread badge on one channel's sidebar link —
+	// only ever a channel other than CHANNEL, since this connection only
+	// hears about activity elsewhere (see ACTIVITY_DEST in
+	// routes/StompChat.bx); the current channel's own messages arrive as
+	// real MESSAGE frames, not activity pings.
+	function renderChannelBadge( channel ) {
+		var link = document.querySelector( '.sc-channel-link[data-channel="' + CSS.escape( channel ) + '"]' );
+		if ( !link ) return;
+		var existing = link.querySelector( ".sc-channel-badge" );
+		if ( existing ) existing.remove();
+		var count = unreadByChannel[ channel ] || 0;
+		if ( count > 0 ) {
+			var badge = document.createElement( "span" );
+			badge.className = "sc-channel-badge";
+			badge.textContent = count;
+			link.appendChild( badge );
+		}
+	}
+
+	function renderTyping() {
+		var names = Object.keys( typingNames );
+		if ( !names.length ) {
+			typingIndicatorEl.hidden = true;
+			typingIndicatorEl.textContent = "";
+			return;
+		}
+		var text;
+		if ( names.length === 1 ) {
+			text = names[ 0 ] + " is typing…";
+		} else if ( names.length === 2 ) {
+			text = names[ 0 ] + " and " + names[ 1 ] + " are typing…";
+		} else {
+			text = names[ 0 ] + ", " + names[ 1 ] + " and " + ( names.length - 2 ) + " other" + ( names.length - 2 === 1 ? "" : "s" ) + " are typing…";
+		}
+		typingIndicatorEl.textContent = text;
+		typingIndicatorEl.hidden = false;
+	}
+
+	function noteTyping( name ) {
+		if ( name === displayName ) return; // never show our own typing back to us
+		if ( typingNames[ name ] ) clearTimeout( typingNames[ name ] );
+		typingNames[ name ] = setTimeout( function () {
+			delete typingNames[ name ];
+			renderTyping();
+		}, TYPING_TIMEOUT_MS );
+		renderTyping();
+	}
+
+	function clearAllTyping() {
+		Object.keys( typingNames ).forEach( function ( name ) { clearTimeout( typingNames[ name ] ); } );
+		typingNames = {};
+		renderTyping();
+	}
+
+	function currentTypingDestination() {
+		return view.type === "dm" ? ( DM_PREFIX + view.userId ) : DESTINATION;
+	}
+
 	function openDm( userId, threadDisplayName ) {
 		ensureDmThread( userId, threadDisplayName );
 		dmThreads[ userId ].unread = 0;
+		clearAllTyping();
 		view = { type: "dm", userId: userId, displayName: threadDisplayName };
 		viewTitleEl.textContent = "Direct message with " + threadDisplayName;
 		backBtn.hidden = false;
@@ -634,6 +731,7 @@
 	}
 
 	function openChannel() {
+		clearAllTyping();
 		view = { type: "channel" };
 		viewTitleEl.innerHTML = '<span class="sc-channel-hash">##</span>' + escapeHtml( CHANNEL );
 		backBtn.hidden = true;
@@ -723,6 +821,7 @@
 				}
 				sendFrame( "SUBSCRIBE", { destination: DESTINATION, id: "sub-0" } );
 				sendFrame( "SUBSCRIBE", { destination: MY_INBOX, id: "sub-dm" } );
+				sendFrame( "SUBSCRIBE", { destination: ACTIVITY_DEST, id: "sub-activity" } );
 			} else if ( frame.command === "MESSAGE" ) {
 				try {
 					var data = JSON.parse( frame.body );
@@ -730,6 +829,24 @@
 						renderPresence( data.members );
 					} else if ( data.type === "history" ) {
 						data.messages.forEach( function ( m ) { addChannelMessage( m.from, m.text ); } );
+					} else if ( data.type === "system" ) {
+						addSystem( data.text );
+					} else if ( data.type === "activity" ) {
+						if ( data.channel !== CHANNEL ) {
+							unreadByChannel[ data.channel ] = ( unreadByChannel[ data.channel ] || 0 ) + 1;
+							renderChannelBadge( data.channel );
+						}
+					} else if ( data.type === "typing" ) {
+						// For a DM ping, check the *sender's* id against
+						// whichever thread is open — frame.headers.destination
+						// is always MY_INBOX for any DM typing ping addressed
+						// to me, regardless of who sent it, so it can't tell
+						// two different people typing to me apart.
+						if ( view.type === "channel" && frame.headers.destination === DESTINATION ) {
+							noteTyping( data.from );
+						} else if ( view.type === "dm" && data.fromId === view.userId ) {
+							noteTyping( data.from );
+						}
 					} else if ( data.type === "dm" ) {
 						addDmMessage( data.fromId, data.from, data.from, data.text );
 					} else {
@@ -750,20 +867,34 @@
 		socket.addEventListener( "error", function () { socket.close(); } );
 	}
 
+	// "from"/"fromId" aren't sent here at all — routes/StompChat.bx stamps
+	// both server-side from the session on every SEND, discarding whatever
+	// a client claims (see its "Identity stamping" docblock), so there's
+	// nothing this client can usefully assert about its own identity on
+	// the wire.
 	composer.addEventListener( "submit", function ( ev ) {
 		ev.preventDefault();
 		var text = composerInput.value.trim();
 		if ( !text || !socket || socket.readyState !== WebSocket.OPEN ) return;
+		clearAllTyping();
 
 		if ( view.type === "dm" ) {
 			var targetId = view.userId;
 			sendFrame( "SEND", { destination: DM_PREFIX + targetId, "content-type": "application/json" },
-				JSON.stringify( { type: "dm", from: displayName, fromId: MY_USER_ID, text: text } ) );
+				JSON.stringify( { type: "dm", text: text } ) );
 			addDmMessage( targetId, view.displayName, displayName, text ); // optimistic echo — see class docblock
 		} else {
-			sendFrame( "SEND", { destination: DESTINATION, "content-type": "application/json" }, JSON.stringify( { type: "message", from: displayName, text: text } ) );
+			sendFrame( "SEND", { destination: DESTINATION, "content-type": "application/json" }, JSON.stringify( { type: "message", text: text } ) );
 		}
 		composerInput.value = "";
+	} );
+
+	composerInput.addEventListener( "input", function () {
+		if ( !socket || socket.readyState !== WebSocket.OPEN ) return;
+		var now = Date.now();
+		if ( now - lastTypingSentAt < TYPING_SEND_THROTTLE_MS ) return;
+		lastTypingSentAt = now;
+		sendFrame( "SEND", { destination: currentTypingDestination(), "content-type": "application/json" }, JSON.stringify( { type: "typing" } ) );
 	} );
 
 	var newChannelForm = document.getElementById( "newChannelForm" );

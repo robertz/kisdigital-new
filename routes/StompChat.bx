@@ -104,6 +104,32 @@
  * browser tab that was open for it, gone on reload — extending
  * variables.history's per-channel design to per-conversation is the
  * obvious next step if that's ever worth it.
+ *
+ * Identity stamping: the module comment above used to say boxExpressStomp()
+ * "forwards a SEND frame's body to subscribers verbatim, with no hook to
+ * rewrite it" — true of the framework itself, but this class already
+ * intercepts every raw frame for history recording (see onConnect()), and
+ * that's exactly the hook needed. stampSend() parses each SEND, discards
+ * whatever "from"/"fromId" the client included entirely, replaces them
+ * with the session-resolved identity, and re-serializes before forwarding
+ * to Stomp's own handler — so a client can no longer put an arbitrary name
+ * on its own outgoing message, in a channel or a DM. This also folds in
+ * what recordIfSend() used to do standalone, since both need the same
+ * parsed frame.
+ *
+ * System messages ("X joined #general") reuse the same channel-broadcast
+ * path presence already uses, from onJoin()/onLeave() — no separate
+ * mechanism.
+ *
+ * Channel activity: every connection also subscribes to one shared
+ * ACTIVITY_DEST for its whole lifetime (same "no UNSUBSCRIBE needed"
+ * reasoning as the DM inbox). A client can never SEND to it — authorize()
+ * refuses publish access outright — only stampSend() publishes to it
+ * server-side, once per recorded channel message, naming which channel
+ * just got activity (never the message content). The client uses this to
+ * badge channels in the sidebar it isn't currently subscribed to; a
+ * connection only ever holds one channel subscription at a time, so this
+ * is the only way it can find out another channel had traffic at all.
  */
 class {
 
@@ -121,6 +147,7 @@ class {
 	variables.MAX_HISTORY     = 50;
 	variables.DEST_PREFIX     = "/topic/stomp-chat/";
 	variables.DM_PREFIX       = "/queue/stomp-chat/dm/";
+	variables.ACTIVITY_DEST   = "/topic/stomp-chat-activity";
 	variables.MAX_CHANNEL_LEN = 30;
 
 	function init( required app, required siteDefaults ){
@@ -165,13 +192,14 @@ class {
 			isClosed  : () => connection.isClosed()
 		};
 
-		// Records history off the raw frame (see class docblock), then
-		// forwards it unchanged to whatever Stomp's own handler() registers
-		// via wrapped.onMessage() above.
+		// Stamps identity onto (and records history from) every raw frame
+		// before forwarding it to whatever Stomp's own handler() registers
+		// via wrapped.onMessage() above — see class docblock's "Identity
+		// stamping".
 		connection.onMessage( ( raw ) => {
-			recordIfSend( raw );
+			var toForward = stampSend( raw, connection );
 			if ( !isNull( messageCallback ) ){
-				messageCallback( raw );
+				messageCallback( toForward );
 			}
 		} );
 
@@ -186,44 +214,75 @@ class {
 		variables.stomp.handler()( wrapped );
 	}
 
-	// Parses one raw WS frame; if it's a SEND to a real channel with a
-	// {..., text: "..."} JSON body, appends {from, text} to that channel's
-	// history, capped at MAX_HISTORY. Anything else (CONNECT, SUBSCRIBE,
-	// a malformed body, a SEND to an unknown destination) is a silent
-	// no-op — this is a side channel on top of Stomp's own frame handling,
-	// not a second place to enforce validation Stomp already owns.
-	function recordIfSend( raw ){
+	// Parses one raw WS frame; if it's a SEND with a JSON body, discards
+	// whatever "from"/"fromId" the client sent (if anything — a typing
+	// ping sends neither) and replaces both with the session-resolved
+	// identity, then re-serializes and returns the stamped frame text for
+	// onConnect() to forward to Stomp's handler instead of the original.
+	// Anything that isn't a SEND, isn't valid STOMP, or isn't a JSON body
+	// passes through completely unchanged — this only ever narrows what a
+	// client can claim about itself, never rewrites anything else about
+	// the frame. Also where a channel SEND gets recorded into history and
+	// a channel activity ping goes out (see recordIfMessage()) — both need
+	// the same parsed frame this already has, so it happens here instead
+	// of a second separate parse.
+	function stampSend( raw, connection ){
 		var frame = "";
 		try {
 			frame = variables.frameCodec.parse( raw );
 		} catch ( any e ){
-			return;
+			return raw;
 		}
 		if ( frame.getCommand() != "SEND" ){
-			return;
+			return raw;
 		}
-		var channel = _channelFromDestination( frame.getHeader( "destination", "" ) );
-		if ( !len( channel ) ){
-			return;
+
+		var sessionData = sessionFor( connection );
+		var displayName = displayNameFor( sessionData );
+		if ( !len( displayName ) ){
+			return raw; // let authorize() reject it normally; nothing to stamp
 		}
+
+		var parsed = "";
 		try {
-			var parsed = JSONDeserialize( frame.getBody() );
-			if ( !isStruct( parsed ) || !len( trim( parsed.text ?: "" ) ) ){
-				return;
-			}
-			var entry = { from: parsed.from ?: "", text: parsed.text };
-			lock name="#variables.historyLock#" type="exclusive" timeout="5" {
-				if ( !structKeyExists( variables.history, channel ) ){
-					variables.history[ channel ] = [];
-				}
-				variables.history[ channel ].append( entry );
-				if ( variables.history[ channel ].len() > variables.MAX_HISTORY ){
-					variables.history[ channel ].deleteAt( 1 );
-				}
-			}
+			parsed = JSONDeserialize( frame.getBody() );
 		} catch ( any e ){
-			// Malformed JSON body — nothing to record.
+			return raw; // not one of our JSON message shapes — pass through
 		}
+		if ( !isStruct( parsed ) ){
+			return raw;
+		}
+
+		parsed.from   = displayName;
+		parsed.fromId = userIdFor( sessionData );
+
+		recordIfMessage( frame.getHeader( "destination", "" ), parsed );
+
+		var stamped = new bxModules.boxexpress.models.StompFrame( "SEND", frame.getHeaders(), JSONSerialize( parsed ) );
+		return variables.frameCodec.serialize( stamped );
+	}
+
+	// If destination is a real channel and parsed looks like a chat
+	// message (has non-empty text — a typing ping doesn't), appends
+	// {from, text} to that channel's history (capped at MAX_HISTORY) and
+	// broadcasts a channel-activity ping naming the channel (never the
+	// message itself) to ACTIVITY_DEST. Anything else is a silent no-op.
+	function recordIfMessage( destination, parsed ){
+		var channel = _channelFromDestination( destination );
+		if ( !len( channel ) || !len( trim( parsed.text ?: "" ) ) ){
+			return;
+		}
+		var entry = { from: parsed.from ?: "", text: parsed.text };
+		lock name="#variables.historyLock#" type="exclusive" timeout="5" {
+			if ( !structKeyExists( variables.history, channel ) ){
+				variables.history[ channel ] = [];
+			}
+			variables.history[ channel ].append( entry );
+			if ( variables.history[ channel ].len() > variables.MAX_HISTORY ){
+				variables.history[ channel ].deleteAt( 1 );
+			}
+		}
+		variables.stomp.send( variables.ACTIVITY_DEST, { type: "activity", channel: channel } );
 	}
 
 	// Unicasts the channel's history straight to one connection as a
@@ -400,7 +459,12 @@ class {
 	// explicit sign-out in another tab) stops working on this one's very
 	// next action rather than staying live until reconnect.
 	//
-	// Two destination shapes are accepted:
+	// Three destination shapes are accepted:
+	//   variables.ACTIVITY_DEST              — shared channel-activity
+	//     feed. Any authenticated connection may SUBSCRIBE (everyone gets
+	//     it automatically on CONNECT); publish is refused outright — only
+	//     stampSend() ever sends to it, server-side, so a client SEND here
+	//     is always someone bypassing the client and is never legitimate.
 	//   variables.DM_PREFIX & <userId>       — a personal DM inbox. Only
 	//     that user may SUBSCRIBE to it (the real privacy boundary for
 	//     DMs — see class docblock); any authenticated user may SEND to
@@ -417,6 +481,10 @@ class {
 		var displayName = displayNameFor( sessionData );
 		if ( !len( displayName ) ){
 			return false;
+		}
+
+		if ( destination == variables.ACTIVITY_DEST ){
+			return access == "subscribe";
 		}
 
 		var dmTargetId = _dmUserIdFromDestination( destination );
@@ -487,19 +555,23 @@ class {
 		}
 		runAsync( () => {
 			variables.stomp.send( variables.DEST_PREFIX & channel, { type: "presence", members: membersInChannel( channel ) } );
+			variables.stomp.send( variables.DEST_PREFIX & channel, { type: "system", text: displayName & " joined ##" & channel } );
 		} );
 	}
 
 	function onLeave( connId ){
-		var channel = "";
+		var channel     = "";
+		var displayName = "";
 		lock name="#variables.presenceLock#" type="exclusive" timeout="5" {
 			if ( structKeyExists( variables.presence, connId ) ){
-				channel = variables.presence[ connId ].channel;
+				channel     = variables.presence[ connId ].channel;
+				displayName = variables.presence[ connId ].displayName;
 				structDelete( variables.presence, connId );
 			}
 		}
 		if ( len( channel ) ){
 			variables.stomp.send( variables.DEST_PREFIX & channel, { type: "presence", members: membersInChannel( channel ) } );
+			variables.stomp.send( variables.DEST_PREFIX & channel, { type: "system", text: displayName & " left ##" & channel } );
 		}
 	}
 
