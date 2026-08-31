@@ -540,6 +540,8 @@
 					var data = JSON.parse( frame.body );
 					if ( data.type === "presence" ) {
 						renderPresence( data.members );
+					} else if ( data.type === "history" ) {
+						data.messages.forEach( function ( m ) { addMessage( m.from, m.text ); } );
 					} else {
 						addMessage( data.from, data.text );
 					}

@@ -66,6 +66,25 @@
  * thin wrapper connection instead of the real one, whose onClose()
  * appends to a local array instead of overwriting — both Stomp's cleanup
  * and this class's presence removal actually run.
+ *
+ * Message history: same trade-off as presence — a channel's history
+ * lives only in variables.history (channel -> last MAX_HISTORY {from,
+ * text} entries) and starts empty on every deploy. boxExpressStomp()
+ * relays a SEND's body to subscribers but gives authorize() no view of
+ * that body at all (only destination/access/connection), so recording
+ * history can't happen from authorize() the way joining presence does —
+ * it has to come from actually looking at each raw frame. onConnect()'s
+ * wrapper intercepts every incoming frame before handing it to Stomp,
+ * parses it with boxlang-express's own StompFrameCodec (reused directly
+ * rather than hand-rolling frame parsing a second time), and records
+ * only SEND frames addressed to a real channel — then forwards the
+ * original, unmodified frame to Stomp's handler exactly as it arrived.
+ * A newly-subscribed connection gets the channel's history unicast
+ * directly (StompFrameCodec.serialize() + connection.send(), a properly
+ * framed MESSAGE the client's parser recognizes) — a plain broadcast
+ * would hit the same "not registered yet" race presence's join broadcast
+ * has, but unicast doesn't go through Stomp's subscriber registry at
+ * all, so there's nothing to race here.
  */
 class {
 
@@ -73,10 +92,14 @@ class {
 	variables.siteDefaults    = "";
 	variables.sessionStore    = "";
 	variables.stomp           = "";
+	variables.frameCodec      = "";
 	variables.channels        = [ "general" ];
 	variables.channelsLock    = "stomp-chat-channels";
 	variables.presence        = {};
 	variables.presenceLock    = "stomp-chat-presence";
+	variables.history         = {};
+	variables.historyLock     = "stomp-chat-history";
+	variables.MAX_HISTORY     = 50;
 	variables.DEST_PREFIX     = "/topic/stomp-chat/";
 	variables.MAX_CHANNEL_LEN = 30;
 
@@ -84,6 +107,7 @@ class {
 		variables.app          = arguments.app;
 		variables.siteDefaults = arguments.siteDefaults;
 		variables.sessionStore = boxExpressCacheStore( "sessionCache" );
+		variables.frameCodec   = new bxModules.boxexpress.models.StompFrameCodec();
 
 		this.router = boxExpressRouter();
 		this.router.get( "/games/stomp-chat", ( req, res, next ) => page( req, res, next ) );
@@ -107,18 +131,29 @@ class {
 	function onConnect( connection ){
 		var connId         = createUUID();
 		var closeCallbacks = [];
+		var messageCallback = javacast( "null", "" );
 
 		var wrapped = {
 			connId    : connId,
 			cookies   : connection.cookies,
 			headers   : connection.headers,
 			get       : ( name ) => connection.get( name ),
-			onMessage : ( cb ) => connection.onMessage( cb ),
+			onMessage : ( cb ) => messageCallback = cb,
 			onClose   : ( cb ) => closeCallbacks.append( cb ),
 			send      : ( data ) => connection.send( data ),
 			close     : () => connection.close(),
 			isClosed  : () => connection.isClosed()
 		};
+
+		// Records history off the raw frame (see class docblock), then
+		// forwards it unchanged to whatever Stomp's own handler() registers
+		// via wrapped.onMessage() above.
+		connection.onMessage( ( raw ) => {
+			recordIfSend( raw );
+			if ( !isNull( messageCallback ) ){
+				messageCallback( raw );
+			}
+		} );
 
 		connection.onClose( ( code, reason ) => {
 			for ( var cb in closeCallbacks ){
@@ -129,6 +164,69 @@ class {
 		wrapped.onClose( ( code, reason ) => onLeave( connId ) );
 
 		variables.stomp.handler()( wrapped );
+	}
+
+	// Parses one raw WS frame; if it's a SEND to a real channel with a
+	// {..., text: "..."} JSON body, appends {from, text} to that channel's
+	// history, capped at MAX_HISTORY. Anything else (CONNECT, SUBSCRIBE,
+	// a malformed body, a SEND to an unknown destination) is a silent
+	// no-op — this is a side channel on top of Stomp's own frame handling,
+	// not a second place to enforce validation Stomp already owns.
+	function recordIfSend( raw ){
+		var frame = "";
+		try {
+			frame = variables.frameCodec.parse( raw );
+		} catch ( any e ){
+			return;
+		}
+		if ( frame.getCommand() != "SEND" ){
+			return;
+		}
+		var channel = _channelFromDestination( frame.getHeader( "destination", "" ) );
+		if ( !len( channel ) ){
+			return;
+		}
+		try {
+			var parsed = JSONDeserialize( frame.getBody() );
+			if ( !isStruct( parsed ) || !len( trim( parsed.text ?: "" ) ) ){
+				return;
+			}
+			var entry = { from: parsed.from ?: "", text: parsed.text };
+			lock name="#variables.historyLock#" type="exclusive" timeout="5" {
+				if ( !structKeyExists( variables.history, channel ) ){
+					variables.history[ channel ] = [];
+				}
+				variables.history[ channel ].append( entry );
+				if ( variables.history[ channel ].len() > variables.MAX_HISTORY ){
+					variables.history[ channel ].deleteAt( 1 );
+				}
+			}
+		} catch ( any e ){
+			// Malformed JSON body — nothing to record.
+		}
+	}
+
+	// Unicasts the channel's history straight to one connection as a
+	// properly-framed STOMP MESSAGE (StompFrameCodec.serialize() +
+	// connection.send(), not variables.stomp.send() — a broadcast would
+	// hit the same "not registered yet" ordering issue documented on
+	// onJoin() below; a direct connection.send() doesn't touch Stomp's
+	// subscriber registry at all, so there's nothing to race here).
+	function sendHistory( connection, channel ){
+		var messages = [];
+		lock name="#variables.historyLock#" type="readonly" timeout="5" {
+			if ( structKeyExists( variables.history, channel ) ){
+				messages = duplicate( variables.history[ channel ] );
+			}
+		}
+		var body  = JSONSerialize( { type: "history", messages: messages } );
+		var frame = new bxModules.boxexpress.models.StompFrame( "MESSAGE", {
+			destination    : variables.DEST_PREFIX & channel,
+			"message-id"   : createUUID(),
+			subscription   : "sub-0",
+			"content-type" : "application/json"
+		}, body );
+		connection.send( variables.frameCodec.serialize( frame ) );
 	}
 
 	// GET /games/stomp-chat?channel=... — same "sign in with Google, then
@@ -285,6 +383,7 @@ class {
 		}
 
 		if ( access == "subscribe" ){
+			sendHistory( connection, channel );
 			onJoin( connection.connId, channel, displayName );
 		}
 
