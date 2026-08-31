@@ -22,11 +22,18 @@
 			</form>
 			<p class="sc-new-channel-error" id="newChannelError" hidden></p>
 			</bx:if>
+
+			<p class="sc-pane-title sc-dm-title">Direct messages</p>
+			<nav class="sc-dm-list" id="dmList"></nav>
+			<p class="sc-dm-empty" id="dmEmpty">Click someone online to start one.</p>
 		</aside>
 
 		<main class="sc-main">
 			<div class="sc-topbar">
-				<span class="sc-channel-title"><span class="sc-channel-hash">##</span>#encodeForHTML( data.currentChannel )#</span>
+				<button type="button" class="sc-back-btn" id="backBtn" aria-label="Back to channel" hidden>
+					<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+				</button>
+				<span class="sc-channel-title" id="viewTitle"><span class="sc-channel-hash">##</span>#encodeForHTML( data.currentChannel )#</span>
 				<span class="sc-status" id="status">connecting&hellip;</span>
 				<span class="sc-me">Signed in as <strong>#encodeForHTML( data.displayName )#</strong> &middot; <a href="/auth/logout?redirect=/games/stomp-chat">sign out</a></span>
 			</div>
@@ -48,7 +55,7 @@
 		</aside>
 	</div>
 
-	<p class="sc-note">Not persisted — channels and messages are cleared on the next deploy. Your display name comes from your Google sign-in, not a field you can edit here.</p>
+	<p class="sc-note">Not persisted — channels, messages and DMs are cleared on the next deploy (DMs also don't survive a page reload). Your display name comes from your Google sign-in, not a field you can edit here.</p>
 </div>
 
 <style>
@@ -74,7 +81,7 @@
 		background: var(--sc-gradient);
 	}
 
-	/* ── Left: channels ── */
+	/* ── Left: channels + DMs ── */
 	.sc-channels {
 		width: 190px;
 		flex: 0 0 auto;
@@ -96,11 +103,12 @@
 		align-items: center;
 		gap: 6px;
 	}
+	.sc-dm-title { margin-top: 6px; }
 	.sc-presence-count {
 		font-weight: 700;
 		color: var(--sc-accent-a);
 	}
-	.sc-channel-list {
+	.sc-channel-list, .sc-dm-list {
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
@@ -123,8 +131,54 @@
 		font-weight: 700;
 		border-left-color: var(--sc-accent-a);
 	}
+	.sc-dm-item {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 6px;
+		padding: 7px 10px;
+		border-radius: 10px;
+		font-size: 0.86rem;
+		font-weight: 500;
+		color: var(--text-secondary);
+		background: none;
+		border: none;
+		border-left: 3px solid transparent;
+		text-align: left;
+		cursor: pointer;
+		font-family: inherit;
+		transition: background 0.15s ease, color 0.15s ease;
+	}
+	.sc-dm-item:hover { background: var(--ui-border-subtle); }
+	.sc-dm-item.is-active {
+		background: linear-gradient(90deg, rgba(124, 58, 237, 0.14), rgba(6, 182, 212, 0.05));
+		color: var(--sc-accent-a);
+		font-weight: 700;
+		border-left-color: var(--sc-accent-a);
+	}
+	.sc-dm-item-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.sc-dm-unread {
+		flex: 0 0 auto;
+		background: var(--sc-gradient);
+		color: ##fff;
+		font-size: 0.68rem;
+		font-weight: 800;
+		min-width: 16px;
+		height: 16px;
+		border-radius: 999px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0 4px;
+	}
+	.sc-dm-empty {
+		margin: 0;
+		font-size: 0.78rem;
+		color: var(--text-muted);
+		line-height: 1.4;
+	}
+	.sc-dm-empty.is-hidden { display: none; }
 	.sc-new-channel {
-		margin-top: auto;
 		display: flex;
 		gap: 6px;
 	}
@@ -165,10 +219,25 @@
 	.sc-topbar {
 		display: flex;
 		align-items: center;
-		gap: 12px;
+		gap: 10px;
 		padding: 16px 20px;
 		border-bottom: 1px solid var(--ui-border-subtle);
 	}
+	.sc-back-btn {
+		flex: 0 0 auto;
+		width: 26px;
+		height: 26px;
+		border-radius: 50%;
+		border: 1px solid var(--ui-border-subtle);
+		background: var(--ui-surface-2);
+		color: var(--text-secondary);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		cursor: pointer;
+	}
+	.sc-back-btn[hidden] { display: none; }
+	.sc-back-btn:hover { color: var(--sc-accent-a); border-color: var(--sc-accent-a); }
 	.sc-channel-title { font-weight: 800; font-size: 1.05rem; }
 	.sc-channel-hash { color: var(--sc-accent-a); margin-right: 1px; }
 	.sc-status {
@@ -330,7 +399,8 @@
 		font-size: 0.85rem;
 		color: var(--text-secondary);
 	}
-	.sc-presence-item:hover { background: var(--ui-border-subtle); }
+	.sc-presence-item.is-clickable { cursor: pointer; }
+	.sc-presence-item.is-clickable:hover { background: var(--ui-border-subtle); color: var(--sc-accent-a); }
 	.sc-presence-avatar {
 		position: relative;
 		flex: 0 0 auto;
@@ -375,7 +445,7 @@
 			border: none;
 			border-bottom: 1px solid var(--ui-border-subtle);
 		}
-		.sc-channel-list { flex-direction: row; flex-wrap: wrap; }
+		.sc-channel-list, .sc-dm-list { flex-direction: row; flex-wrap: wrap; }
 		.sc-presence-list { flex-direction: row; flex-wrap: wrap; }
 		.sc-msg-row { max-width: 92%; }
 	}
@@ -400,8 +470,19 @@
 	// load closes the old one and opens a fresh socket into the new
 	// channel, which the server's normal onClose/SUBSCRIBE paths handle
 	// correctly without any special-casing.
+	//
+	// Direct messages don't have that problem at all: every connection
+	// subscribes once to its own inbox (DM_PREFIX + MY_USER_ID) right
+	// alongside the channel subscription and never needs to leave it, so
+	// switching *which DM thread is on screen* is purely a client-side
+	// view swap — no new SUBSCRIBE, no reconnect. A DM thread only lives
+	// in this tab's memory (dmThreads below) — there's no server-side
+	// history for it the way channels have, so it's gone on reload.
 	var CHANNEL = #JSONSerialize( data.currentChannel )#;
 	var DESTINATION = "/topic/stomp-chat/" + CHANNEL;
+	var MY_USER_ID = #JSONSerialize( data.userId )#;
+	var DM_PREFIX = "/queue/stomp-chat/dm/";
+	var MY_INBOX = DM_PREFIX + MY_USER_ID;
 	var RECONNECT_DELAY_MS = 2000;
 	var displayName = #JSONSerialize( data.displayName )#;
 
@@ -422,6 +503,10 @@
 	}
 
 	var statusEl = document.getElementById( "status" );
+	var viewTitleEl = document.getElementById( "viewTitle" );
+	var backBtn = document.getElementById( "backBtn" );
+	var dmListEl = document.getElementById( "dmList" );
+	var dmEmptyEl = document.getElementById( "dmEmpty" );
 	var presenceListEl = document.getElementById( "presenceList" );
 	var presenceCountEl = document.getElementById( "presenceCount" );
 	var messagesEl = document.getElementById( "messages" );
@@ -430,6 +515,14 @@
 
 	var socket = null;
 	var connectingLine = null;
+
+	// view is either { type: "channel" } or { type: "dm", userId, displayName }.
+	// channelMessages/dmThreads are the client-only backing store both
+	// views render from — see class docblock in routes/StompChat.bx for
+	// why DMs don't have a server-side equivalent of channel history.
+	var view = { type: "channel" };
+	var channelMessages = [];
+	var dmThreads = {}; // userId -> { displayName, messages: [{from,text}], unread }
 
 	function setStatus( text, state ) {
 		statusEl.textContent = text;
@@ -446,7 +539,7 @@
 		messagesEl.scrollTop = messagesEl.scrollHeight;
 	}
 
-	function addMessage( from, text ) {
+	function buildMessageRow( from, text ) {
 		var isOwn = from === displayName;
 		var row = document.createElement( "div" );
 		row.className = "sc-msg-row" + ( isOwn ? " is-own" : "" );
@@ -463,9 +556,122 @@
 
 		row.appendChild( avatar );
 		row.appendChild( bubble );
-		messagesEl.appendChild( row );
+		return row;
+	}
+
+	function renderActiveMessages() {
+		messagesEl.innerHTML = "";
+		var list = view.type === "dm"
+			? ( dmThreads[ view.userId ] ? dmThreads[ view.userId ].messages : [] )
+			: channelMessages;
+		list.forEach( function ( m ) { messagesEl.appendChild( buildMessageRow( m.from, m.text ) ); } );
 		scrollToBottom();
 	}
+
+	function addChannelMessage( from, text ) {
+		channelMessages.push( { from: from, text: text } );
+		if ( view.type === "channel" ) {
+			messagesEl.appendChild( buildMessageRow( from, text ) );
+			scrollToBottom();
+		}
+	}
+
+	function ensureDmThread( userId, threadDisplayName ) {
+		if ( !dmThreads[ userId ] ) {
+			dmThreads[ userId ] = { displayName: threadDisplayName, messages: [], unread: 0 };
+		}
+		return dmThreads[ userId ];
+	}
+
+	function addDmMessage( userId, threadDisplayName, from, text ) {
+		var thread = ensureDmThread( userId, threadDisplayName );
+		thread.messages.push( { from: from, text: text } );
+		if ( view.type === "dm" && view.userId === userId ) {
+			messagesEl.appendChild( buildMessageRow( from, text ) );
+			scrollToBottom();
+		} else {
+			thread.unread++;
+		}
+		renderDmList();
+	}
+
+	function renderDmList() {
+		var ids = Object.keys( dmThreads );
+		dmEmptyEl.classList.toggle( "is-hidden", ids.length > 0 );
+		dmListEl.innerHTML = "";
+		ids.forEach( function ( userId ) {
+			var thread = dmThreads[ userId ];
+			var btn = document.createElement( "button" );
+			btn.type = "button";
+			btn.className = "sc-dm-item" + ( view.type === "dm" && view.userId === userId ? " is-active" : "" );
+
+			var label = document.createElement( "span" );
+			label.className = "sc-dm-item-name";
+			label.textContent = thread.displayName;
+			btn.appendChild( label );
+
+			if ( thread.unread ) {
+				var badge = document.createElement( "span" );
+				badge.className = "sc-dm-unread";
+				badge.textContent = thread.unread;
+				btn.appendChild( badge );
+			}
+
+			btn.addEventListener( "click", function () { openDm( userId, thread.displayName ); } );
+			dmListEl.appendChild( btn );
+		} );
+	}
+
+	function openDm( userId, threadDisplayName ) {
+		ensureDmThread( userId, threadDisplayName );
+		dmThreads[ userId ].unread = 0;
+		view = { type: "dm", userId: userId, displayName: threadDisplayName };
+		viewTitleEl.textContent = "Direct message with " + threadDisplayName;
+		backBtn.hidden = false;
+		composerInput.placeholder = "Message " + threadDisplayName;
+		renderDmList();
+		renderActiveMessages();
+	}
+
+	function openChannel() {
+		view = { type: "channel" };
+		viewTitleEl.innerHTML = '<span class="sc-channel-hash">##</span>' + escapeHtml( CHANNEL );
+		backBtn.hidden = true;
+		composerInput.placeholder = "Message ##" + CHANNEL;
+		renderDmList();
+		renderActiveMessages();
+	}
+
+	backBtn.addEventListener( "click", openChannel );
+
+	function renderPresence( members ) {
+		presenceCountEl.textContent = members.length ? "(" + members.length + ")" : "";
+		presenceListEl.innerHTML = "";
+		members.forEach( function ( member ) {
+			var isSelf = member.userId === MY_USER_ID;
+			var li = document.createElement( "li" );
+			li.className = "sc-presence-item" + ( isSelf ? "" : " is-clickable" );
+
+			var avatar = document.createElement( "span" );
+			avatar.className = "sc-presence-avatar";
+			avatar.style.background = avatarColor( member.displayName );
+			avatar.textContent = initials( member.displayName );
+
+			var label = document.createElement( "span" );
+			label.className = "sc-presence-name";
+			label.textContent = member.displayName + ( isSelf ? " (you)" : "" );
+
+			li.appendChild( avatar );
+			li.appendChild( label );
+			if ( !isSelf ) {
+				li.addEventListener( "click", function () { openDm( member.userId, member.displayName ); } );
+			}
+			presenceListEl.appendChild( li );
+		} );
+	}
+
+	function addSystem( text ) { return addLine( "sc-line-system", text ); }
+	function addError( text ) { return addLine( "sc-line-error", text ); }
 
 	function addLine( className, text ) {
 		var line = document.createElement( "div" );
@@ -474,31 +680,6 @@
 		messagesEl.appendChild( line );
 		scrollToBottom();
 		return line;
-	}
-
-	function addSystem( text ) { return addLine( "sc-line-system", text ); }
-	function addError( text ) { return addLine( "sc-line-error", text ); }
-
-	function renderPresence( members ) {
-		presenceCountEl.textContent = members.length ? "(" + members.length + ")" : "";
-		presenceListEl.innerHTML = "";
-		members.forEach( function ( name ) {
-			var li = document.createElement( "li" );
-			li.className = "sc-presence-item";
-
-			var avatar = document.createElement( "span" );
-			avatar.className = "sc-presence-avatar";
-			avatar.style.background = avatarColor( name );
-			avatar.textContent = initials( name );
-
-			var label = document.createElement( "span" );
-			label.className = "sc-presence-name";
-			label.textContent = name;
-
-			li.appendChild( avatar );
-			li.appendChild( label );
-			presenceListEl.appendChild( li );
-		} );
 	}
 
 	// STOMP 1.2 frame wire format: "COMMAND\nheader:value\n\n<body>\0"
@@ -541,15 +722,18 @@
 					connectingLine = null;
 				}
 				sendFrame( "SUBSCRIBE", { destination: DESTINATION, id: "sub-0" } );
+				sendFrame( "SUBSCRIBE", { destination: MY_INBOX, id: "sub-dm" } );
 			} else if ( frame.command === "MESSAGE" ) {
 				try {
 					var data = JSON.parse( frame.body );
 					if ( data.type === "presence" ) {
 						renderPresence( data.members );
 					} else if ( data.type === "history" ) {
-						data.messages.forEach( function ( m ) { addMessage( m.from, m.text ); } );
+						data.messages.forEach( function ( m ) { addChannelMessage( m.from, m.text ); } );
+					} else if ( data.type === "dm" ) {
+						addDmMessage( data.fromId, data.from, data.from, data.text );
 					} else {
-						addMessage( data.from, data.text );
+						addChannelMessage( data.from, data.text );
 					}
 				} catch ( e ) { /* ignore malformed body */ }
 			} else if ( frame.command === "ERROR" ) {
@@ -570,7 +754,15 @@
 		ev.preventDefault();
 		var text = composerInput.value.trim();
 		if ( !text || !socket || socket.readyState !== WebSocket.OPEN ) return;
-		sendFrame( "SEND", { destination: DESTINATION, "content-type": "application/json" }, JSON.stringify( { type: "message", from: displayName, text: text } ) );
+
+		if ( view.type === "dm" ) {
+			var targetId = view.userId;
+			sendFrame( "SEND", { destination: DM_PREFIX + targetId, "content-type": "application/json" },
+				JSON.stringify( { type: "dm", from: displayName, fromId: MY_USER_ID, text: text } ) );
+			addDmMessage( targetId, view.displayName, displayName, text ); // optimistic echo — see class docblock
+		} else {
+			sendFrame( "SEND", { destination: DESTINATION, "content-type": "application/json" }, JSON.stringify( { type: "message", from: displayName, text: text } ) );
+		}
 		composerInput.value = "";
 	} );
 
@@ -607,6 +799,7 @@
 		} );
 	}
 
+	renderDmList();
 	connectingLine = addSystem( "Connecting as " + displayName + "…" );
 	connect();
 })();

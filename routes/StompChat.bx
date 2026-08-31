@@ -85,6 +85,25 @@
  * would hit the same "not registered yet" race presence's join broadcast
  * has, but unicast doesn't go through Stomp's subscriber registry at
  * all, so there's nothing to race here.
+ *
+ * Direct messages: every connection subscribes to exactly one personal
+ * inbox for its whole lifetime — DM_PREFIX & <own userId> — alongside
+ * its one channel subscription, the moment CONNECT succeeds (no
+ * UNSUBSCRIBE problem here at all, since a connection never needs to
+ * leave its own inbox). Sending a DM is a SEND straight to the
+ * *recipient's* inbox destination; authorize() is the real security
+ * boundary here (not cosmetic like the channel-name check) — a
+ * connection may only SUBSCRIBE to its own inbox (dmTargetId == myId),
+ * but may SEND to anyone's, since the recipient's own subscribe-gating
+ * is what actually keeps a DM private. The sender never receives their
+ * own SEND back (they're not subscribed to the recipient's inbox, only
+ * their own), so the client echoes its own outgoing DM locally rather
+ * than waiting on a round trip — same reasoning as any optimistic-send
+ * UI. No server-side DM history at all (a real scope cut, not an
+ * oversight): unlike channel history, a DM thread only lives in the
+ * browser tab that was open for it, gone on reload — extending
+ * variables.history's per-channel design to per-conversation is the
+ * obvious next step if that's ever worth it.
  */
 class {
 
@@ -101,6 +120,7 @@ class {
 	variables.historyLock     = "stomp-chat-history";
 	variables.MAX_HISTORY     = 50;
 	variables.DEST_PREFIX     = "/topic/stomp-chat/";
+	variables.DM_PREFIX       = "/queue/stomp-chat/dm/";
 	variables.MAX_CHANNEL_LEN = 30;
 
 	function init( required app, required siteDefaults ){
@@ -261,6 +281,7 @@ class {
 			canonicalUrl   : variables.siteDefaults.canonicalUrl( req.path ),
 			meta           : variables.siteDefaults.defaultMeta( req.path ),
 			displayName    : displayName,
+			userId         : userIdFor( req.session ),
 			channels       : channelList,
 			currentChannel : currentChannel,
 			isAdmin        : isAdminSession( req.session ),
@@ -336,6 +357,24 @@ class {
 		return "";
 	}
 
+	// A stable id for DM destinations and presence, prefixed by which
+	// session population it came from — commenter.id and manage_user.id
+	// are separate tables (see routes/Auth.bx), so this is cheap insurance
+	// against a theoretical id collision between the two rather than a
+	// real observed problem (both are UUID primary keys in practice).
+	function userIdFor( sessionData ){
+		if ( isNull( sessionData ) ){
+			return "";
+		}
+		if ( isStruct( sessionData.commenter ?: "" ) && len( sessionData.commenter.id ?: "" ) ){
+			return "c-" & sessionData.commenter.id;
+		}
+		if ( isStruct( sessionData.manage_user ?: "" ) && len( sessionData.manage_user.id ?: "" ) ){
+			return "m-" & sessionData.manage_user.id;
+		}
+		return "";
+	}
+
 	// Resolves the site session (or null) for a WebSocket connection from
 	// its handshake cookies — the same "connect.sid" -> sessionCache
 	// lookup boxExpressSession()'s own middleware does internally, just
@@ -359,35 +398,57 @@ class {
 	// STOMP SUBSCRIBE/SEND — re-checked per action (not just once at
 	// CONNECT), so a session that gets destroyed mid-connection (an
 	// explicit sign-out in another tab) stops working on this one's very
-	// next action rather than staying live until reconnect. destination
-	// must be variables.DEST_PREFIX plus a channel currently in
-	// variables.channels — anything else is refused outright, including
-	// a channel that existed when the page was rendered but has since...
-	// (channels are never removed today, so that specific case can't
-	// actually happen yet, but the check is against live state regardless,
-	// not a snapshot taken at CONNECT time).
+	// next action rather than staying live until reconnect.
 	//
-	// A successful SUBSCRIBE also joins presence here — the one point
-	// that already has both "this connection is entering channel X" and
-	// a resolved display name for it. SEND (access == "publish") doesn't
-	// touch presence at all; a connection can only join once, on its one
-	// SUBSCRIBE, not once per message.
+	// Two destination shapes are accepted:
+	//   variables.DM_PREFIX & <userId>       — a personal DM inbox. Only
+	//     that user may SUBSCRIBE to it (the real privacy boundary for
+	//     DMs — see class docblock); any authenticated user may SEND to
+	//     it, which is exactly how a DM gets delivered to someone else.
+	//   variables.DEST_PREFIX & <channel>    — must be a channel
+	//     currently in variables.channels; anything else is refused
+	//     outright. A successful SUBSCRIBE also joins presence here — the
+	//     one point that already has both "this connection is entering
+	//     channel X" and a resolved identity for it. SEND doesn't touch
+	//     presence at all; a connection can only join once, on its one
+	//     channel SUBSCRIBE, not once per message.
 	function authorize( destination, access, connection ){
-		var channel = _channelFromDestination( destination );
-		if ( !len( channel ) ){
+		var sessionData = sessionFor( connection );
+		var displayName = displayNameFor( sessionData );
+		if ( !len( displayName ) ){
 			return false;
 		}
-		var displayName = displayNameFor( sessionFor( connection ) );
-		if ( !len( displayName ) ){
+
+		var dmTargetId = _dmUserIdFromDestination( destination );
+		if ( len( dmTargetId ) ){
+			if ( access == "subscribe" ){
+				return dmTargetId == userIdFor( sessionData );
+			}
+			return true; // publish: sending a DM to anyone is allowed
+		}
+
+		var channel = _channelFromDestination( destination );
+		if ( !len( channel ) ){
 			return false;
 		}
 
 		if ( access == "subscribe" ){
 			sendHistory( connection, channel );
-			onJoin( connection.connId, channel, displayName );
+			onJoin( connection.connId, channel, userIdFor( sessionData ), displayName );
 		}
 
 		return true;
+	}
+
+	function _dmUserIdFromDestination( destination ){
+		var prefixLen = len( variables.DM_PREFIX );
+		if ( len( destination ) <= prefixLen ){
+			return "";
+		}
+		if ( left( destination, prefixLen ) != variables.DM_PREFIX ){
+			return "";
+		}
+		return mid( destination, prefixLen + 1, len( destination ) - prefixLen );
 	}
 
 	// mid()'s count computed exactly (not just "the rest of the string"),
@@ -420,12 +481,12 @@ class {
 	// that race every time against Stomp's own registration step
 	// (in-memory, no I/O, completes as soon as authorize() returns)
 	// immediately following.
-	function onJoin( connId, channel, displayName ){
+	function onJoin( connId, channel, userId, displayName ){
 		lock name="#variables.presenceLock#" type="exclusive" timeout="5" {
-			variables.presence[ connId ] = { channel: channel, displayName: displayName };
+			variables.presence[ connId ] = { channel: channel, userId: userId, displayName: displayName };
 		}
 		runAsync( () => {
-			variables.stomp.send( variables.DEST_PREFIX & channel, { type: "presence", members: namesInChannel( channel ) } );
+			variables.stomp.send( variables.DEST_PREFIX & channel, { type: "presence", members: membersInChannel( channel ) } );
 		} );
 	}
 
@@ -438,20 +499,23 @@ class {
 			}
 		}
 		if ( len( channel ) ){
-			variables.stomp.send( variables.DEST_PREFIX & channel, { type: "presence", members: namesInChannel( channel ) } );
+			variables.stomp.send( variables.DEST_PREFIX & channel, { type: "presence", members: membersInChannel( channel ) } );
 		}
 	}
 
-	function namesInChannel( channel ){
-		var names = [];
+	// {userId, displayName} per member rather than a bare name — the
+	// client needs userId to address a DM at someone from the presence
+	// list.
+	function membersInChannel( channel ){
+		var members = [];
 		lock name="#variables.presenceLock#" type="readonly" timeout="5" {
 			for ( var connId in variables.presence ){
 				if ( variables.presence[ connId ].channel == channel ){
-					names.append( variables.presence[ connId ].displayName );
+					members.append( { userId: variables.presence[ connId ].userId, displayName: variables.presence[ connId ].displayName } );
 				}
 			}
 		}
-		return names;
+		return members;
 	}
 
 }
