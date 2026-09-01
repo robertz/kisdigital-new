@@ -32,7 +32,7 @@
 			</button>
 			<span class="sc-channel-title" id="viewTitle"><span class="sc-channel-hash">##</span>#encodeForHTML( data.currentChannel )#</span>
 			<span class="sc-status" id="status">connecting&hellip;</span>
-			<span class="sc-me">Signed in as <strong>#encodeForHTML( data.displayName )#</strong> &middot; <a href="/auth/logout?redirect=/games/stomp-chat">sign out</a></span>
+			<span class="sc-me">Signed in as <strong>#encodeForHTML( data.displayName )#</strong> &middot; <a href="/auth/logout?redirect=/games">sign out</a></span>
 		</div>
 
 		<div class="sc-messages" id="messages"></div>
