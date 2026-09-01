@@ -1,7 +1,9 @@
 <bx:include template="../partials/_head.bxm">
 <bx:output>
 <div class="sc-app" id="scApp">
-	<aside class="sc-channels">
+	<div class="sc-scrim" id="scrim"></div>
+
+	<aside class="sc-channels" id="channelsDrawer">
 		<a href="/" class="sc-workspace" aria-label="Back to KISDigital">
 			<span class="sc-workspace-icon">S</span>
 			<span class="sc-workspace-text">
@@ -23,16 +25,27 @@
 		<p class="sc-pane-title sc-dm-title">Direct messages</p>
 		<nav class="sc-dm-list" id="dmList"></nav>
 		<p class="sc-dm-empty" id="dmEmpty">Click someone online to start one.</p>
+
+		<p class="sc-sidebar-footer">Signed in as <strong>#encodeForHTML( data.displayName )#</strong> &middot; <a href="/auth/logout?redirect=/">sign out</a></p>
 	</aside>
 
 	<main class="sc-main">
 		<div class="sc-topbar">
+			<!--- Mobile-only drawer toggles — hidden on desktop (see the
+			      @media block) where .sc-channels/.sc-presence are always
+			      visible as permanent side panels instead. --->
+			<button type="button" class="sc-menu-btn" id="channelsMenuBtn" aria-label="Channels" aria-expanded="false" aria-controls="channelsDrawer">
+				<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+			</button>
 			<button type="button" class="sc-back-btn" id="backBtn" aria-label="Back to channel" hidden>
 				<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
 			</button>
 			<span class="sc-channel-title" id="viewTitle"><span class="sc-channel-hash">##</span>#encodeForHTML( data.currentChannel )#</span>
 			<span class="sc-status" id="status">connecting&hellip;</span>
-			<span class="sc-me">Signed in as <strong>#encodeForHTML( data.displayName )#</strong> &middot; <a href="/auth/logout?redirect=/">sign out</a></span>
+			<button type="button" class="sc-presence-btn" id="presenceMenuBtn" aria-label="Members online" aria-expanded="false" aria-controls="presenceDrawer">
+				<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"></path><circle cx="10" cy="7" r="4"></circle></svg>
+				<span id="presenceBtnCount"></span>
+			</button>
 		</div>
 
 		<div class="sc-messages" id="messages"></div>
@@ -47,7 +60,7 @@
 		</form>
 	</main>
 
-	<aside class="sc-presence">
+	<aside class="sc-presence" id="presenceDrawer">
 		<p class="sc-pane-title">Online <span class="sc-presence-count" id="presenceCount"></span></p>
 		<ul class="sc-presence-list" id="presenceList"></ul>
 	</aside>
@@ -82,6 +95,11 @@
 		height: 4px;
 		background: var(--sc-gradient);
 	}
+	/* Only does anything below 760px (see @media block) — the drawer
+	   backdrop for .sc-channels/.sc-presence. Inert above that regardless
+	   of its is-visible class, so the JS that toggles it never needs to
+	   know or care what the viewport width is. */
+	.sc-scrim { display: none; }
 
 	/* ── Left: workspace header + channels + DMs ── */
 	.sc-channels {
@@ -278,6 +296,15 @@
 		line-height: 1.4;
 	}
 	.sc-dm-empty.is-hidden { display: none; }
+	.sc-sidebar-footer {
+		margin: auto 0 0;
+		padding-top: 12px;
+		border-top: 1px solid var(--ui-border-subtle);
+		font-size: 0.78rem;
+		color: var(--text-secondary);
+		line-height: 1.4;
+	}
+	.sc-sidebar-footer a { color: var(--sc-accent-a); }
 	.sc-new-channel {
 		display: flex;
 		gap: 6px;
@@ -338,7 +365,36 @@
 	}
 	.sc-back-btn[hidden] { display: none; }
 	.sc-back-btn:hover { color: var(--sc-accent-a); border-color: var(--sc-accent-a); }
-	.sc-channel-title { font-weight: 800; font-size: 1.05rem; }
+	/* Drawer toggles — mobile-only (see @media block); .sc-channels and
+	   .sc-presence are permanent side panels above 760px, so there's
+	   nothing for these to toggle there. */
+	.sc-menu-btn, .sc-presence-btn {
+		display: none;
+		flex: 0 0 auto;
+		align-items: center;
+		justify-content: center;
+		gap: 4px;
+		height: 28px;
+		padding: 0 9px;
+		border-radius: 999px;
+		border: 1px solid var(--ui-border-subtle);
+		background: var(--ui-surface-2);
+		color: var(--text-secondary);
+		font-size: 0.75rem;
+		font-weight: 700;
+		cursor: pointer;
+	}
+	.sc-menu-btn { width: 28px; padding: 0; }
+	.sc-menu-btn:hover, .sc-presence-btn:hover { color: var(--sc-accent-a); border-color: var(--sc-accent-a); }
+	.sc-channel-title {
+		font-weight: 800;
+		font-size: 1.05rem;
+		flex: 1 1 auto;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
 	.sc-channel-hash { color: var(--sc-accent-a); margin-right: 1px; }
 	.sc-status {
 		display: inline-flex;
@@ -351,6 +407,8 @@
 		border-radius: 999px;
 		background: var(--ui-surface-2);
 		border: 1px solid var(--ui-border-subtle);
+		margin-left: auto;
+		flex: 0 0 auto;
 	}
 	.sc-status::before {
 		content: "";
@@ -367,13 +425,6 @@
 		70%  { box-shadow: 0 0 0 6px rgba(47, 158, 91, 0); }
 		100% { box-shadow: 0 0 0 0 rgba(47, 158, 91, 0); }
 	}
-	.sc-me {
-		margin-left: auto;
-		font-size: 0.82rem;
-		color: var(--text-secondary);
-		white-space: nowrap;
-	}
-	.sc-me a { color: var(--sc-accent-a); }
 	.sc-messages {
 		flex: 1 1 auto;
 		overflow-y: auto;
@@ -541,15 +592,56 @@
 		white-space: nowrap;
 	}
 
+	/* Below 760px, .sc-channels and .sc-presence stop being permanent side
+	   panels and become off-canvas drawers instead — stacking all three
+	   columns in one narrow scroll (the old approach) buried the message
+	   thread itself under two full-width sections and pushed the presence
+	   list below the composer, needing a scroll just to see who's online.
+	   Each drawer slides in over the message view on its own trigger
+	   (##channelsMenuBtn / ##presenceMenuBtn in the topbar) with a shared
+	   scrim behind it; .sc-main needs no width/position rule of its own
+	   here since taking the drawers out of flow via position:fixed already
+	   leaves it as .sc-app's only remaining flex child, filling the width
+	   on its own. */
 	@media (max-width: 760px) {
-		.sc-app { flex-direction: column; }
+		.sc-menu-btn, .sc-presence-btn { display: inline-flex; }
+
 		.sc-channels, .sc-presence {
-			width: auto;
-			border: none;
-			border-bottom: 1px solid var(--ui-border-subtle);
+			position: fixed;
+			top: 0;
+			bottom: 0;
+			width: min(84vw, 300px);
+			z-index: 40;
+			transition: transform 0.24s ease;
+			box-shadow: 0 0 44px rgba(0, 0, 0, 0.4);
 		}
-		.sc-channel-list, .sc-dm-list { flex-direction: row; flex-wrap: wrap; }
-		.sc-presence-list { flex-direction: row; flex-wrap: wrap; }
+		.sc-channels {
+			left: 0;
+			transform: translateX(-100%);
+			border-right: 1px solid var(--ui-border-subtle);
+		}
+		.sc-channels.is-open { transform: translateX(0); }
+		.sc-presence {
+			right: 0;
+			transform: translateX(100%);
+			border-left: 1px solid var(--ui-border-subtle);
+		}
+		.sc-presence.is-open { transform: translateX(0); }
+
+		.sc-scrim {
+			display: block;
+			position: fixed;
+			inset: 0;
+			background: rgba(0, 0, 0, 0.5);
+			z-index: 35;
+			opacity: 0;
+			pointer-events: none;
+			transition: opacity 0.2s ease;
+		}
+		.sc-scrim.is-visible { opacity: 1; pointer-events: auto; }
+
+		.sc-topbar { padding: 12px 14px; gap: 6px; }
+		.sc-channel-title { font-size: 0.95rem; }
 		.sc-msg-row { max-width: 92%; }
 	}
 </style>
@@ -610,10 +702,16 @@
 	var dmEmptyEl = document.getElementById( "dmEmpty" );
 	var presenceListEl = document.getElementById( "presenceList" );
 	var presenceCountEl = document.getElementById( "presenceCount" );
+	var presenceBtnCountEl = document.getElementById( "presenceBtnCount" );
 	var messagesEl = document.getElementById( "messages" );
 	var typingIndicatorEl = document.getElementById( "typingIndicator" );
 	var composer = document.getElementById( "composer" );
 	var composerInput = document.getElementById( "composerInput" );
+	var channelsDrawer = document.getElementById( "channelsDrawer" );
+	var presenceDrawer = document.getElementById( "presenceDrawer" );
+	var scrimEl = document.getElementById( "scrim" );
+	var channelsMenuBtn = document.getElementById( "channelsMenuBtn" );
+	var presenceMenuBtn = document.getElementById( "presenceMenuBtn" );
 
 	var socket = null;
 	var connectingLine = null;
@@ -899,6 +997,7 @@
 
 	function renderPresence( members ) {
 		presenceCountEl.textContent = members.length ? "(" + members.length + ")" : "";
+		presenceBtnCountEl.textContent = members.length || "";
 		presenceListEl.innerHTML = "";
 		members.forEach( function ( member ) {
 			var isSelf = member.userId === MY_USER_ID;
@@ -934,6 +1033,7 @@
 		renderChannelList(); // no channel row should read as "active" while a DM is open
 		renderDmList();
 		renderActiveMessages();
+		closeDrawers(); // picking a DM (from either drawer) should return to the message view on mobile
 	}
 
 	// Pure client-side view swap between two channels already joined —
@@ -952,9 +1052,43 @@
 		renderDmList();
 		renderActiveMessages();
 		renderPresenceForActive();
+		closeDrawers(); // picking a channel (from the drawer, or the back button) should return to the message view on mobile
 	}
 
 	backBtn.addEventListener( "click", function () { switchToChannel( activeChannel ); } );
+
+	// Mobile drawer toggles — inert on desktop (see the @media block:
+	// .sc-channels/.sc-presence only respond to position/transform rules
+	// below 760px, and .sc-menu-btn/.sc-presence-btn are display:none
+	// there), so this wiring stays unconditional rather than checking the
+	// viewport width itself.
+	function closeDrawers() {
+		channelsDrawer.classList.remove( "is-open" );
+		presenceDrawer.classList.remove( "is-open" );
+		scrimEl.classList.remove( "is-visible" );
+		channelsMenuBtn.setAttribute( "aria-expanded", "false" );
+		presenceMenuBtn.setAttribute( "aria-expanded", "false" );
+	}
+
+	function openDrawer( drawer, btn ) {
+		closeDrawers();
+		drawer.classList.add( "is-open" );
+		scrimEl.classList.add( "is-visible" );
+		btn.setAttribute( "aria-expanded", "true" );
+	}
+
+	channelsMenuBtn.addEventListener( "click", function () {
+		if ( channelsDrawer.classList.contains( "is-open" ) ) closeDrawers();
+		else openDrawer( channelsDrawer, channelsMenuBtn );
+	} );
+	presenceMenuBtn.addEventListener( "click", function () {
+		if ( presenceDrawer.classList.contains( "is-open" ) ) closeDrawers();
+		else openDrawer( presenceDrawer, presenceMenuBtn );
+	} );
+	scrimEl.addEventListener( "click", closeDrawers );
+	document.addEventListener( "keydown", function ( ev ) {
+		if ( ev.key === "Escape" ) closeDrawers();
+	} );
 
 	function subscribeChannel( channel ) {
 		sendFrame( "SUBSCRIBE", { destination: CHANNEL_DEST_PREFIX + channel, id: CHANNEL_SUB_PREFIX + channel } );
