@@ -889,6 +889,16 @@
 					connectingLine.remove();
 					connectingLine = null;
 				}
+				// A (re)connect always ends with a fresh SUBSCRIBE below, which
+				// makes the server replay the channel's full history again
+				// (see routes/StompChat.bx's sendHistory()) — clearing the
+				// local backing array first (and re-rendering whatever's on
+				// screen from it) is what stops that replay from doubling up
+				// on top of messages already appended from before the drop.
+				// A first connect finds this already empty, so it's a no-op
+				// there.
+				channelMessages = [];
+				renderActiveMessages();
 				sendFrame( "SUBSCRIBE", { destination: DESTINATION, id: CHANNEL_SUB_ID } );
 				sendFrame( "SUBSCRIBE", { destination: MY_INBOX, id: "sub-dm" } );
 				sendFrame( "SUBSCRIBE", { destination: ACTIVITY_DEST, id: "sub-activity" } );
