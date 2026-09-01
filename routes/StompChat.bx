@@ -34,13 +34,19 @@
  * boundary as any authenticated form's freeform text field, not a
  * broker-enforced identity claim.
  *
- * Channels: variables.channels is still a plain in-memory array — not
- * persisted, cleared on the next deploy, same trade-off as every other
- * demo under /games. Only an admin (req.session.manage_user.role ==
- * "admin") can create one, via POST /games/stomp-chat/channels — CSRF-
- * protected automatically (routes/Manage.bx mounts boxExpressCsrf() with
- * no path prefix, so it already covers this route; req.csrfToken() just
- * works here the same as it does on any /manage form).
+ * Channels: variables.channels is an in-memory cache loaded from
+ * StompChatChannel (db/migrations/0011_...sql) at boot and appended to on
+ * every create — reads (channelsSnapshot(), the hot path for every
+ * SUBSCRIBE/SEND) never touch the database, only loadPersistedChannels()
+ * (init()) and persistChannel() (createChannel()) do. #general is never a
+ * row there either, same reasoning as StompChatChannelMembership not
+ * storing it (see below) — it's the one channel that doesn't need to be
+ * remembered because it's never not there. Only an admin
+ * (req.session.manage_user.role == "admin") can create a channel, via
+ * POST /games/stomp-chat/channels — CSRF-protected automatically
+ * (routes/Manage.bx mounts boxExpressCsrf() with no path prefix, so it
+ * already covers this route; req.csrfToken() just works here the same as
+ * it does on any /manage form).
  *
  * Channel membership (which channels a user has joined, as opposed to
  * which ones exist) is the one piece of this page that IS persisted —
@@ -51,10 +57,11 @@
  * of it (joinedChannelsFor() always prepends it), and leaveChannel() below
  * refuses to remove it — pinned, can't be left, same on the client (no
  * leave affordance rendered for it at all) and the server (the real trust
- * boundary). A stored membership row can outlive the in-memory channel it
- * names (a deploy resets variables.channels back to just ["general"]);
- * joinedChannelsFor() filters against the live channel list rather than
- * trusting every row still refers to something that exists.
+ * boundary). joinedChannelsFor() still filters against the live channel
+ * list rather than trusting every row refers to something real — channels
+ * are persisted now too (see the section above), but this keeps working
+ * correctly even if a channel were ever removed by hand directly against
+ * the database.
  *
  * A connection can be subscribed to several channels at once now — every
  * channel the signed-in user has joined, all subscribed the moment CONNECT
@@ -100,24 +107,29 @@
  * same event as deciding to leave, the same distinction Slack draws
  * between a presence dot changing and an actual "X left the channel" line.
  *
- * Message history: same non-persisted trade-off as before — a channel's
- * history lives only in variables.history (channel -> last MAX_HISTORY
- * {from, text} entries) and starts empty on every deploy. boxExpressStomp()
- * relays a SEND's body to subscribers but gives authorize() no view of
- * that body at all (only destination/access/connection), so recording
- * history can't happen from authorize() the way joining presence does —
- * it has to come from actually looking at each raw frame. onConnect()'s
- * wrapper intercepts every incoming frame before handing it to Stomp,
- * parses it with boxlang-express's own StompFrameCodec (reused directly
- * rather than hand-rolling frame parsing a second time), and records only
- * SEND frames addressed to a real channel — then forwards the original,
+ * Message history: persisted to StompChatMessage, kept for a 30-day
+ * rolling window (HISTORY_RETENTION_DAYS) rather than forever — see
+ * pruneOldMessages(), run opportunistically after every write since this
+ * app has no scheduled-job infrastructure to hang a cron-style cleanup off
+ * of and the traffic here is low enough that pruning on every write costs
+ * nothing real. boxExpressStomp() relays a SEND's body to subscribers but
+ * gives authorize() no view of that body at all (only
+ * destination/access/connection), so recording history can't happen from
+ * authorize() the way joining presence does — it has to come from
+ * actually looking at each raw frame. onConnect()'s wrapper intercepts
+ * every incoming frame before handing it to Stomp, parses it with
+ * boxlang-express's own StompFrameCodec (reused directly rather than
+ * hand-rolling frame parsing a second time), and records only SEND frames
+ * addressed to a real channel or DM inbox — then forwards the original,
  * unmodified frame to Stomp's handler exactly as it arrived. A freshly
  * SUBSCRIBEd connection gets that channel's history unicast directly
  * (StompFrameCodec.serialize() + connection.send(), a properly framed
  * MESSAGE the client's parser recognizes) — a plain broadcast would hit
  * the same "not registered yet" race presence's join broadcast has, but
  * unicast doesn't go through Stomp's subscriber registry at all, so
- * there's nothing to race here.
+ * there's nothing to race here. MAX_HISTORY_ROWS is a payload-size safety
+ * cap on top of the 30-day window (LIMIT in sendHistory()'s query), not
+ * the retention mechanism itself.
  *
  * Direct messages: every connection subscribes to exactly one personal
  * inbox for its whole lifetime — DM_PREFIX & <own userId> — alongside
@@ -132,11 +144,15 @@
  * own SEND back (they're not subscribed to the recipient's inbox, only
  * their own), so the client echoes its own outgoing DM locally rather
  * than waiting on a round trip — same reasoning as any optimistic-send
- * UI. No server-side DM history at all (a real scope cut, not an
- * oversight): unlike channel history, a DM thread only lives in the
- * browser tab that was open for it, gone on reload — extending
- * variables.history's per-channel design to per-conversation is the
- * obvious next step if that's ever worth it.
+ * UI, and orthogonal to persistence: stampSend() records every DM to
+ * StompChatDirectMessage the same 30-day way as channel messages
+ * regardless of which side renders it first. Unlike channel history
+ * there's no SUBSCRIBE-triggered unicast to hang delivery off of (a DM
+ * inbox is one destination for a user's whole lifetime, not one per
+ * conversation) — dmThreadsFor() instead loads every conversation this
+ * user has had in the last 30 days once, up front, in page(), and the
+ * view embeds it directly into the initial render alongside
+ * joinedChannels.
  *
  * Identity stamping: the module comment above used to say boxExpressStomp()
  * "forwards a SEND frame's body to subscribers verbatim, with no hook to
@@ -163,23 +179,23 @@ class {
 	variables.sessionStore       = "";
 	variables.stomp               = "";
 	variables.frameCodec          = "";
-	variables.channels            = [ "general" ];
-	variables.channelsLock        = "stomp-chat-channels";
-	variables.presence            = {}; // channel -> connId -> { userId, displayName }
-	variables.presenceLock        = "stomp-chat-presence";
-	variables.history             = {};
-	variables.historyLock         = "stomp-chat-history";
-	variables.MAX_HISTORY         = 50;
-	variables.DEST_PREFIX         = "/topic/stomp-chat/";
-	variables.DM_PREFIX           = "/queue/stomp-chat/dm/";
-	variables.MAX_CHANNEL_LEN     = 30;
-	variables.CHANNEL_SUB_PREFIX  = "sub-ch-"; // must match the client's subscribe-id scheme — see interceptFrame()
+	variables.channels             = [ "general" ];
+	variables.channelsLock         = "stomp-chat-channels";
+	variables.presence             = {}; // channel -> connId -> { userId, displayName }
+	variables.presenceLock         = "stomp-chat-presence";
+	variables.MAX_HISTORY_ROWS     = 500; // payload-size safety cap, not the retention mechanism — see HISTORY_RETENTION_DAYS
+	variables.HISTORY_RETENTION_DAYS = 30;
+	variables.DEST_PREFIX          = "/topic/stomp-chat/";
+	variables.DM_PREFIX            = "/queue/stomp-chat/dm/";
+	variables.MAX_CHANNEL_LEN      = 30;
+	variables.CHANNEL_SUB_PREFIX   = "sub-ch-"; // must match the client's subscribe-id scheme — see interceptFrame()
 
 	function init( required app, required siteDefaults ){
 		variables.app          = arguments.app;
 		variables.siteDefaults = arguments.siteDefaults;
 		variables.sessionStore = boxExpressCacheStore( "sessionCache" );
 		variables.frameCodec   = new bxModules.boxexpress.models.StompFrameCodec();
+		variables.channels     = loadPersistedChannels();
 
 		this.router = boxExpressRouter();
 		this.router.get( "/games/stomp-chat", ( req, res, next ) => page( req, res, next ) );
@@ -317,31 +333,97 @@ class {
 		parsed.from   = displayName;
 		parsed.fromId = userIdFor( sessionData );
 
-		recordIfMessage( frame.getHeader( "destination", "" ), parsed );
+		recordIfMessage( frame.getHeader( "destination", "" ), parsed, rawUserIdFor( sessionData ) );
 
 		var stamped = new bxModules.boxexpress.models.StompFrame( "SEND", frame.getHeaders(), JSONSerialize( parsed ) );
 		return variables.frameCodec.serialize( stamped );
 	}
 
-	// If destination is a real channel and parsed looks like a chat
-	// message (has non-empty text — a typing ping doesn't), appends
-	// {from, text} to that channel's history, capped at MAX_HISTORY.
-	// Anything else is a silent no-op.
-	function recordIfMessage( destination, parsed ){
-		var channel = _channelFromDestination( destination );
-		if ( !len( channel ) || !len( trim( parsed.text ?: "" ) ) ){
+	// Persists a real chat message (non-empty text — a typing ping has
+	// none, and is a silent no-op here) to whichever of StompChatMessage
+	// or StompChatDirectMessage the destination resolves to. rawUserId is
+	// the *sender's* real User.id, already resolved by stampSend() from
+	// the same session lookup it used for displayName — not re-derived
+	// here.
+	function recordIfMessage( destination, parsed, rawUserId ){
+		if ( !len( trim( parsed.text ?: "" ) ) ){
 			return;
 		}
-		var entry = { from: parsed.from ?: "", text: parsed.text };
-		lock name="#variables.historyLock#" type="exclusive" timeout="5" {
-			if ( !structKeyExists( variables.history, channel ) ){
-				variables.history[ channel ] = [];
-			}
-			variables.history[ channel ].append( entry );
-			if ( variables.history[ channel ].len() > variables.MAX_HISTORY ){
-				variables.history[ channel ].deleteAt( 1 );
-			}
+
+		var channel = _channelFromDestination( destination );
+		if ( len( channel ) ){
+			recordChannelMessage( channel, rawUserId, parsed.from ?: "", parsed.text );
+			return;
 		}
+
+		var dmTargetId = _dmUserIdFromDestination( destination );
+		if ( len( dmTargetId ) ){
+			recordDirectMessage( rawUserId, _rawFromPrefixedUserId( dmTargetId ), parsed.from ?: "", parsed.text );
+		}
+	}
+
+	// body truncated to the column width defensively — the composer caps
+	// at 500 characters client-side (maxlength on #composerInput), but
+	// this is the real trust boundary, not that attribute.
+	function recordChannelMessage( channel, rawUserId, fromName, text ){
+		queryExecute(
+			"INSERT INTO StompChatMessage (channel, user_id, from_name, body) VALUES (:channel, :userId, :fromName, :body)",
+			{
+				channel : { value: channel,           cfsqltype: "cf_sql_varchar" },
+				userId  : { value: rawUserId,          cfsqltype: "cf_sql_varchar", null: !len( rawUserId ) },
+				fromName: { value: left( fromName, 50 ), cfsqltype: "cf_sql_varchar" },
+				body    : { value: left( text, 1000 ), cfsqltype: "cf_sql_varchar" }
+			}
+		);
+		pruneOldMessages();
+	}
+
+	// Both ids required — a DM with no real sender or recipient user isn't
+	// a DM (this can't actually happen: authorize() already refused
+	// anything reaching here without a resolvable session/target), but the
+	// guard costs nothing and keeps this safe to call in isolation.
+	function recordDirectMessage( fromRawUserId, toRawUserId, fromName, text ){
+		if ( !len( fromRawUserId ) || !len( toRawUserId ) ){
+			return;
+		}
+		queryExecute(
+			"INSERT INTO StompChatDirectMessage (from_user_id, to_user_id, from_name, body) VALUES (:fromId, :toId, :fromName, :body)",
+			{
+				fromId  : { value: fromRawUserId,      cfsqltype: "cf_sql_varchar" },
+				toId    : { value: toRawUserId,        cfsqltype: "cf_sql_varchar" },
+				fromName: { value: left( fromName, 50 ), cfsqltype: "cf_sql_varchar" },
+				body    : { value: left( text, 1000 ), cfsqltype: "cf_sql_varchar" }
+			}
+		);
+		pruneOldMessages();
+	}
+
+	// Run after every recorded message rather than on a schedule — this
+	// app has no job-scheduling infrastructure to hang a cron-style
+	// cleanup off of, and the traffic on this page is low enough that a
+	// DELETE on an indexed range, once per send, costs nothing real.
+	// Failure here is logged and swallowed rather than propagated — a
+	// prune that couldn't run this time isn't a reason to fail the send
+	// that triggered it.
+	function pruneOldMessages(){
+		try {
+			queryExecute( "DELETE FROM StompChatMessage WHERE created < (NOW() - INTERVAL #variables.HISTORY_RETENTION_DAYS# DAY)" );
+			queryExecute( "DELETE FROM StompChatDirectMessage WHERE created < (NOW() - INTERVAL #variables.HISTORY_RETENTION_DAYS# DAY)" );
+		} catch ( any e ){
+			println( "[stomp-chat] Failed to prune old messages: " & e.message );
+		}
+	}
+
+	// A prefixed id ("c-"/"m-" & User.id, see userIdFor()) back to the raw
+	// User.id — the inverse of userIdFor(), needed here because a DM's
+	// destination (and therefore _dmUserIdFromDestination()'s result)
+	// carries the wire-protocol prefixed form, but StompChatDirectMessage
+	// stores the real foreign key.
+	function _rawFromPrefixedUserId( prefixedId ){
+		if ( len( prefixedId ) <= 2 ){
+			return "";
+		}
+		return mid( prefixedId, 3, len( prefixedId ) - 2 );
 	}
 
 	// Unicasts the channel's history straight to one connection as a
@@ -350,12 +432,22 @@ class {
 	// hit the same "not registered yet" ordering issue documented on
 	// onSubscribeChannel() below; a direct connection.send() doesn't touch
 	// Stomp's subscriber registry at all, so there's nothing to race here).
+	// Newest MAX_HISTORY_ROWS within the last HISTORY_RETENTION_DAYS,
+	// fetched newest-first (so LIMIT keeps the *recent* end, not the
+	// oldest) then walked backwards while building the reply so the
+	// client still receives them in chronological order.
 	function sendHistory( connection, channel ){
+		var rows = queryExecute(
+			"SELECT from_name, body FROM StompChatMessage
+			 WHERE channel = :channel AND created >= (NOW() - INTERVAL #variables.HISTORY_RETENTION_DAYS# DAY)
+			 ORDER BY created DESC
+			 LIMIT #variables.MAX_HISTORY_ROWS#",
+			{ channel: { value: channel, cfsqltype: "cf_sql_varchar" } },
+			{ returnType: "array" }
+		);
 		var messages = [];
-		lock name="#variables.historyLock#" type="readonly" timeout="5" {
-			if ( structKeyExists( variables.history, channel ) ){
-				messages = duplicate( variables.history[ channel ] );
-			}
+		for ( var i = rows.len(); i >= 1; i-- ){
+			messages.append( { from: rows[ i ].from_name, text: rows[ i ].body } );
 		}
 		var body  = JSONSerialize( { type: "history", messages: messages } );
 		var frame = new bxModules.boxexpress.models.StompFrame( "MESSAGE", {
@@ -365,6 +457,65 @@ class {
 			"content-type" : "application/json"
 		}, body );
 		connection.send( variables.frameCodec.serialize( frame ) );
+	}
+
+	// Every DM conversation rawUserId has had in the last
+	// HISTORY_RETENTION_DAYS, keyed by the *partner's* prefixed id (the
+	// same id space presence/DM addressing already uses client-side) so
+	// the view can hand this straight to the client as its initial
+	// dmThreads without any translation. Two queries per partner (their
+	// current display name/role, then the conversation itself) rather
+	// than one bigger join — this page's DM volume is low enough that
+	// simplicity wins over shaving a round trip.
+	function dmThreadsFor( rawUserId ){
+		var threads = {};
+		if ( !len( rawUserId ) ){
+			return threads;
+		}
+
+		var partners = queryExecute(
+			"SELECT DISTINCT CASE WHEN from_user_id = :me THEN to_user_id ELSE from_user_id END AS partner_id
+			 FROM StompChatDirectMessage
+			 WHERE ( from_user_id = :me OR to_user_id = :me )
+			   AND created >= (NOW() - INTERVAL #variables.HISTORY_RETENTION_DAYS# DAY)",
+			{ me: { value: rawUserId, cfsqltype: "cf_sql_varchar" } },
+			{ returnType: "array" }
+		);
+
+		for ( var p in partners ){
+			var partnerId = p.partner_id;
+
+			var userRows = queryExecute(
+				"SELECT display_name, role FROM User WHERE id = :id LIMIT 1",
+				{ id: { value: partnerId, cfsqltype: "cf_sql_varchar" } },
+				{ returnType: "array" }
+			);
+			if ( !userRows.len() ){
+				continue; // partner account no longer exists
+			}
+			var partnerPrefixedId = ( userRows[ 1 ].role == "commenter" ? "c-" : "m-" ) & partnerId;
+
+			var msgRows = queryExecute(
+				"SELECT from_user_id, from_name, body FROM StompChatDirectMessage
+				 WHERE ( ( from_user_id = :me AND to_user_id = :partner ) OR ( from_user_id = :partner AND to_user_id = :me ) )
+				   AND created >= (NOW() - INTERVAL #variables.HISTORY_RETENTION_DAYS# DAY)
+				 ORDER BY created DESC
+				 LIMIT #variables.MAX_HISTORY_ROWS#",
+				{
+					me     : { value: rawUserId, cfsqltype: "cf_sql_varchar" },
+					partner: { value: partnerId, cfsqltype: "cf_sql_varchar" }
+				},
+				{ returnType: "array" }
+			);
+			var messages = [];
+			for ( var i = msgRows.len(); i >= 1; i-- ){
+				messages.append( { from: msgRows[ i ].from_name, text: msgRows[ i ].body } );
+			}
+
+			threads[ partnerPrefixedId ] = { displayName: userRows[ 1 ].display_name, messages: messages };
+		}
+
+		return threads;
 	}
 
 	// GET /games/stomp-chat?channel=... — same "sign in with Google, then
@@ -390,8 +541,9 @@ class {
 			return;
 		}
 
-		var channelList = channelsSnapshot();
-		var joined       = joinedChannelsFor( rawUserIdFor( req.session ), channelList );
+		var rawUserId    = rawUserIdFor( req.session );
+		var channelList  = channelsSnapshot();
+		var joined       = joinedChannelsFor( rawUserId, channelList );
 		var requested    = trim( req.query.channel ?: "" );
 		var currentChannel = joined.contains( requested ) ? requested : joined[ 1 ]; // joined[1] is always "general"
 
@@ -404,6 +556,7 @@ class {
 			channels       : channelList,
 			joinedChannels : joined,
 			currentChannel : currentChannel,
+			dmThreads      : dmThreadsFor( rawUserId ),
 			isAdmin        : isAdminSession( req.session ),
 			csrfToken      : req.csrfToken()
 		} );
@@ -433,8 +586,40 @@ class {
 			}
 			variables.channels.append( name );
 		}
+		persistChannel( name, rawUserIdFor( req.session ) );
 
 		res.json( { success: true, channel: name, channels: channelsSnapshot() } );
+	}
+
+	// Loaded once at boot into variables.channels (the in-memory cache
+	// every hot-path read actually uses — see channelsSnapshot()); a
+	// failure here (database unreachable at startup, table missing) is
+	// logged and swallowed rather than crashing the whole app over one
+	// demo page's data — falls back to just ["general"], same as a brand
+	// new install would see.
+	function loadPersistedChannels(){
+		var channels = [ "general" ];
+		try {
+			var rows = queryExecute( "SELECT name FROM StompChatChannel ORDER BY created ASC", {}, { returnType: "array" } );
+			for ( var row in rows ){
+				if ( !channels.contains( row.name ) ){
+					channels.append( row.name );
+				}
+			}
+		} catch ( any e ){
+			println( "[stomp-chat] Failed to load persisted channels, starting with just ##general: " & e.message );
+		}
+		return channels;
+	}
+
+	function persistChannel( name, rawUserId ){
+		queryExecute(
+			"INSERT IGNORE INTO StompChatChannel (name, created_by) VALUES (:name, :createdBy)",
+			{
+				name     : { value: name,      cfsqltype: "cf_sql_varchar" },
+				createdBy: { value: rawUserId, cfsqltype: "cf_sql_varchar", null: !len( rawUserId ) }
+			}
+		);
 	}
 
 	// Lowercase, dash-joined, alphanumeric-only, length-capped — "" if

@@ -57,7 +57,7 @@
 		</aside>
 	</div>
 
-	<p class="sc-note">Channels, messages and DMs are cleared on the next deploy (DMs also don't survive a page reload) — but which channels you've joined is remembered. Your display name comes from your Google sign-in, not a field you can edit here.</p>
+	<p class="sc-note">Channels, channel history and direct messages are all kept for 30 days, then rolled off. Your display name comes from your Google sign-in, not a field you can edit here.</p>
 </div>
 
 <style>
@@ -619,15 +619,17 @@
 
 	// view is either { type: "channel", channel } or
 	// { type: "dm", userId, displayName }. channelsMessages/dmThreads are
-	// the client-only backing stores every view renders from —
-	// channelsMessages entries are { type: "chat", from, text } or
-	// { type: "system", text } so a channel's join/leave lines replay in
-	// the right order when you switch back to it, not just its chat
-	// messages. presenceByChannel caches each joined channel's last known
-	// roster so switching to it (or back to it from a DM) doesn't show a
-	// blank "Online" panel until the next presence broadcast happens to
-	// arrive. See routes/StompChat.bx's class docblock for why DMs don't
-	// have a server-side equivalent of channel history at all.
+	// the backing stores every view renders from — channelsMessages
+	// entries are { type: "chat", from, text } or { type: "system", text }
+	// so a channel's join/leave lines replay in the right order when you
+	// switch back to it, not just its chat messages. presenceByChannel
+	// caches each joined channel's last known roster so switching to it
+	// (or back to it from a DM) doesn't show a blank "Online" panel until
+	// the next presence broadcast happens to arrive. dmThreads starts
+	// seeded from data.dmThreads below (the last 30 days, loaded server-
+	// side by routes/StompChat.bx's dmThreadsFor()) rather than empty —
+	// unlike channel history there's no per-conversation SUBSCRIBE to hang
+	// a later fetch off of, so this is the only time it's ever delivered.
 	var view = { type: "channel", channel: activeChannel };
 	var channelsMessages = {}; // channel -> [{type:"chat",from,text} | {type:"system",text}]
 	var presenceByChannel = {}; // channel -> [{userId,displayName}]
@@ -640,6 +642,15 @@
 		channelsMessages[ channel ] = [];
 		presenceByChannel[ channel ] = [];
 		unreadByChannel[ channel ] = 0;
+	} );
+
+	// dmThreadsFor() (routes/StompChat.bx) already loaded every DM
+	// conversation from the last 30 days server-side — seeded here with
+	// unread:0 (it's history, not something new arriving right now), same
+	// shape ensureDmThread()/addDmMessage() build for a live conversation.
+	var initialDmThreads = #JSONSerialize( data.dmThreads )#;
+	Object.keys( initialDmThreads ).forEach( function ( userId ) {
+		dmThreads[ userId ] = { displayName: initialDmThreads[ userId ].displayName, messages: initialDmThreads[ userId ].messages, unread: 0 };
 	} );
 
 	function setStatus( text, state ) {

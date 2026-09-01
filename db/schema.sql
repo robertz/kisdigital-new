@@ -231,3 +231,57 @@ create table StompChatChannelMembership
         foreign key (user_id) references User (id)
             on update cascade on delete cascade
 );
+
+-- STOMP Chat channel list, channel history, and DM history — 30-day
+-- rolling retention enforced in app code, see
+-- db/migrations/0011_add_stomp_chat_history.sql.
+create table StompChatChannel
+(
+    name       varchar(30)                          not null
+        primary key,
+    created_by varchar(36)                          null,
+    created    timestamp default CURRENT_TIMESTAMP  not null,
+    constraint StompChatChannel_User_id_fk
+        foreign key (created_by) references User (id)
+            on update cascade on delete set null
+);
+
+create table StompChatMessage
+(
+    id        varchar(36)   default (uuid())            not null
+        primary key,
+    channel   varchar(30)                                not null,
+    user_id   varchar(36)                                 null,
+    from_name varchar(50)                                not null,
+    body      varchar(1000)                              not null,
+    created   timestamp(3)  default CURRENT_TIMESTAMP(3) not null,
+    constraint StompChatMessage_User_id_fk
+        foreign key (user_id) references User (id)
+            on update cascade on delete set null
+);
+
+create index idx_stompchatmessage_channel_created
+    on StompChatMessage (channel, created);
+
+create table StompChatDirectMessage
+(
+    id           varchar(36)   default (uuid())            not null
+        primary key,
+    from_user_id varchar(36)                                not null,
+    to_user_id   varchar(36)                                not null,
+    from_name    varchar(50)                                not null,
+    body         varchar(1000)                              not null,
+    created      timestamp(3)  default CURRENT_TIMESTAMP(3) not null,
+    constraint StompChatDirectMessage_From_User_id_fk
+        foreign key (from_user_id) references User (id)
+            on update cascade on delete cascade,
+    constraint StompChatDirectMessage_To_User_id_fk
+        foreign key (to_user_id) references User (id)
+            on update cascade on delete cascade
+);
+
+create index idx_stompchatdm_from_to_created
+    on StompChatDirectMessage (from_user_id, to_user_id, created);
+
+create index idx_stompchatdm_to_from_created
+    on StompChatDirectMessage (to_user_id, from_user_id, created);
