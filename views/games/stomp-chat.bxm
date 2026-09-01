@@ -1,79 +1,79 @@
 <bx:include template="../partials/_head.bxm">
 <bx:output>
-<div class="container py-5">
-	<div class="c-project-hero">
-		<p class="c-project-hero__eyebrow">Game</p>
-		<h1 class="c-project-hero__title">STOMP Chat</h1>
-		<p class="c-project-hero__tagline">A multi-channel chat over boxlang-express's STOMP pub/sub layer (<code class="bx-inline">boxExpressStomp()</code>) — unlike <a href="/games/chat/">Chat</a>, this one requires signing in first: the WebSocket CONNECT/SUBSCRIBE/SEND all check your site session, not just the page load.</p>
-	</div>
-
-	<div class="sc-app">
-		<aside class="sc-channels">
-			<div class="sc-workspace">
-				<span class="sc-workspace-icon">S</span>
+<div class="sc-app" id="scApp">
+	<aside class="sc-channels">
+		<a href="/games" class="sc-workspace" aria-label="Back to KISDigital Games">
+			<span class="sc-workspace-icon">S</span>
+			<span class="sc-workspace-text">
 				<span class="sc-workspace-name">STOMP Chat</span>
-			</div>
+				<span class="sc-workspace-sub">30-day history &middot; boxExpressStomp()</span>
+			</span>
+		</a>
 
-			<p class="sc-pane-title">Channels</p>
-			<nav class="sc-channel-list" id="channelList"></nav>
-			<bx:if data.isAdmin>
-			<form class="sc-new-channel" id="newChannelForm">
-				<input type="text" id="newChannelInput" class="sc-new-channel-input" maxlength="30" placeholder="new-channel" autocomplete="off">
-				<button type="submit" class="sc-new-channel-add" aria-label="Create channel">+</button>
-			</form>
-			<p class="sc-new-channel-error" id="newChannelError" hidden></p>
-			</bx:if>
+		<p class="sc-pane-title">Channels</p>
+		<nav class="sc-channel-list" id="channelList"></nav>
+		<bx:if data.isAdmin>
+		<form class="sc-new-channel" id="newChannelForm">
+			<input type="text" id="newChannelInput" class="sc-new-channel-input" maxlength="30" placeholder="new-channel" autocomplete="off">
+			<button type="submit" class="sc-new-channel-add" aria-label="Create channel">+</button>
+		</form>
+		<p class="sc-new-channel-error" id="newChannelError" hidden></p>
+		</bx:if>
 
-			<p class="sc-pane-title sc-dm-title">Direct messages</p>
-			<nav class="sc-dm-list" id="dmList"></nav>
-			<p class="sc-dm-empty" id="dmEmpty">Click someone online to start one.</p>
-		</aside>
+		<p class="sc-pane-title sc-dm-title">Direct messages</p>
+		<nav class="sc-dm-list" id="dmList"></nav>
+		<p class="sc-dm-empty" id="dmEmpty">Click someone online to start one.</p>
+	</aside>
 
-		<main class="sc-main">
-			<div class="sc-topbar">
-				<button type="button" class="sc-back-btn" id="backBtn" aria-label="Back to channel" hidden>
-					<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
-				</button>
-				<span class="sc-channel-title" id="viewTitle"><span class="sc-channel-hash">##</span>#encodeForHTML( data.currentChannel )#</span>
-				<span class="sc-status" id="status">connecting&hellip;</span>
-				<span class="sc-me">Signed in as <strong>#encodeForHTML( data.displayName )#</strong> &middot; <a href="/auth/logout?redirect=/games/stomp-chat">sign out</a></span>
-			</div>
+	<main class="sc-main">
+		<div class="sc-topbar">
+			<button type="button" class="sc-back-btn" id="backBtn" aria-label="Back to channel" hidden>
+				<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+			</button>
+			<span class="sc-channel-title" id="viewTitle"><span class="sc-channel-hash">##</span>#encodeForHTML( data.currentChannel )#</span>
+			<span class="sc-status" id="status">connecting&hellip;</span>
+			<span class="sc-me">Signed in as <strong>#encodeForHTML( data.displayName )#</strong> &middot; <a href="/auth/logout?redirect=/games/stomp-chat">sign out</a></span>
+		</div>
 
-			<div class="sc-messages" id="messages"></div>
-			<p class="sc-typing" id="typingIndicator" hidden></p>
+		<div class="sc-messages" id="messages"></div>
+		<p class="sc-typing" id="typingIndicator" hidden></p>
 
-			<form class="sc-composer" id="composer">
-				<input type="text" id="composerInput" class="sc-composer-input" maxlength="500" placeholder="Message ###encodeForHTMLAttribute( data.currentChannel )#" autocomplete="off">
-				<button type="submit" class="sc-composer-send">
-					<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
-					Send
-				</button>
-			</form>
-		</main>
+		<form class="sc-composer" id="composer">
+			<input type="text" id="composerInput" class="sc-composer-input" maxlength="500" placeholder="Message ###encodeForHTMLAttribute( data.currentChannel )#" autocomplete="off">
+			<button type="submit" class="sc-composer-send">
+				<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+				Send
+			</button>
+		</form>
+	</main>
 
-		<aside class="sc-presence">
-			<p class="sc-pane-title">Online <span class="sc-presence-count" id="presenceCount"></span></p>
-			<ul class="sc-presence-list" id="presenceList"></ul>
-		</aside>
-	</div>
-
-	<p class="sc-note">Channels, channel history and direct messages are all kept for 30 days, then rolled off. Your display name comes from your Google sign-in, not a field you can edit here.</p>
+	<aside class="sc-presence">
+		<p class="sc-pane-title">Online <span class="sc-presence-count" id="presenceCount"></span></p>
+		<ul class="sc-presence-list" id="presenceList"></ul>
+	</aside>
 </div>
 
 <style>
+	/* Escapes the normal site chrome — this page is meant to feel like a
+	   standalone application, not content embedded in the blog layout.
+	   Safe to target the shared header/footer classes directly here
+	   (rather than needing a scoped selector): this <style> block only
+	   ever ships on this one page's own HTML, so it can't affect any
+	   other page's rendering. body's fixed padding-top (offsetting the
+	   site header's position:fixed — see site.css) is zeroed to match,
+	   and body's own scroll is turned off since .sc-app manages its own
+	   internal scroll regions (##messages, the channel list) instead. */
+	header.header, .skip-link, .c-site-footer { display: none; }
+	body { padding-top: 0; overflow: hidden; }
+
 	.sc-app {
 		--sc-accent-a: ##7c3aed;
 		--sc-accent-b: ##06b6d4;
 		--sc-gradient: linear-gradient(135deg, var(--sc-accent-a), var(--sc-accent-b));
-		position: relative;
-		margin-top: 28px;
-		border-radius: 20px;
-		border: 1px solid var(--ui-border-subtle);
+		position: fixed;
+		inset: 0;
 		background: var(--ui-surface-1);
-		box-shadow: 0 24px 60px -28px rgba(124, 58, 237, 0.45), var(--ui-shadow-sm);
-		overflow: hidden;
 		display: flex;
-		min-height: 520px;
 	}
 	.sc-app::before {
 		content: "";
@@ -101,21 +101,41 @@
 		padding-bottom: 14px;
 		margin-bottom: 2px;
 		border-bottom: 1px solid var(--ui-border-subtle);
+		text-decoration: none;
+		color: inherit;
 	}
+	.sc-workspace:hover .sc-workspace-name { color: var(--sc-accent-a); }
 	.sc-workspace-icon {
 		flex: 0 0 auto;
-		width: 26px;
-		height: 26px;
-		border-radius: 7px;
+		width: 30px;
+		height: 30px;
+		border-radius: 8px;
 		background: var(--sc-gradient);
 		color: ##fff;
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		font-weight: 800;
-		font-size: 0.8rem;
+		font-size: 0.85rem;
 	}
-	.sc-workspace-name { font-weight: 800; font-size: 0.95rem; }
+	.sc-workspace-text {
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+	}
+	.sc-workspace-name {
+		font-weight: 800;
+		font-size: 0.92rem;
+		transition: color 0.15s ease;
+	}
+	.sc-workspace-sub {
+		font-size: 0.66rem;
+		font-weight: 600;
+		color: var(--text-muted);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
 	.sc-pane-title {
 		margin: 0;
 		font-size: 0.7rem;
@@ -519,13 +539,6 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
-	}
-
-	.sc-note {
-		margin-top: 14px;
-		font-size: 0.8rem;
-		color: var(--text-muted);
-		text-align: center;
 	}
 
 	@media (max-width: 760px) {
