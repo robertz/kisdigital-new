@@ -2,7 +2,7 @@
 <bx:output>
 <div class="sc-app" id="scApp">
 	<aside class="sc-channels">
-		<a href="/games" class="sc-workspace" aria-label="Back to KISDigital Games">
+		<a href="/" class="sc-workspace" aria-label="Back to KISDigital">
 			<span class="sc-workspace-icon">S</span>
 			<span class="sc-workspace-text">
 				<span class="sc-workspace-name">STOMP Chat</span>
@@ -32,7 +32,7 @@
 			</button>
 			<span class="sc-channel-title" id="viewTitle"><span class="sc-channel-hash">##</span>#encodeForHTML( data.currentChannel )#</span>
 			<span class="sc-status" id="status">connecting&hellip;</span>
-			<span class="sc-me">Signed in as <strong>#encodeForHTML( data.displayName )#</strong> &middot; <a href="/auth/logout?redirect=/games">sign out</a></span>
+			<span class="sc-me">Signed in as <strong>#encodeForHTML( data.displayName )#</strong> &middot; <a href="/auth/logout?redirect=/">sign out</a></span>
 		</div>
 
 		<div class="sc-messages" id="messages"></div>
@@ -947,7 +947,7 @@
 		backBtn.hidden = true;
 		composerInput.placeholder = "Message ##" + channel;
 		unreadByChannel[ channel ] = 0;
-		history.pushState( null, "", "/games/stomp-chat?channel=" + encodeURIComponent( channel ) );
+		history.pushState( null, "", "/chat?channel=" + encodeURIComponent( channel ) );
 		renderChannelList();
 		renderDmList();
 		renderActiveMessages();
@@ -1032,7 +1032,7 @@
 
 	function connect() {
 		var proto = location.protocol === "https:" ? "wss:" : "ws:";
-		socket = new WebSocket( proto + "//" + location.host + "/games/stomp-chat/socket" );
+		socket = new WebSocket( proto + "//" + location.host + "/chat/socket" );
 
 		socket.addEventListener( "open", function () {
 			sendFrame( "CONNECT", { "accept-version": "1.2", host: location.host } );
@@ -1146,7 +1146,7 @@
 			if ( !name ) return;
 			newChannelError.hidden = true;
 
-			fetch( "/games/stomp-chat/channels", {
+			fetch( "/chat/channels", {
 				method: "POST",
 				headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken },
 				body: JSON.stringify( { name: name } )

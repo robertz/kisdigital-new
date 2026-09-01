@@ -1,10 +1,13 @@
 /**
- * /games/stomp-chat — a multi-channel chat over boxlang-express's STOMP
- * pub/sub layer (boxExpressStomp()), gated behind the site's own login —
- * deliberately separate from routes/Chat.bx's anonymous raw-app.ws() demo,
- * both to keep that one's "no auth at all" story intact and to show the
- * other end of the spectrum: every CONNECT/SUBSCRIBE/SEND on this socket
- * re-checks a real site session, not just the page load.
+ * /chat — a multi-channel chat over boxlang-express's STOMP pub/sub layer
+ * (boxExpressStomp()), gated behind the site's own login — deliberately
+ * separate from routes/Chat.bx's anonymous raw-app.ws() demo (still under
+ * /games/chat/), both to keep that one's "no auth at all" story intact and
+ * to show the other end of the spectrum: every CONNECT/SUBSCRIBE/SEND on
+ * this socket re-checks a real site session, not just the page load.
+ * Promoted out of the games listing into the header nav (it used to live
+ * at /games/stomp-chat — see redirectLegacyPath() for the permanent
+ * redirect and GameRegistry.bx's git history for the removed entry).
  *
  * Needs both an HTTP route (the gated page, plus an admin-only channel-
  * creation POST) and a direct app.ws() registration (STOMP's handler()),
@@ -43,7 +46,7 @@
  * storing it (see below) — it's the one channel that doesn't need to be
  * remembered because it's never not there. Only an admin
  * (req.session.manage_user.role == "admin") can create a channel, via
- * POST /games/stomp-chat/channels — CSRF-protected automatically
+ * POST /chat/channels — CSRF-protected automatically
  * (routes/Manage.bx mounts boxExpressCsrf() with no path prefix, so it
  * already covers this route; req.csrfToken() just works here the same as
  * it does on any /manage form).
@@ -198,15 +201,20 @@ class {
 		variables.channels     = loadPersistedChannels();
 
 		this.router = boxExpressRouter();
-		this.router.get( "/games/stomp-chat", ( req, res, next ) => page( req, res, next ) );
-		this.router.post( "/games/stomp-chat/channels", ( req, res, next ) => createChannel( req, res, next ) );
+		this.router.get( "/chat", ( req, res, next ) => page( req, res, next ) );
+		this.router.post( "/chat/channels", ( req, res, next ) => createChannel( req, res, next ) );
+		// Permanent redirect from the old /games/stomp-chat URL (this page
+		// used to live under the games listing — see GameRegistry.bx) to
+		// its promoted, nav-linked home at /chat, preserving ?channel= for
+		// anyone who bookmarked a specific channel.
+		this.router.get( "/games/stomp-chat", ( req, res, next ) => redirectLegacyPath( req, res, next ) );
 
 		variables.stomp = boxExpressStomp( {
 			authenticate: ( login, passcode, host, connection ) => authenticate( connection ),
 			authorize   : ( login, destination, access, connection ) => authorize( destination, access, connection )
 		} );
 
-		variables.app.ws( "/games/stomp-chat/socket", ( connection ) => onConnect( connection ) );
+		variables.app.ws( "/chat/socket", ( connection ) => onConnect( connection ) );
 
 		return this;
 	}
@@ -518,9 +526,18 @@ class {
 		return threads;
 	}
 
-	// GET /games/stomp-chat?channel=... — same "sign in with Google, then
-	// come back here" pattern routes/Manage.bx uses for /manage, but via
-	// the general-purpose /auth/google (routes/Auth.bx) rather than the
+	// GET /games/stomp-chat?channel=... — the pre-promotion URL (this page
+	// used to be listed under /games — see GameRegistry.bx). Permanent
+	// redirect to /chat, carrying ?channel= along for anyone who bookmarked
+	// a specific one.
+	function redirectLegacyPath( req, res, next ){
+		var channel = trim( req.query.channel ?: "" );
+		res.redirect( "/chat" & ( len( channel ) ? "?channel=" & encodeForURL( channel ) : "" ), 301 );
+	}
+
+	// GET /chat?channel=... — same "sign in with Google, then come back
+	// here" pattern routes/Manage.bx uses for /manage, but via the
+	// general-purpose /auth/google (routes/Auth.bx) rather than the
 	// CMS-only login, since any signed-in visitor should see this, not
 	// just staff.
 	//
@@ -537,7 +554,7 @@ class {
 	function page( req, res, next ){
 		var displayName = displayNameFor( req.session );
 		if ( !len( displayName ) ){
-			res.redirect( "/auth/google?redirect=/games/stomp-chat" );
+			res.redirect( "/auth/google?redirect=/chat" );
 			return;
 		}
 
@@ -547,7 +564,7 @@ class {
 		var requested    = trim( req.query.channel ?: "" );
 		var currentChannel = joined.contains( requested ) ? requested : joined[ 1 ]; // joined[1] is always "general"
 
-		res.render( "games/stomp-chat", {
+		res.render( "main/chat", {
 			pageTitle      : "STOMP Chat",
 			canonicalUrl   : variables.siteDefaults.canonicalUrl( req.path ),
 			meta           : variables.siteDefaults.defaultMeta( req.path ),
@@ -562,7 +579,7 @@ class {
 		} );
 	}
 
-	// POST /games/stomp-chat/channels — admin-only. CSRF is already
+	// POST /chat/channels — admin-only. CSRF is already
 	// enforced site-wide (see class docblock), so no separate check here.
 	// Doesn't join the creating admin to the new channel server-side —
 	// the view SUBSCRIBEs to it right after a successful create, which
