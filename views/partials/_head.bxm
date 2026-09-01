@@ -108,6 +108,12 @@
 				<a href="/projects" class="header__link">Projects</a>
 				<a href="/games" class="header__link">Games</a>
 				<a href="/about" class="header__link">About</a>
+				<!--- STOMP Chat is its own full-viewport app (escapes this
+				      very header — see views/games/stomp-chat.bxm), so a
+				      same-tab nav click would yank someone out of whatever
+				      they were reading here; target="_blank" opens it
+				      alongside instead. --->
+				<a href="/games/stomp-chat" class="header__link" target="_blank" rel="noopener">Chat</a>
 				<bx:if len( data.manageUser ?: "" )>
 					<a href="/manage" class="header__link">Dashboard</a>
 				</bx:if>
@@ -138,6 +144,9 @@
 			</a>
 			<a href="/games" class="mobile-menu__link">
 				<i class="bi bi-joystick"></i> Games
+			</a>
+			<a href="/games/stomp-chat" class="mobile-menu__link" target="_blank" rel="noopener">
+				<i class="bi bi-chat-dots"></i> Chat
 			</a>
 			<a href="/about" class="mobile-menu__link">
 				<i class="bi bi-person"></i> About
