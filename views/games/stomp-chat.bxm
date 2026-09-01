@@ -493,14 +493,11 @@
 	// is still required by the STOMP spec, so one is sent with no real
 	// credentials in it — those fields are ignored server-side.
 	//
-	// Switching channels is a plain link to ?channel=X (see the channel
-	// list above), not a client-side re-subscribe: boxExpressStomp() gives
-	// authorize() a hook for SUBSCRIBE and SEND but none for UNSUBSCRIBE,
-	// so there's no clean way for the server to hear "this connection just
-	// left channel X" short of the socket actually closing. A full page
-	// load closes the old one and opens a fresh socket into the new
-	// channel, which the server's normal onClose/SUBSCRIBE paths handle
-	// correctly without any special-casing.
+	// Switching channels sends a real UNSUBSCRIBE for the old channel and a
+	// SUBSCRIBE for the new one, both over the same socket — see
+	// switchChannel() below and routes/StompChat.bx's class docblock for
+	// why this doesn't need a reconnect despite boxExpressStomp() having no
+	// authorize() hook for UNSUBSCRIBE.
 	//
 	// Direct messages don't have that problem at all: every connection
 	// subscribes once to its own inbox (DM_PREFIX + MY_USER_ID) right
@@ -511,6 +508,7 @@
 	// history for it the way channels have, so it's gone on reload.
 	var CHANNEL = #JSONSerialize( data.currentChannel )#;
 	var DESTINATION = "/topic/stomp-chat/" + CHANNEL;
+	var CHANNEL_SUB_ID = "sub-0"; // must match routes/StompChat.bx's variables.CHANNEL_SUB_ID
 	var MY_USER_ID = #JSONSerialize( data.userId )#;
 	var DM_PREFIX = "/queue/stomp-chat/dm/";
 	var MY_INBOX = DM_PREFIX + MY_USER_ID;
@@ -742,6 +740,78 @@
 
 	backBtn.addEventListener( "click", openChannel );
 
+	// Marks data-channel="CHANNEL" as the active sidebar link — called both
+	// after a same-socket switch and once up front for the server-rendered
+	// initial state, so a freshly-added channel link (addChannelLink()) and
+	// the original ones share one code path.
+	function markActiveChannelLink() {
+		document.querySelectorAll( ".sc-channel-link" ).forEach( function ( link ) {
+			link.classList.toggle( "is-active", link.dataset.channel === CHANNEL );
+		} );
+	}
+
+	// Same-socket channel switch: UNSUBSCRIBE the current channel, SUBSCRIBE
+	// the new one, both over the connection that's already open — see the
+	// IIFE's opening comment and routes/StompChat.bx's class docblock for
+	// why this doesn't need boxExpressStomp() to support UNSUBSCRIBE in
+	// authorize() at all. Safe to call before the socket has ever connected
+	// (e.g. clicking a channel link during the first "Connecting…" moment):
+	// CHANNEL/DESTINATION are read fresh when the CONNECTED handler sends
+	// its own first SUBSCRIBE, so there's nothing to unsubscribe from yet
+	// and this just changes what that first SUBSCRIBE targets.
+	function switchChannel( channel ) {
+		if ( channel === CHANNEL ) {
+			openChannel(); // already subscribed — just swap the view back, no UNSUBSCRIBE/SUBSCRIBE needed
+			return;
+		}
+
+		var wasOpen = socket && socket.readyState === WebSocket.OPEN;
+		if ( wasOpen ) {
+			sendFrame( "UNSUBSCRIBE", { id: CHANNEL_SUB_ID } );
+		}
+
+		CHANNEL = channel;
+		DESTINATION = "/topic/stomp-chat/" + CHANNEL;
+		channelMessages = [];
+		unreadByChannel[ CHANNEL ] = 0;
+		renderChannelBadge( CHANNEL );
+		markActiveChannelLink();
+		history.pushState( null, "", "/games/stomp-chat?channel=" + encodeURIComponent( CHANNEL ) );
+
+		openChannel(); // resets view to "channel", re-renders (now empty) messages
+
+		if ( wasOpen ) {
+			sendFrame( "SUBSCRIBE", { destination: DESTINATION, id: CHANNEL_SUB_ID } );
+		}
+	}
+
+	document.querySelectorAll( ".sc-channel-link" ).forEach( function ( link ) {
+		link.addEventListener( "click", function ( ev ) {
+			ev.preventDefault();
+			switchChannel( link.dataset.channel );
+		} );
+	} );
+
+	// Appends a new channel link to the sidebar (for a channel this admin
+	// just created — it isn't in the server-rendered data.channels list
+	// yet) and wires it up exactly like the ones rendered on load.
+	function addChannelLink( channel ) {
+		var nav = document.querySelector( ".sc-channel-list" );
+		var link = document.createElement( "a" );
+		link.href = "/games/stomp-chat?channel=" + encodeURIComponent( channel );
+		link.dataset.channel = channel;
+		link.className = "sc-channel-link";
+		var label = document.createElement( "span" );
+		label.className = "sc-channel-link-name";
+		label.textContent = "##" + channel;
+		link.appendChild( label );
+		link.addEventListener( "click", function ( ev ) {
+			ev.preventDefault();
+			switchChannel( channel );
+		} );
+		nav.appendChild( link );
+	}
+
 	function renderPresence( members ) {
 		presenceCountEl.textContent = members.length ? "(" + members.length + ")" : "";
 		presenceListEl.innerHTML = "";
@@ -819,7 +889,7 @@
 					connectingLine.remove();
 					connectingLine = null;
 				}
-				sendFrame( "SUBSCRIBE", { destination: DESTINATION, id: "sub-0" } );
+				sendFrame( "SUBSCRIBE", { destination: DESTINATION, id: CHANNEL_SUB_ID } );
 				sendFrame( "SUBSCRIBE", { destination: MY_INBOX, id: "sub-dm" } );
 				sendFrame( "SUBSCRIBE", { destination: ACTIVITY_DEST, id: "sub-activity" } );
 			} else if ( frame.command === "MESSAGE" ) {
@@ -917,7 +987,9 @@
 				.then( function ( res ) { return res.json().then( function ( body ) { return { ok: res.ok, body: body }; } ); } )
 				.then( function ( result ) {
 					if ( result.ok && result.body.success ) {
-						location.href = "/games/stomp-chat?channel=" + encodeURIComponent( result.body.channel );
+						addChannelLink( result.body.channel );
+						switchChannel( result.body.channel );
+						newChannelInput.value = "";
 					} else {
 						newChannelError.textContent = result.body.error || "Couldn't create that channel.";
 						newChannelError.hidden = false;

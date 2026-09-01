@@ -42,15 +42,23 @@
  * no path prefix, so it already covers this route; req.csrfToken() just
  * works here the same as it does on any /manage form).
  *
- * A connection only ever occupies one channel for its whole lifetime.
- * Switching channels client-side means closing the socket and opening a
- * fresh one subscribed to the new destination, rather than a STOMP
- * UNSUBSCRIBE — boxExpressStomp() gives authorize() a hook for SUBSCRIBE
- * and SEND, but none at all for UNSUBSCRIBE, so there's no clean way to
- * hear "this connection just left channel X but kept the socket open."
- * A full reconnect sidesteps that entirely: the old channel's presence
- * cleanup runs through the normal onClose path (see onConnect()), and
- * the new channel's presence add runs through the normal SUBSCRIBE path.
+ * A connection only ever occupies one channel at a time, but can switch
+ * without closing the socket: a real STOMP UNSUBSCRIBE for the channel
+ * subscription, followed by a SUBSCRIBE to the new one, both over the
+ * same connection. boxExpressStomp() gives authorize() a hook for
+ * SUBSCRIBE and SEND but none for UNSUBSCRIBE — however, reading
+ * Stomp.bx directly shows its own _handleUnsubscribe already tears down
+ * its internal subscribersByDestination entry on UNSUBSCRIBE with no app
+ * hook needed at all; the missing hook only ever meant "the app can't
+ * find out a leave happened," not "the framework doesn't support it."
+ * interceptFrame() below (the same raw-frame interception stampSend()
+ * already needed for identity/history) watches for an UNSUBSCRIBE on the
+ * channel subscription id and runs onLeave() itself before forwarding
+ * the frame to Stomp unchanged — the old channel's presence cleanup runs
+ * from that, the new channel's presence add runs through the normal
+ * SUBSCRIBE/authorize() path exactly as it already did, and the raw
+ * UNSUBSCRIBE still reaches Stomp's own handler so its registry stays
+ * correct too.
  *
  * Presence: boxExpressStomp() has no concept of this itself (see the
  * WebSockets doc's "What this isn't") — it's tracked entirely in this
@@ -149,6 +157,7 @@ class {
 	variables.DM_PREFIX       = "/queue/stomp-chat/dm/";
 	variables.ACTIVITY_DEST   = "/topic/stomp-chat-activity";
 	variables.MAX_CHANNEL_LEN = 30;
+	variables.CHANNEL_SUB_ID  = "sub-0"; // must match the client's hardcoded subscribe id — see interceptFrame()
 
 	function init( required app, required siteDefaults ){
 		variables.app          = arguments.app;
@@ -192,12 +201,12 @@ class {
 			isClosed  : () => connection.isClosed()
 		};
 
-		// Stamps identity onto (and records history from) every raw frame
-		// before forwarding it to whatever Stomp's own handler() registers
-		// via wrapped.onMessage() above — see class docblock's "Identity
-		// stamping".
+		// Stamps identity onto (and records history from) every raw SEND,
+		// and runs channel-leave cleanup on the channel UNSUBSCRIBE — see
+		// interceptFrame() — before forwarding to whatever Stomp's own
+		// handler() registers via wrapped.onMessage() above.
 		connection.onMessage( ( raw ) => {
-			var toForward = stampSend( raw, connection );
+			var toForward = interceptFrame( raw, connection, connId );
 			if ( !isNull( messageCallback ) ){
 				messageCallback( toForward );
 			}
@@ -214,29 +223,50 @@ class {
 		variables.stomp.handler()( wrapped );
 	}
 
-	// Parses one raw WS frame; if it's a SEND with a JSON body, discards
-	// whatever "from"/"fromId" the client sent (if anything — a typing
-	// ping sends neither) and replaces both with the session-resolved
-	// identity, then re-serializes and returns the stamped frame text for
-	// onConnect() to forward to Stomp's handler instead of the original.
-	// Anything that isn't a SEND, isn't valid STOMP, or isn't a JSON body
-	// passes through completely unchanged — this only ever narrows what a
-	// client can claim about itself, never rewrites anything else about
-	// the frame. Also where a channel SEND gets recorded into history and
-	// a channel activity ping goes out (see recordIfMessage()) — both need
-	// the same parsed frame this already has, so it happens here instead
-	// of a second separate parse.
-	function stampSend( raw, connection ){
+	// Parses one raw WS frame once, before Stomp ever sees it, and branches
+	// on command:
+	//   UNSUBSCRIBE, id == CHANNEL_SUB_ID — this connection is leaving its
+	//     current channel (either a same-socket channel switch or a client
+	//     tearing down before close). Runs onLeave() for presence cleanup
+	//     immediately, then forwards the frame unchanged — Stomp.bx's own
+	//     _handleUnsubscribe still needs to see it to clear its internal
+	//     subscribersByDestination entry (confirmed by reading
+	//     models/middleware/Stomp.bx directly: it already handles this with
+	//     no app hook required).
+	//   SEND — handed to stampSend() for identity stamping/history (see its
+	//     docblock).
+	//   anything else — passed through completely unchanged.
+	function interceptFrame( raw, connection, connId ){
 		var frame = "";
 		try {
 			frame = variables.frameCodec.parse( raw );
 		} catch ( any e ){
 			return raw;
 		}
+
+		if ( frame.getCommand() == "UNSUBSCRIBE" && frame.getHeader( "id", "" ) == variables.CHANNEL_SUB_ID ){
+			onLeave( connId );
+			return raw;
+		}
+
 		if ( frame.getCommand() != "SEND" ){
 			return raw;
 		}
 
+		return stampSend( raw, frame, connection );
+	}
+
+	// Discards whatever "from"/"fromId" the client sent on a SEND (if
+	// anything — a typing ping sends neither) and replaces both with the
+	// session-resolved identity, then re-serializes and returns the
+	// stamped frame text. Not a JSON body, or no resolvable identity, and
+	// the original raw frame passes through unchanged — this only ever
+	// narrows what a client can claim about itself, never rewrites
+	// anything else about the frame. Also where a channel SEND gets
+	// recorded into history and a channel activity ping goes out (see
+	// recordIfMessage()) — both need the same parsed frame interceptFrame()
+	// already has, so it happens here instead of a second separate parse.
+	function stampSend( raw, frame, connection ){
 		var sessionData = sessionFor( connection );
 		var displayName = displayNameFor( sessionData );
 		if ( !len( displayName ) ){
@@ -302,7 +332,7 @@ class {
 		var frame = new bxModules.boxexpress.models.StompFrame( "MESSAGE", {
 			destination    : variables.DEST_PREFIX & channel,
 			"message-id"   : createUUID(),
-			subscription   : "sub-0",
+			subscription   : variables.CHANNEL_SUB_ID,
 			"content-type" : "application/json"
 		}, body );
 		connection.send( variables.frameCodec.serialize( frame ) );
