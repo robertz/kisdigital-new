@@ -988,13 +988,25 @@ class {
 
 	// {userId, displayName} per member rather than a bare name — the
 	// client needs userId to address a DM at someone from the presence
-	// list.
+	// list. Presence is keyed by connId, not userId (see class docblock),
+	// so the same signed-in user with two tabs open (or two devices)
+	// occupies two entries here — deduplicated by userId before returning,
+	// so the roster shows one row per person, not one per connection.
+	// Which of that user's connIds "wins" the kept entry is arbitrary
+	// (whichever the struct iterates first) and doesn't matter: every
+	// connId for the same userId already carries the same displayName.
 	function membersInChannel( channel ){
+		var seenUserIds = {};
 		var members = [];
 		lock name="#variables.presenceLock#" type="readonly" timeout="5" {
 			if ( structKeyExists( variables.presence, channel ) ){
 				for ( var connId in variables.presence[ channel ] ){
-					members.append( { userId: variables.presence[ channel ][ connId ].userId, displayName: variables.presence[ channel ][ connId ].displayName } );
+					var entry = variables.presence[ channel ][ connId ];
+					if ( structKeyExists( seenUserIds, entry.userId ) ){
+						continue;
+					}
+					seenUserIds[ entry.userId ] = true;
+					members.append( { userId: entry.userId, displayName: entry.displayName } );
 				}
 			}
 		}
