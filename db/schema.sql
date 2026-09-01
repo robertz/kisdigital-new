@@ -217,3 +217,17 @@ create table ProjectDoc
     constraint ProjectDoc_project_page_uindex
         unique (project_slug, page_slug)
 );
+
+-- STOMP Chat (/games/stomp-chat) channel membership — see
+-- db/migrations/0010_add_stomp_chat_channel_membership.sql for why #general
+-- itself is never a row here.
+create table StompChatChannelMembership
+(
+    user_id varchar(36)                          not null,
+    channel varchar(30)                          not null,
+    joined  timestamp default CURRENT_TIMESTAMP  not null,
+    primary key (user_id, channel),
+    constraint StompChatChannelMembership_User_id_fk
+        foreign key (user_id) references User (id)
+            on update cascade on delete cascade
+);

@@ -9,14 +9,13 @@
 
 	<div class="sc-app">
 		<aside class="sc-channels">
+			<div class="sc-workspace">
+				<span class="sc-workspace-icon">S</span>
+				<span class="sc-workspace-name">STOMP Chat</span>
+			</div>
+
 			<p class="sc-pane-title">Channels</p>
-			<nav class="sc-channel-list">
-				<bx:loop array="#data.channels#" item="channel">
-					<a href="/games/stomp-chat?channel=#encodeForHTMLAttribute( channel )#" data-channel="#encodeForHTMLAttribute( channel )#" class="sc-channel-link#( channel == data.currentChannel ? ' is-active' : '' )#">
-						<span class="sc-channel-link-name">###encodeForHTML( channel )#</span>
-					</a>
-				</bx:loop>
-			</nav>
+			<nav class="sc-channel-list" id="channelList"></nav>
 			<bx:if data.isAdmin>
 			<form class="sc-new-channel" id="newChannelForm">
 				<input type="text" id="newChannelInput" class="sc-new-channel-input" maxlength="30" placeholder="new-channel" autocomplete="off">
@@ -58,7 +57,7 @@
 		</aside>
 	</div>
 
-	<p class="sc-note">Not persisted — channels, messages and DMs are cleared on the next deploy (DMs also don't survive a page reload). Your display name comes from your Google sign-in, not a field you can edit here.</p>
+	<p class="sc-note">Channels, messages and DMs are cleared on the next deploy (DMs also don't survive a page reload) — but which channels you've joined is remembered. Your display name comes from your Google sign-in, not a field you can edit here.</p>
 </div>
 
 <style>
@@ -84,17 +83,39 @@
 		background: var(--sc-gradient);
 	}
 
-	/* ── Left: channels + DMs ── */
+	/* ── Left: workspace header + channels + DMs ── */
 	.sc-channels {
-		width: 190px;
+		width: 210px;
 		flex: 0 0 auto;
 		border-right: 1px solid var(--ui-border-subtle);
 		background: var(--ui-surface-2);
-		padding: 20px 14px 14px;
+		padding: 16px 14px 14px;
 		display: flex;
 		flex-direction: column;
 		gap: 12px;
 	}
+	.sc-workspace {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding-bottom: 14px;
+		margin-bottom: 2px;
+		border-bottom: 1px solid var(--ui-border-subtle);
+	}
+	.sc-workspace-icon {
+		flex: 0 0 auto;
+		width: 26px;
+		height: 26px;
+		border-radius: 7px;
+		background: var(--sc-gradient);
+		color: ##fff;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-weight: 800;
+		font-size: 0.8rem;
+	}
+	.sc-workspace-name { font-weight: 800; font-size: 0.95rem; }
 	.sc-pane-title {
 		margin: 0;
 		font-size: 0.7rem;
@@ -116,23 +137,46 @@
 		flex-direction: column;
 		gap: 2px;
 	}
-	.sc-channel-link {
+	.sc-channel-row {
+		position: relative;
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
-		gap: 6px;
-		padding: 7px 10px;
+		gap: 4px;
+		border-radius: 10px;
+		border-left: 3px solid transparent;
+		transition: background 0.15s ease;
+	}
+	.sc-channel-row:hover { background: var(--ui-border-subtle); }
+	.sc-channel-link {
+		flex: 1 1 auto;
+		min-width: 0;
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		padding: 7px 4px 7px 10px;
 		border-radius: 10px;
 		font-size: 0.88rem;
 		font-weight: 500;
 		color: var(--text-secondary);
-		text-decoration: none;
-		border-left: 3px solid transparent;
-		transition: background 0.15s ease, color 0.15s ease;
+		background: none;
+		border: none;
+		text-align: left;
+		cursor: pointer;
+		font-family: inherit;
 	}
+	.sc-channel-hash { opacity: 0.7; }
 	.sc-channel-link-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.sc-channel-row.is-unjoined .sc-channel-link { color: var(--text-muted); opacity: 0.7; }
+	.sc-channel-row.is-unjoined:hover .sc-channel-link-name::after {
+		content: " · join";
+		opacity: 0.75;
+		font-size: 0.78em;
+		font-weight: 700;
+		color: var(--sc-accent-a);
+	}
 	.sc-channel-badge {
 		flex: 0 0 auto;
+		margin-right: 8px;
 		background: var(--sc-gradient);
 		color: ##fff;
 		font-size: 0.68rem;
@@ -145,13 +189,28 @@
 		justify-content: center;
 		padding: 0 4px;
 	}
-	.sc-channel-link:hover { background: var(--ui-border-subtle); }
-	.sc-channel-link.is-active {
+	.sc-channel-leave {
+		flex: 0 0 auto;
+		width: 20px;
+		height: 20px;
+		margin-right: 6px;
+		border-radius: 50%;
+		border: none;
+		background: none;
+		color: var(--text-muted);
+		font-size: 0.9rem;
+		line-height: 1;
+		cursor: pointer;
+		opacity: 0;
+		transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
+	}
+	.sc-channel-row:hover .sc-channel-leave { opacity: 1; }
+	.sc-channel-leave:hover { background: rgba(214, 69, 69, 0.15); color: ##d64545; }
+	.sc-channel-row.is-active {
 		background: linear-gradient(90deg, rgba(124, 58, 237, 0.14), rgba(6, 182, 212, 0.05));
-		color: var(--sc-accent-a);
-		font-weight: 700;
 		border-left-color: var(--sc-accent-a);
 	}
+	.sc-channel-row.is-active .sc-channel-link { color: var(--sc-accent-a); font-weight: 700; }
 	.sc-dm-item {
 		display: flex;
 		align-items: center;
@@ -493,26 +552,22 @@
 	// is still required by the STOMP spec, so one is sent with no real
 	// credentials in it — those fields are ignored server-side.
 	//
-	// Switching channels sends a real UNSUBSCRIBE for the old channel and a
-	// SUBSCRIBE for the new one, both over the same socket — see
-	// switchChannel() below and routes/StompChat.bx's class docblock for
-	// why this doesn't need a reconnect despite boxExpressStomp() having no
-	// authorize() hook for UNSUBSCRIBE.
-	//
-	// Direct messages don't have that problem at all: every connection
-	// subscribes once to its own inbox (DM_PREFIX + MY_USER_ID) right
-	// alongside the channel subscription and never needs to leave it, so
-	// switching *which DM thread is on screen* is purely a client-side
-	// view swap — no new SUBSCRIBE, no reconnect. A DM thread only lives
-	// in this tab's memory (dmThreads below) — there's no server-side
-	// history for it the way channels have, so it's gone on reload.
-	var CHANNEL = #JSONSerialize( data.currentChannel )#;
-	var DESTINATION = "/topic/stomp-chat/" + CHANNEL;
-	var CHANNEL_SUB_ID = "sub-0"; // must match routes/StompChat.bx's variables.CHANNEL_SUB_ID
+	// A connection SUBSCRIBEs to every channel the user has joined at once
+	// (see connect()'s CONNECTED handler) rather than exactly one — moving
+	// between two channels you're already in is therefore a pure client-
+	// side view swap (switchToChannel()), same as moving between two open
+	// DM threads always was. Real SUBSCRIBE/UNSUBSCRIBE traffic only
+	// happens for an actual membership change: joinChannel() (clicking an
+	// unjoined channel) and leaveChannel() (its "×" hover affordance,
+	// never offered for ##general — see routes/StompChat.bx's class
+	// docblock for why that's pinned both here and server-side). Both
+	// persist server-side (StompChatChannelMembership), so which channels
+	// you're in survives a reload — unlike everything else on this page.
 	var MY_USER_ID = #JSONSerialize( data.userId )#;
+	var CHANNEL_DEST_PREFIX = "/topic/stomp-chat/";
+	var CHANNEL_SUB_PREFIX = "sub-ch-"; // must match routes/StompChat.bx's variables.CHANNEL_SUB_PREFIX
 	var DM_PREFIX = "/queue/stomp-chat/dm/";
 	var MY_INBOX = DM_PREFIX + MY_USER_ID;
-	var ACTIVITY_DEST = "/topic/stomp-chat-activity";
 	var RECONNECT_DELAY_MS = 2000;
 	var TYPING_TIMEOUT_MS = 3000;
 	var TYPING_SEND_THROTTLE_MS = 2000;
@@ -537,6 +592,7 @@
 	var statusEl = document.getElementById( "status" );
 	var viewTitleEl = document.getElementById( "viewTitle" );
 	var backBtn = document.getElementById( "backBtn" );
+	var channelListEl = document.getElementById( "channelList" );
 	var dmListEl = document.getElementById( "dmList" );
 	var dmEmptyEl = document.getElementById( "dmEmpty" );
 	var presenceListEl = document.getElementById( "presenceList" );
@@ -549,16 +605,42 @@
 	var socket = null;
 	var connectingLine = null;
 
-	// view is either { type: "channel" } or { type: "dm", userId, displayName }.
-	// channelMessages/dmThreads are the client-only backing store both
-	// views render from — see class docblock in routes/StompChat.bx for
-	// why DMs don't have a server-side equivalent of channel history.
-	var view = { type: "channel" };
-	var channelMessages = [];
+	// allChannels: every channel that exists (joined or not — the sidebar
+	// shows all of them, dimming the ones this user hasn't joined, per the
+	// "one list, unjoined dimmed" browse design). joinedChannels: the
+	// subset this user is actually subscribed to; "general" is always
+	// first and never leaves it. activeChannel tracks whichever channel
+	// the presence panel and the back button return to — it stays put
+	// while a DM thread is open (view.type === "dm"), matching how the
+	// presence list behaved before DMs and multi-channel coexisted at all.
+	var allChannels = #JSONSerialize( data.channels )#;
+	var joinedChannels = #JSONSerialize( data.joinedChannels )#;
+	var activeChannel = #JSONSerialize( data.currentChannel )#;
+
+	// view is either { type: "channel", channel } or
+	// { type: "dm", userId, displayName }. channelsMessages/dmThreads are
+	// the client-only backing stores every view renders from —
+	// channelsMessages entries are { type: "chat", from, text } or
+	// { type: "system", text } so a channel's join/leave lines replay in
+	// the right order when you switch back to it, not just its chat
+	// messages. presenceByChannel caches each joined channel's last known
+	// roster so switching to it (or back to it from a DM) doesn't show a
+	// blank "Online" panel until the next presence broadcast happens to
+	// arrive. See routes/StompChat.bx's class docblock for why DMs don't
+	// have a server-side equivalent of channel history at all.
+	var view = { type: "channel", channel: activeChannel };
+	var channelsMessages = {}; // channel -> [{type:"chat",from,text} | {type:"system",text}]
+	var presenceByChannel = {}; // channel -> [{userId,displayName}]
+	var unreadByChannel = {}; // channel -> count, only for joined channels that aren't the active view
 	var dmThreads = {}; // userId -> { displayName, messages: [{from,text}], unread }
-	var unreadByChannel = {}; // channel -> count, for channels this connection isn't subscribed to
 	var typingNames = {}; // displayName -> timeout id, for whichever destination is currently active
 	var lastTypingSentAt = 0;
+
+	joinedChannels.forEach( function ( channel ) {
+		channelsMessages[ channel ] = [];
+		presenceByChannel[ channel ] = [];
+		unreadByChannel[ channel ] = 0;
+	} );
 
 	function setStatus( text, state ) {
 		statusEl.textContent = text;
@@ -595,21 +677,68 @@
 		return row;
 	}
 
+	function buildLine( className, text ) {
+		var line = document.createElement( "div" );
+		line.className = className;
+		line.textContent = text;
+		return line;
+	}
+
 	function renderActiveMessages() {
 		messagesEl.innerHTML = "";
 		var list = view.type === "dm"
-			? ( dmThreads[ view.userId ] ? dmThreads[ view.userId ].messages : [] )
-			: channelMessages;
-		list.forEach( function ( m ) { messagesEl.appendChild( buildMessageRow( m.from, m.text ) ); } );
+			? ( dmThreads[ view.userId ] ? dmThreads[ view.userId ].messages.map( function ( m ) { return { type: "chat", from: m.from, text: m.text }; } ) : [] )
+			: ( channelsMessages[ view.channel ] || [] );
+		list.forEach( function ( m ) {
+			messagesEl.appendChild( m.type === "system" ? buildLine( "sc-line-system", m.text ) : buildMessageRow( m.from, m.text ) );
+		} );
 		scrollToBottom();
 	}
 
-	function addChannelMessage( from, text ) {
-		channelMessages.push( { from: from, text: text } );
-		if ( view.type === "channel" ) {
+	// Real-time chat message for `channel` (any joined channel, not
+	// necessarily the one on screen). Always recorded into that channel's
+	// backing array; only painted into the DOM (and scrolled to) if it's
+	// the active view — otherwise it bumps that channel's unread badge.
+	function addChannelMessage( channel, from, text ) {
+		if ( !channelsMessages[ channel ] ) channelsMessages[ channel ] = [];
+		channelsMessages[ channel ].push( { type: "chat", from: from, text: text } );
+		if ( view.type === "channel" && view.channel === channel ) {
 			messagesEl.appendChild( buildMessageRow( from, text ) );
 			scrollToBottom();
+		} else {
+			unreadByChannel[ channel ] = ( unreadByChannel[ channel ] || 0 ) + 1;
+			renderChannelList();
 		}
+	}
+
+	// A "joined ##x" / "left ##x" system line — recorded the same way as a
+	// chat message, but never bumps the unread badge (Slack doesn't badge
+	// a channel just because someone came or went, only for actual
+	// messages).
+	function addChannelSystem( channel, text ) {
+		if ( !channelsMessages[ channel ] ) channelsMessages[ channel ] = [];
+		channelsMessages[ channel ].push( { type: "system", text: text } );
+		if ( view.type === "channel" && view.channel === channel ) {
+			messagesEl.appendChild( buildLine( "sc-line-system", text ) );
+			scrollToBottom();
+		}
+	}
+
+	function addChannelHistory( channel, messages ) {
+		channelsMessages[ channel ] = messages.map( function ( m ) { return { type: "chat", from: m.from, text: m.text }; } );
+		if ( view.type === "channel" && view.channel === channel ) renderActiveMessages();
+	}
+
+	function addError( text ) {
+		messagesEl.appendChild( buildLine( "sc-line-error", text ) );
+		scrollToBottom();
+	}
+
+	function addSystem( text ) {
+		var line = buildLine( "sc-line-system", text );
+		messagesEl.appendChild( line );
+		scrollToBottom();
+		return line;
 	}
 
 	function ensureDmThread( userId, threadDisplayName ) {
@@ -658,23 +787,47 @@
 		} );
 	}
 
-	// Renders (or clears) the unread badge on one channel's sidebar link —
-	// only ever a channel other than CHANNEL, since this connection only
-	// hears about activity elsewhere (see ACTIVITY_DEST in
-	// routes/StompChat.bx); the current channel's own messages arrive as
-	// real MESSAGE frames, not activity pings.
-	function renderChannelBadge( channel ) {
-		var link = document.querySelector( '.sc-channel-link[data-channel="' + CSS.escape( channel ) + '"]' );
-		if ( !link ) return;
-		var existing = link.querySelector( ".sc-channel-badge" );
-		if ( existing ) existing.remove();
-		var count = unreadByChannel[ channel ] || 0;
-		if ( count > 0 ) {
-			var badge = document.createElement( "span" );
-			badge.className = "sc-channel-badge";
-			badge.textContent = count;
-			link.appendChild( badge );
-		}
+	// Rebuilds the whole sidebar channel list from allChannels/
+	// joinedChannels/unreadByChannel/view every time something about it
+	// changes (join, leave, switch, a badge count) — same "just rebuild
+	// it" approach renderDmList() already uses, simpler than patching
+	// individual rows for a list this small.
+	function renderChannelList() {
+		channelListEl.innerHTML = "";
+		allChannels.forEach( function ( channel ) {
+			var isJoined = joinedChannels.indexOf( channel ) !== -1;
+			var isActive = view.type === "channel" && view.channel === channel;
+
+			var row = document.createElement( "div" );
+			row.className = "sc-channel-row" + ( isJoined ? "" : " is-unjoined" ) + ( isActive ? " is-active" : "" );
+
+			var link = document.createElement( "button" );
+			link.type = "button";
+			link.className = "sc-channel-link";
+			link.innerHTML = '<span class="sc-channel-hash">##</span><span class="sc-channel-link-name">' + escapeHtml( channel ) + '</span>';
+			link.addEventListener( "click", function () { openChannelRow( channel ); } );
+			row.appendChild( link );
+
+			var unread = unreadByChannel[ channel ] || 0;
+			if ( isJoined && unread > 0 ) {
+				var badge = document.createElement( "span" );
+				badge.className = "sc-channel-badge";
+				badge.textContent = unread;
+				row.appendChild( badge );
+			}
+
+			if ( isJoined && channel !== "general" ) {
+				var leaveBtn = document.createElement( "button" );
+				leaveBtn.type = "button";
+				leaveBtn.className = "sc-channel-leave";
+				leaveBtn.setAttribute( "aria-label", "Leave ##" + channel );
+				leaveBtn.textContent = "×";
+				leaveBtn.addEventListener( "click", function () { leaveChannel( channel ); } );
+				row.appendChild( leaveBtn );
+			}
+
+			channelListEl.appendChild( row );
+		} );
 	}
 
 	function renderTyping() {
@@ -713,103 +866,11 @@
 	}
 
 	function currentTypingDestination() {
-		return view.type === "dm" ? ( DM_PREFIX + view.userId ) : DESTINATION;
+		return view.type === "dm" ? ( DM_PREFIX + view.userId ) : ( CHANNEL_DEST_PREFIX + view.channel );
 	}
 
-	function openDm( userId, threadDisplayName ) {
-		ensureDmThread( userId, threadDisplayName );
-		dmThreads[ userId ].unread = 0;
-		clearAllTyping();
-		view = { type: "dm", userId: userId, displayName: threadDisplayName };
-		viewTitleEl.textContent = "Direct message with " + threadDisplayName;
-		backBtn.hidden = false;
-		composerInput.placeholder = "Message " + threadDisplayName;
-		renderDmList();
-		renderActiveMessages();
-	}
-
-	function openChannel() {
-		clearAllTyping();
-		view = { type: "channel" };
-		viewTitleEl.innerHTML = '<span class="sc-channel-hash">##</span>' + escapeHtml( CHANNEL );
-		backBtn.hidden = true;
-		composerInput.placeholder = "Message ##" + CHANNEL;
-		renderDmList();
-		renderActiveMessages();
-	}
-
-	backBtn.addEventListener( "click", openChannel );
-
-	// Marks data-channel="CHANNEL" as the active sidebar link — called both
-	// after a same-socket switch and once up front for the server-rendered
-	// initial state, so a freshly-added channel link (addChannelLink()) and
-	// the original ones share one code path.
-	function markActiveChannelLink() {
-		document.querySelectorAll( ".sc-channel-link" ).forEach( function ( link ) {
-			link.classList.toggle( "is-active", link.dataset.channel === CHANNEL );
-		} );
-	}
-
-	// Same-socket channel switch: UNSUBSCRIBE the current channel, SUBSCRIBE
-	// the new one, both over the connection that's already open — see the
-	// IIFE's opening comment and routes/StompChat.bx's class docblock for
-	// why this doesn't need boxExpressStomp() to support UNSUBSCRIBE in
-	// authorize() at all. Safe to call before the socket has ever connected
-	// (e.g. clicking a channel link during the first "Connecting…" moment):
-	// CHANNEL/DESTINATION are read fresh when the CONNECTED handler sends
-	// its own first SUBSCRIBE, so there's nothing to unsubscribe from yet
-	// and this just changes what that first SUBSCRIBE targets.
-	function switchChannel( channel ) {
-		if ( channel === CHANNEL ) {
-			openChannel(); // already subscribed — just swap the view back, no UNSUBSCRIBE/SUBSCRIBE needed
-			return;
-		}
-
-		var wasOpen = socket && socket.readyState === WebSocket.OPEN;
-		if ( wasOpen ) {
-			sendFrame( "UNSUBSCRIBE", { id: CHANNEL_SUB_ID } );
-		}
-
-		CHANNEL = channel;
-		DESTINATION = "/topic/stomp-chat/" + CHANNEL;
-		channelMessages = [];
-		unreadByChannel[ CHANNEL ] = 0;
-		renderChannelBadge( CHANNEL );
-		markActiveChannelLink();
-		history.pushState( null, "", "/games/stomp-chat?channel=" + encodeURIComponent( CHANNEL ) );
-
-		openChannel(); // resets view to "channel", re-renders (now empty) messages
-
-		if ( wasOpen ) {
-			sendFrame( "SUBSCRIBE", { destination: DESTINATION, id: CHANNEL_SUB_ID } );
-		}
-	}
-
-	document.querySelectorAll( ".sc-channel-link" ).forEach( function ( link ) {
-		link.addEventListener( "click", function ( ev ) {
-			ev.preventDefault();
-			switchChannel( link.dataset.channel );
-		} );
-	} );
-
-	// Appends a new channel link to the sidebar (for a channel this admin
-	// just created — it isn't in the server-rendered data.channels list
-	// yet) and wires it up exactly like the ones rendered on load.
-	function addChannelLink( channel ) {
-		var nav = document.querySelector( ".sc-channel-list" );
-		var link = document.createElement( "a" );
-		link.href = "/games/stomp-chat?channel=" + encodeURIComponent( channel );
-		link.dataset.channel = channel;
-		link.className = "sc-channel-link";
-		var label = document.createElement( "span" );
-		label.className = "sc-channel-link-name";
-		label.textContent = "##" + channel;
-		link.appendChild( label );
-		link.addEventListener( "click", function ( ev ) {
-			ev.preventDefault();
-			switchChannel( channel );
-		} );
-		nav.appendChild( link );
+	function renderPresenceForActive() {
+		renderPresence( presenceByChannel[ activeChannel ] || [] );
 	}
 
 	function renderPresence( members ) {
@@ -838,16 +899,88 @@
 		} );
 	}
 
-	function addSystem( text ) { return addLine( "sc-line-system", text ); }
-	function addError( text ) { return addLine( "sc-line-error", text ); }
+	function openDm( userId, threadDisplayName ) {
+		ensureDmThread( userId, threadDisplayName );
+		dmThreads[ userId ].unread = 0;
+		clearAllTyping();
+		view = { type: "dm", userId: userId, displayName: threadDisplayName };
+		viewTitleEl.textContent = "Direct message with " + threadDisplayName;
+		backBtn.hidden = false;
+		composerInput.placeholder = "Message " + threadDisplayName;
+		renderChannelList(); // no channel row should read as "active" while a DM is open
+		renderDmList();
+		renderActiveMessages();
+	}
 
-	function addLine( className, text ) {
-		var line = document.createElement( "div" );
-		line.className = className;
-		line.textContent = text;
-		messagesEl.appendChild( line );
-		scrollToBottom();
-		return line;
+	// Pure client-side view swap between two channels already joined —
+	// no STOMP traffic at all, this connection is already subscribed to
+	// every joinedChannels entry (see connect()'s CONNECTED handler).
+	function switchToChannel( channel ) {
+		clearAllTyping();
+		activeChannel = channel;
+		view = { type: "channel", channel: channel };
+		viewTitleEl.innerHTML = '<span class="sc-channel-hash">##</span>' + escapeHtml( channel );
+		backBtn.hidden = true;
+		composerInput.placeholder = "Message ##" + channel;
+		unreadByChannel[ channel ] = 0;
+		history.pushState( null, "", "/games/stomp-chat?channel=" + encodeURIComponent( channel ) );
+		renderChannelList();
+		renderDmList();
+		renderActiveMessages();
+		renderPresenceForActive();
+	}
+
+	backBtn.addEventListener( "click", function () { switchToChannel( activeChannel ); } );
+
+	function subscribeChannel( channel ) {
+		sendFrame( "SUBSCRIBE", { destination: CHANNEL_DEST_PREFIX + channel, id: CHANNEL_SUB_PREFIX + channel } );
+	}
+
+	// Joins a channel this user wasn't already in: adds it to
+	// joinedChannels client-side immediately (so the sidebar and the
+	// upcoming switchToChannel() treat it as joined right away) and sends
+	// a real SUBSCRIBE — routes/StompChat.bx's authorize() persists the
+	// membership row and broadcasts the "joined" system message from
+	// there, not from anything sent on this frame.
+	function joinChannel( channel ) {
+		if ( joinedChannels.indexOf( channel ) !== -1 ) return;
+		joinedChannels.push( channel );
+		channelsMessages[ channel ] = [];
+		presenceByChannel[ channel ] = [];
+		unreadByChannel[ channel ] = 0;
+		if ( socket && socket.readyState === WebSocket.OPEN ) subscribeChannel( channel );
+	}
+
+	// Explicit leave (the sidebar row's hover "×") — never offered for
+	// ##general in the UI, but guarded here too since this is the function
+	// that would actually send the UNSUBSCRIBE. Falls back the view to
+	// ##general first if the channel being left is the one on screen, since
+	// you can't be looking at a channel you're not in.
+	function leaveChannel( channel ) {
+		if ( channel === "general" ) return;
+		var idx = joinedChannels.indexOf( channel );
+		if ( idx === -1 ) return;
+		joinedChannels.splice( idx, 1 );
+		delete channelsMessages[ channel ];
+		delete presenceByChannel[ channel ];
+		delete unreadByChannel[ channel ];
+		if ( socket && socket.readyState === WebSocket.OPEN ) {
+			sendFrame( "UNSUBSCRIBE", { id: CHANNEL_SUB_PREFIX + channel } );
+		}
+		if ( view.type === "channel" && view.channel === channel ) {
+			switchToChannel( "general" );
+		} else {
+			renderChannelList();
+		}
+	}
+
+	// Click handler for any sidebar channel row, joined or not — joining
+	// (if needed) and opening are the same gesture from the user's side,
+	// matching "clicking an unsubscribed channel moves it to the active
+	// list."
+	function openChannelRow( channel ) {
+		if ( joinedChannels.indexOf( channel ) === -1 ) joinChannel( channel );
+		switchToChannel( channel );
 	}
 
 	// STOMP 1.2 frame wire format: "COMMAND\nheader:value\n\n<body>\0"
@@ -889,48 +1022,48 @@
 					connectingLine.remove();
 					connectingLine = null;
 				}
-				// A (re)connect always ends with a fresh SUBSCRIBE below, which
-				// makes the server replay the channel's full history again
-				// (see routes/StompChat.bx's sendHistory()) — clearing the
-				// local backing array first (and re-rendering whatever's on
-				// screen from it) is what stops that replay from doubling up
-				// on top of messages already appended from before the drop.
-				// A first connect finds this already empty, so it's a no-op
-				// there.
-				channelMessages = [];
+				// A (re)connect always ends with a fresh SUBSCRIBE per
+				// joined channel below, which makes the server replay each
+				// one's full history again (see routes/StompChat.bx's
+				// sendHistory()) — clearing every channel's local backing
+				// array first (and re-rendering whatever's on screen from
+				// it) is what stops that replay from doubling up on top of
+				// messages already appended from before the drop. A first
+				// connect finds these already empty, so it's a no-op there.
+				joinedChannels.forEach( function ( channel ) { channelsMessages[ channel ] = []; } );
 				renderActiveMessages();
-				sendFrame( "SUBSCRIBE", { destination: DESTINATION, id: CHANNEL_SUB_ID } );
+				joinedChannels.forEach( function ( channel ) { subscribeChannel( channel ); } );
 				sendFrame( "SUBSCRIBE", { destination: MY_INBOX, id: "sub-dm" } );
-				sendFrame( "SUBSCRIBE", { destination: ACTIVITY_DEST, id: "sub-activity" } );
 			} else if ( frame.command === "MESSAGE" ) {
 				try {
 					var data = JSON.parse( frame.body );
-					if ( data.type === "presence" ) {
-						renderPresence( data.members );
-					} else if ( data.type === "history" ) {
-						data.messages.forEach( function ( m ) { addChannelMessage( m.from, m.text ); } );
-					} else if ( data.type === "system" ) {
-						addSystem( data.text );
-					} else if ( data.type === "activity" ) {
-						if ( data.channel !== CHANNEL ) {
-							unreadByChannel[ data.channel ] = ( unreadByChannel[ data.channel ] || 0 ) + 1;
-							renderChannelBadge( data.channel );
+					var destination = frame.headers.destination || "";
+					if ( destination === MY_INBOX ) {
+						if ( data.type === "typing" ) {
+							// Check the *sender's* id against whichever DM
+							// thread is open — destination is always
+							// MY_INBOX for any DM typing ping addressed to
+							// me, regardless of who sent it, so it can't
+							// tell two different people typing to me apart
+							// on its own.
+							if ( view.type === "dm" && data.fromId === view.userId ) noteTyping( data.from );
+						} else if ( data.type === "dm" ) {
+							addDmMessage( data.fromId, data.from, data.from, data.text );
 						}
-					} else if ( data.type === "typing" ) {
-						// For a DM ping, check the *sender's* id against
-						// whichever thread is open — frame.headers.destination
-						// is always MY_INBOX for any DM typing ping addressed
-						// to me, regardless of who sent it, so it can't tell
-						// two different people typing to me apart.
-						if ( view.type === "channel" && frame.headers.destination === DESTINATION ) {
-							noteTyping( data.from );
-						} else if ( view.type === "dm" && data.fromId === view.userId ) {
-							noteTyping( data.from );
+					} else if ( destination.indexOf( CHANNEL_DEST_PREFIX ) === 0 ) {
+						var channel = destination.slice( CHANNEL_DEST_PREFIX.length );
+						if ( data.type === "presence" ) {
+							presenceByChannel[ channel ] = data.members;
+							if ( channel === activeChannel ) renderPresenceForActive();
+						} else if ( data.type === "history" ) {
+							addChannelHistory( channel, data.messages );
+						} else if ( data.type === "system" ) {
+							addChannelSystem( channel, data.text );
+						} else if ( data.type === "typing" ) {
+							if ( view.type === "channel" && view.channel === channel ) noteTyping( data.from );
+						} else {
+							addChannelMessage( channel, data.from, data.text );
 						}
-					} else if ( data.type === "dm" ) {
-						addDmMessage( data.fromId, data.from, data.from, data.text );
-					} else {
-						addChannelMessage( data.from, data.text );
 					}
 				} catch ( e ) { /* ignore malformed body */ }
 			} else if ( frame.command === "ERROR" ) {
@@ -964,7 +1097,7 @@
 				JSON.stringify( { type: "dm", text: text } ) );
 			addDmMessage( targetId, view.displayName, displayName, text ); // optimistic echo — see class docblock
 		} else {
-			sendFrame( "SEND", { destination: DESTINATION, "content-type": "application/json" }, JSON.stringify( { type: "message", text: text } ) );
+			sendFrame( "SEND", { destination: CHANNEL_DEST_PREFIX + view.channel, "content-type": "application/json" }, JSON.stringify( { type: "message", text: text } ) );
 		}
 		composerInput.value = "";
 	} );
@@ -997,9 +1130,9 @@
 				.then( function ( res ) { return res.json().then( function ( body ) { return { ok: res.ok, body: body }; } ); } )
 				.then( function ( result ) {
 					if ( result.ok && result.body.success ) {
-						addChannelLink( result.body.channel );
-						switchChannel( result.body.channel );
+						allChannels = result.body.channels;
 						newChannelInput.value = "";
+						openChannelRow( result.body.channel ); // creator joins and opens it immediately
 					} else {
 						newChannelError.textContent = result.body.error || "Couldn't create that channel.";
 						newChannelError.hidden = false;
@@ -1012,6 +1145,7 @@
 		} );
 	}
 
+	renderChannelList();
 	renderDmList();
 	connectingLine = addSystem( "Connecting as " + displayName + "…" );
 	connect();

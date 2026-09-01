@@ -34,7 +34,7 @@
  * boundary as any authenticated form's freeform text field, not a
  * broker-enforced identity claim.
  *
- * Channels: variables.channels is a plain in-memory array — not
+ * Channels: variables.channels is still a plain in-memory array — not
  * persisted, cleared on the next deploy, same trade-off as every other
  * demo under /games. Only an admin (req.session.manage_user.role ==
  * "admin") can create one, via POST /games/stomp-chat/channels — CSRF-
@@ -42,61 +42,86 @@
  * no path prefix, so it already covers this route; req.csrfToken() just
  * works here the same as it does on any /manage form).
  *
- * A connection only ever occupies one channel at a time, but can switch
- * without closing the socket: a real STOMP UNSUBSCRIBE for the channel
- * subscription, followed by a SUBSCRIBE to the new one, both over the
- * same connection. boxExpressStomp() gives authorize() a hook for
- * SUBSCRIBE and SEND but none for UNSUBSCRIBE — however, reading
- * Stomp.bx directly shows its own _handleUnsubscribe already tears down
- * its internal subscribersByDestination entry on UNSUBSCRIBE with no app
- * hook needed at all; the missing hook only ever meant "the app can't
- * find out a leave happened," not "the framework doesn't support it."
- * interceptFrame() below (the same raw-frame interception stampSend()
- * already needed for identity/history) watches for an UNSUBSCRIBE on the
- * channel subscription id and runs onLeave() itself before forwarding
- * the frame to Stomp unchanged — the old channel's presence cleanup runs
- * from that, the new channel's presence add runs through the normal
- * SUBSCRIBE/authorize() path exactly as it already did, and the raw
- * UNSUBSCRIBE still reaches Stomp's own handler so its registry stays
- * correct too.
+ * Channel membership (which channels a user has joined, as opposed to
+ * which ones exist) is the one piece of this page that IS persisted —
+ * StompChatChannelMembership (db/migrations/0010_...sql) survives a
+ * redeploy on purpose, since "explicitly leave to stop being a member"
+ * only means something if joining also sticks. #general itself is never a
+ * row in that table: every signed-in user is always considered a member
+ * of it (joinedChannelsFor() always prepends it), and leaveChannel() below
+ * refuses to remove it — pinned, can't be left, same on the client (no
+ * leave affordance rendered for it at all) and the server (the real trust
+ * boundary). A stored membership row can outlive the in-memory channel it
+ * names (a deploy resets variables.channels back to just ["general"]);
+ * joinedChannelsFor() filters against the live channel list rather than
+ * trusting every row still refers to something that exists.
+ *
+ * A connection can be subscribed to several channels at once now — every
+ * channel the signed-in user has joined, all subscribed the moment CONNECT
+ * succeeds (see the view's connect()) — rather than exactly one for its
+ * whole lifetime. Switching which channel is on screen between two you've
+ * already joined is therefore a pure client-side view swap, no protocol
+ * traffic at all, the same as switching between two open DM threads always
+ * was. STOMP SUBSCRIBE/UNSUBSCRIBE only happen for a real membership
+ * change: SUBSCRIBE when joining a channel you weren't already in (either
+ * clicking an unjoined one, or the automatic subscribe-everything-you've-
+ * joined that happens on every connect), UNSUBSCRIBE when explicitly
+ * leaving one. boxExpressStomp() gives authorize() a hook for SUBSCRIBE and
+ * SEND but none for UNSUBSCRIBE — however, reading Stomp.bx directly shows
+ * its own _handleUnsubscribe already tears down its internal
+ * subscribersByDestination entry on UNSUBSCRIBE with no app hook needed at
+ * all; the missing hook only ever meant "the app can't find out a leave
+ * happened," not "the framework doesn't support it." interceptFrame()
+ * below (the same raw-frame interception stampSend() already needed for
+ * identity/history) watches for an UNSUBSCRIBE whose id encodes a channel
+ * (see CHANNEL_SUB_PREFIX) and runs leaveChannel() itself — deleting the
+ * membership row and cleaning up presence — before forwarding the frame to
+ * Stomp unchanged, so its own registry stays correct too.
  *
  * Presence: boxExpressStomp() has no concept of this itself (see the
  * WebSockets doc's "What this isn't") — it's tracked entirely in this
- * class, per channel, in variables.presence (connId -> {channel,
- * displayName}), added to on a successful SUBSCRIBE (inside authorize(),
- * the one point that already knows both "this connection is joining a
- * channel" and who they are) and removed on disconnect. The disconnect
- * half needs a small trick: WebSocketConnection.onClose() only holds a
- * single callback slot (plain assignment, not a list), and Stomp.bx's
- * own handler() already claims it for subscription cleanup — calling
- * onClose() again ourselves would silently overwrite that and leak
- * Stomp's internal subscriber registry. onConnect() below hands Stomp a
- * thin wrapper connection instead of the real one, whose onClose()
- * appends to a local array instead of overwriting — both Stomp's cleanup
- * and this class's presence removal actually run.
+ * class, per channel, in variables.presence (channel -> connId ->
+ * {userId, displayName}, one connId able to appear under several
+ * channels at once now). Adding a connId under a channel happens inside
+ * authorize()'s SUBSCRIBE branch (the one point that already knows both
+ * "this connection is joining channel X" and who they are); removing one
+ * happens either from leaveChannel() (one channel, connection stays open)
+ * or onDisconnect() (every channel this connId was in, connection is
+ * gone). onDisconnect() needs a small trick to run at all:
+ * WebSocketConnection.onClose() only holds a single callback slot (plain
+ * assignment, not a list), and Stomp.bx's own handler() already claims it
+ * for subscription cleanup — calling onClose() again ourselves would
+ * silently overwrite that and leak Stomp's internal subscriber registry.
+ * onConnect() below hands Stomp a thin wrapper connection instead of the
+ * real one, whose onClose() appends to a local array instead of
+ * overwriting — both Stomp's cleanup and this class's presence removal
+ * actually run. A disconnect (as opposed to an explicit leaveChannel())
+ * never posts a "left #channel" system message — going offline isn't the
+ * same event as deciding to leave, the same distinction Slack draws
+ * between a presence dot changing and an actual "X left the channel" line.
  *
- * Message history: same trade-off as presence — a channel's history
- * lives only in variables.history (channel -> last MAX_HISTORY {from,
- * text} entries) and starts empty on every deploy. boxExpressStomp()
+ * Message history: same non-persisted trade-off as before — a channel's
+ * history lives only in variables.history (channel -> last MAX_HISTORY
+ * {from, text} entries) and starts empty on every deploy. boxExpressStomp()
  * relays a SEND's body to subscribers but gives authorize() no view of
  * that body at all (only destination/access/connection), so recording
  * history can't happen from authorize() the way joining presence does —
  * it has to come from actually looking at each raw frame. onConnect()'s
  * wrapper intercepts every incoming frame before handing it to Stomp,
  * parses it with boxlang-express's own StompFrameCodec (reused directly
- * rather than hand-rolling frame parsing a second time), and records
- * only SEND frames addressed to a real channel — then forwards the
- * original, unmodified frame to Stomp's handler exactly as it arrived.
- * A newly-subscribed connection gets the channel's history unicast
- * directly (StompFrameCodec.serialize() + connection.send(), a properly
- * framed MESSAGE the client's parser recognizes) — a plain broadcast
- * would hit the same "not registered yet" race presence's join broadcast
- * has, but unicast doesn't go through Stomp's subscriber registry at
- * all, so there's nothing to race here.
+ * rather than hand-rolling frame parsing a second time), and records only
+ * SEND frames addressed to a real channel — then forwards the original,
+ * unmodified frame to Stomp's handler exactly as it arrived. A freshly
+ * SUBSCRIBEd connection gets that channel's history unicast directly
+ * (StompFrameCodec.serialize() + connection.send(), a properly framed
+ * MESSAGE the client's parser recognizes) — a plain broadcast would hit
+ * the same "not registered yet" race presence's join broadcast has, but
+ * unicast doesn't go through Stomp's subscriber registry at all, so
+ * there's nothing to race here.
  *
  * Direct messages: every connection subscribes to exactly one personal
  * inbox for its whole lifetime — DM_PREFIX & <own userId> — alongside
- * its one channel subscription, the moment CONNECT succeeds (no
+ * whichever channels it's joined, the moment CONNECT succeeds (no
  * UNSUBSCRIBE problem here at all, since a connection never needs to
  * leave its own inbox). Sending a DM is a SEND straight to the
  * *recipient's* inbox destination; authorize() is the real security
@@ -126,38 +151,29 @@
  * parsed frame.
  *
  * System messages ("X joined #general") reuse the same channel-broadcast
- * path presence already uses, from onJoin()/onLeave() — no separate
- * mechanism.
- *
- * Channel activity: every connection also subscribes to one shared
- * ACTIVITY_DEST for its whole lifetime (same "no UNSUBSCRIBE needed"
- * reasoning as the DM inbox). A client can never SEND to it — authorize()
- * refuses publish access outright — only stampSend() publishes to it
- * server-side, once per recorded channel message, naming which channel
- * just got activity (never the message content). The client uses this to
- * badge channels in the sidebar it isn't currently subscribed to; a
- * connection only ever holds one channel subscription at a time, so this
- * is the only way it can find out another channel had traffic at all.
+ * path presence already uses — no separate mechanism. "Joined" only fires
+ * for a real new membership row (see isNewJoin in authorize()), never for
+ * a reconnect resubscribing to a channel already joined, and never at all
+ * for #general (see the class docblock's opening section).
  */
 class {
 
-	variables.app             = "";
-	variables.siteDefaults    = "";
-	variables.sessionStore    = "";
-	variables.stomp           = "";
-	variables.frameCodec      = "";
-	variables.channels        = [ "general" ];
-	variables.channelsLock    = "stomp-chat-channels";
-	variables.presence        = {};
-	variables.presenceLock    = "stomp-chat-presence";
-	variables.history         = {};
-	variables.historyLock     = "stomp-chat-history";
-	variables.MAX_HISTORY     = 50;
-	variables.DEST_PREFIX     = "/topic/stomp-chat/";
-	variables.DM_PREFIX       = "/queue/stomp-chat/dm/";
-	variables.ACTIVITY_DEST   = "/topic/stomp-chat-activity";
-	variables.MAX_CHANNEL_LEN = 30;
-	variables.CHANNEL_SUB_ID  = "sub-0"; // must match the client's hardcoded subscribe id — see interceptFrame()
+	variables.app                = "";
+	variables.siteDefaults       = "";
+	variables.sessionStore       = "";
+	variables.stomp               = "";
+	variables.frameCodec          = "";
+	variables.channels            = [ "general" ];
+	variables.channelsLock        = "stomp-chat-channels";
+	variables.presence            = {}; // channel -> connId -> { userId, displayName }
+	variables.presenceLock        = "stomp-chat-presence";
+	variables.history             = {};
+	variables.historyLock         = "stomp-chat-history";
+	variables.MAX_HISTORY         = 50;
+	variables.DEST_PREFIX         = "/topic/stomp-chat/";
+	variables.DM_PREFIX           = "/queue/stomp-chat/dm/";
+	variables.MAX_CHANNEL_LEN     = 30;
+	variables.CHANNEL_SUB_PREFIX  = "sub-ch-"; // must match the client's subscribe-id scheme — see interceptFrame()
 
 	function init( required app, required siteDefaults ){
 		variables.app          = arguments.app;
@@ -185,8 +201,8 @@ class {
 	// Every other member just delegates straight through to the real
 	// connection; only onClose's behavior actually differs.
 	function onConnect( connection ){
-		var connId         = createUUID();
-		var closeCallbacks = [];
+		var connId          = createUUID();
+		var closeCallbacks  = [];
 		var messageCallback = javacast( "null", "" );
 
 		var wrapped = {
@@ -202,7 +218,7 @@ class {
 		};
 
 		// Stamps identity onto (and records history from) every raw SEND,
-		// and runs channel-leave cleanup on the channel UNSUBSCRIBE — see
+		// and runs leaveChannel() on a channel UNSUBSCRIBE — see
 		// interceptFrame() — before forwarding to whatever Stomp's own
 		// handler() registers via wrapped.onMessage() above.
 		connection.onMessage( ( raw ) => {
@@ -218,17 +234,18 @@ class {
 			}
 		} );
 
-		wrapped.onClose( ( code, reason ) => onLeave( connId ) );
+		wrapped.onClose( ( code, reason ) => onDisconnect( connId ) );
 
 		variables.stomp.handler()( wrapped );
 	}
 
 	// Parses one raw WS frame once, before Stomp ever sees it, and branches
 	// on command:
-	//   UNSUBSCRIBE, id == CHANNEL_SUB_ID — this connection is leaving its
-	//     current channel (either a same-socket channel switch or a client
-	//     tearing down before close). Runs onLeave() for presence cleanup
-	//     immediately, then forwards the frame unchanged — Stomp.bx's own
+	//   UNSUBSCRIBE, id starting with CHANNEL_SUB_PREFIX — the channel name
+	//     is encoded directly in the id (see the view's subscribe calls),
+	//     so no server-side id->destination bookkeeping is needed just to
+	//     find out which channel this is. Runs leaveChannel() immediately,
+	//     then forwards the frame unchanged — Stomp.bx's own
 	//     _handleUnsubscribe still needs to see it to clear its internal
 	//     subscribersByDestination entry (confirmed by reading
 	//     models/middleware/Stomp.bx directly: it already handles this with
@@ -244,8 +261,11 @@ class {
 			return raw;
 		}
 
-		if ( frame.getCommand() == "UNSUBSCRIBE" && frame.getHeader( "id", "" ) == variables.CHANNEL_SUB_ID ){
-			onLeave( connId );
+		if ( frame.getCommand() == "UNSUBSCRIBE" ){
+			var channel = _channelFromSubId( frame.getHeader( "id", "" ) );
+			if ( len( channel ) ){
+				leaveChannel( connId, channel, connection );
+			}
 			return raw;
 		}
 
@@ -256,6 +276,17 @@ class {
 		return stampSend( raw, frame, connection );
 	}
 
+	function _channelFromSubId( subId ){
+		var prefixLen = len( variables.CHANNEL_SUB_PREFIX );
+		if ( len( subId ) <= prefixLen ){
+			return "";
+		}
+		if ( left( subId, prefixLen ) != variables.CHANNEL_SUB_PREFIX ){
+			return "";
+		}
+		return mid( subId, prefixLen + 1, len( subId ) - prefixLen );
+	}
+
 	// Discards whatever "from"/"fromId" the client sent on a SEND (if
 	// anything — a typing ping sends neither) and replaces both with the
 	// session-resolved identity, then re-serializes and returns the
@@ -263,9 +294,9 @@ class {
 	// the original raw frame passes through unchanged — this only ever
 	// narrows what a client can claim about itself, never rewrites
 	// anything else about the frame. Also where a channel SEND gets
-	// recorded into history and a channel activity ping goes out (see
-	// recordIfMessage()) — both need the same parsed frame interceptFrame()
-	// already has, so it happens here instead of a second separate parse.
+	// recorded into history (see recordIfMessage()) — it needs the same
+	// parsed frame interceptFrame() already has, so it happens here
+	// instead of a second separate parse.
 	function stampSend( raw, frame, connection ){
 		var sessionData = sessionFor( connection );
 		var displayName = displayNameFor( sessionData );
@@ -294,9 +325,8 @@ class {
 
 	// If destination is a real channel and parsed looks like a chat
 	// message (has non-empty text — a typing ping doesn't), appends
-	// {from, text} to that channel's history (capped at MAX_HISTORY) and
-	// broadcasts a channel-activity ping naming the channel (never the
-	// message itself) to ACTIVITY_DEST. Anything else is a silent no-op.
+	// {from, text} to that channel's history, capped at MAX_HISTORY.
+	// Anything else is a silent no-op.
 	function recordIfMessage( destination, parsed ){
 		var channel = _channelFromDestination( destination );
 		if ( !len( channel ) || !len( trim( parsed.text ?: "" ) ) ){
@@ -312,15 +342,14 @@ class {
 				variables.history[ channel ].deleteAt( 1 );
 			}
 		}
-		variables.stomp.send( variables.ACTIVITY_DEST, { type: "activity", channel: channel } );
 	}
 
 	// Unicasts the channel's history straight to one connection as a
 	// properly-framed STOMP MESSAGE (StompFrameCodec.serialize() +
 	// connection.send(), not variables.stomp.send() — a broadcast would
 	// hit the same "not registered yet" ordering issue documented on
-	// onJoin() below; a direct connection.send() doesn't touch Stomp's
-	// subscriber registry at all, so there's nothing to race here).
+	// onSubscribeChannel() below; a direct connection.send() doesn't touch
+	// Stomp's subscriber registry at all, so there's nothing to race here).
 	function sendHistory( connection, channel ){
 		var messages = [];
 		lock name="#variables.historyLock#" type="readonly" timeout="5" {
@@ -332,7 +361,7 @@ class {
 		var frame = new bxModules.boxexpress.models.StompFrame( "MESSAGE", {
 			destination    : variables.DEST_PREFIX & channel,
 			"message-id"   : createUUID(),
-			subscription   : variables.CHANNEL_SUB_ID,
+			subscription   : variables.CHANNEL_SUB_PREFIX & channel,
 			"content-type" : "application/json"
 		}, body );
 		connection.send( variables.frameCodec.serialize( frame ) );
@@ -361,9 +390,10 @@ class {
 			return;
 		}
 
-		var channelList    = channelsSnapshot();
-		var requested       = trim( req.query.channel ?: "" );
-		var currentChannel  = channelList.contains( requested ) ? requested : channelList[ 1 ];
+		var channelList = channelsSnapshot();
+		var joined       = joinedChannelsFor( rawUserIdFor( req.session ), channelList );
+		var requested    = trim( req.query.channel ?: "" );
+		var currentChannel = joined.contains( requested ) ? requested : joined[ 1 ]; // joined[1] is always "general"
 
 		res.render( "games/stomp-chat", {
 			pageTitle      : "STOMP Chat",
@@ -372,6 +402,7 @@ class {
 			displayName    : displayName,
 			userId         : userIdFor( req.session ),
 			channels       : channelList,
+			joinedChannels : joined,
 			currentChannel : currentChannel,
 			isAdmin        : isAdminSession( req.session ),
 			csrfToken      : req.csrfToken()
@@ -380,6 +411,9 @@ class {
 
 	// POST /games/stomp-chat/channels — admin-only. CSRF is already
 	// enforced site-wide (see class docblock), so no separate check here.
+	// Doesn't join the creating admin to the new channel server-side —
+	// the view SUBSCRIBEs to it right after a successful create, which
+	// authorize() treats as a completely ordinary new-channel join.
 	function createChannel( req, res, next ){
 		if ( !isAdminSession( req.session ) ){
 			res.status( 403 ).json( { success: false, error: "Admins only." } );
@@ -425,6 +459,85 @@ class {
 		}
 	}
 
+	// Every channel a user is a member of: "general" always first (see
+	// class docblock — it's never a stored row), followed by whatever
+	// StompChatChannelMembership has for them, filtered against
+	// channelList so a row naming a channel that no longer exists in
+	// memory (cleared on the last deploy) doesn't show up as a phantom
+	// membership. rawUserId "" (nobody signed in, or a session with
+	// neither population somehow) just gets ["general"] back.
+	function joinedChannelsFor( rawUserId, channelList ){
+		var joined = [ "general" ];
+		if ( !len( rawUserId ) ){
+			return joined;
+		}
+		var rows = queryExecute(
+			"SELECT channel FROM StompChatChannelMembership WHERE user_id = :userId",
+			{ userId: { value: rawUserId, cfsqltype: "cf_sql_varchar" } },
+			{ returnType: "array" }
+		);
+		for ( var row in rows ){
+			if ( channelList.contains( row.channel ) && !joined.contains( row.channel ) ){
+				joined.append( row.channel );
+			}
+		}
+		return joined;
+	}
+
+	function hasJoined( rawUserId, channel ){
+		if ( channel == "general" ){
+			return true;
+		}
+		if ( !len( rawUserId ) ){
+			return false;
+		}
+		var rows = queryExecute(
+			"SELECT 1 FROM StompChatChannelMembership WHERE user_id = :userId AND channel = :channel LIMIT 1",
+			{
+				userId : { value: rawUserId, cfsqltype: "cf_sql_varchar" },
+				channel: { value: channel,   cfsqltype: "cf_sql_varchar" }
+			},
+			{ returnType: "array" }
+		);
+		return rows.len() > 0;
+	}
+
+	// INSERT IGNORE rather than a SELECT-then-INSERT: two tabs joining the
+	// same new channel in the same instant both hit authorize()'s SUBSCRIBE
+	// branch independently, and the primary key (user_id, channel) already
+	// makes a duplicate impossible — IGNORE just means the second write
+	// loses the race silently instead of raising a constraint error for
+	// something that isn't actually a problem.
+	function persistJoin( rawUserId, channel ){
+		if ( channel == "general" || !len( rawUserId ) ){
+			return;
+		}
+		queryExecute(
+			"INSERT IGNORE INTO StompChatChannelMembership (user_id, channel) VALUES (:userId, :channel)",
+			{
+				userId : { value: rawUserId, cfsqltype: "cf_sql_varchar" },
+				channel: { value: channel,   cfsqltype: "cf_sql_varchar" }
+			}
+		);
+	}
+
+	// #general can never be persisted-left — matches the client never
+	// rendering a leave affordance for it, but this is the real boundary:
+	// leaveChannel() calls this unconditionally, so the guard belongs here
+	// rather than trusting every caller to check first.
+	function persistLeave( rawUserId, channel ){
+		if ( channel == "general" || !len( rawUserId ) ){
+			return;
+		}
+		queryExecute(
+			"DELETE FROM StompChatChannelMembership WHERE user_id = :userId AND channel = :channel",
+			{
+				userId : { value: rawUserId, cfsqltype: "cf_sql_varchar" },
+				channel: { value: channel,   cfsqltype: "cf_sql_varchar" }
+			}
+		);
+	}
+
 	function isAdminSession( sessionData ){
 		return !isNull( sessionData ) && isStruct( sessionData.manage_user ?: "" ) && ( sessionData.manage_user.role ?: "" ) == "admin";
 	}
@@ -447,10 +560,13 @@ class {
 	}
 
 	// A stable id for DM destinations and presence, prefixed by which
-	// session population it came from — commenter.id and manage_user.id
-	// are separate tables (see routes/Auth.bx), so this is cheap insurance
-	// against a theoretical id collision between the two rather than a
-	// real observed problem (both are UUID primary keys in practice).
+	// session population it came from — commenter and manage_user are
+	// actually the same underlying User table (just a different `role`),
+	// so this prefix isn't guarding against a real id collision; it's kept
+	// as-is for continuity with every DM/presence destination already
+	// built on it. rawUserIdFor() below is the unprefixed version, used
+	// only where a real User.id is needed — the membership table's actual
+	// foreign key.
 	function userIdFor( sessionData ){
 		if ( isNull( sessionData ) ){
 			return "";
@@ -460,6 +576,21 @@ class {
 		}
 		if ( isStruct( sessionData.manage_user ?: "" ) && len( sessionData.manage_user.id ?: "" ) ){
 			return "m-" & sessionData.manage_user.id;
+		}
+		return "";
+	}
+
+	// The raw User.id behind this session, unprefixed — see userIdFor()'s
+	// docblock for why the two need to differ at all.
+	function rawUserIdFor( sessionData ){
+		if ( isNull( sessionData ) ){
+			return "";
+		}
+		if ( isStruct( sessionData.commenter ?: "" ) && len( sessionData.commenter.id ?: "" ) ){
+			return sessionData.commenter.id;
+		}
+		if ( isStruct( sessionData.manage_user ?: "" ) && len( sessionData.manage_user.id ?: "" ) ){
+			return sessionData.manage_user.id;
 		}
 		return "";
 	}
@@ -489,32 +620,23 @@ class {
 	// explicit sign-out in another tab) stops working on this one's very
 	// next action rather than staying live until reconnect.
 	//
-	// Three destination shapes are accepted:
-	//   variables.ACTIVITY_DEST              — shared channel-activity
-	//     feed. Any authenticated connection may SUBSCRIBE (everyone gets
-	//     it automatically on CONNECT); publish is refused outright — only
-	//     stampSend() ever sends to it, server-side, so a client SEND here
-	//     is always someone bypassing the client and is never legitimate.
-	//   variables.DM_PREFIX & <userId>       — a personal DM inbox. Only
-	//     that user may SUBSCRIBE to it (the real privacy boundary for
-	//     DMs — see class docblock); any authenticated user may SEND to
-	//     it, which is exactly how a DM gets delivered to someone else.
-	//   variables.DEST_PREFIX & <channel>    — must be a channel
-	//     currently in variables.channels; anything else is refused
-	//     outright. A successful SUBSCRIBE also joins presence here — the
-	//     one point that already has both "this connection is entering
-	//     channel X" and a resolved identity for it. SEND doesn't touch
-	//     presence at all; a connection can only join once, on its one
-	//     channel SUBSCRIBE, not once per message.
+	// Two destination shapes are accepted:
+	//   variables.DM_PREFIX & <userId>    — a personal DM inbox. Only that
+	//     user may SUBSCRIBE to it (the real privacy boundary for DMs —
+	//     see class docblock); any authenticated user may SEND to it,
+	//     which is exactly how a DM gets delivered to someone else.
+	//   variables.DEST_PREFIX & <channel> — must be a channel currently in
+	//     variables.channels; anything else is refused outright. A
+	//     successful SUBSCRIBE persists membership (if this is a genuinely
+	//     new join — see isNewJoin) and joins presence — this is the one
+	//     point that already has both "this connection is entering channel
+	//     X" and a resolved identity for it. SEND doesn't touch presence
+	//     or membership at all.
 	function authorize( destination, access, connection ){
 		var sessionData = sessionFor( connection );
 		var displayName = displayNameFor( sessionData );
 		if ( !len( displayName ) ){
 			return false;
-		}
-
-		if ( destination == variables.ACTIVITY_DEST ){
-			return access == "subscribe";
 		}
 
 		var dmTargetId = _dmUserIdFromDestination( destination );
@@ -531,8 +653,13 @@ class {
 		}
 
 		if ( access == "subscribe" ){
+			var rawUserId = rawUserIdFor( sessionData );
+			var isNewJoin = channel != "general" && !hasJoined( rawUserId, channel );
+			if ( isNewJoin ){
+				persistJoin( rawUserId, channel );
+			}
 			sendHistory( connection, channel );
-			onJoin( connection.connId, channel, userIdFor( sessionData ), displayName );
+			onSubscribeChannel( connection.connId, channel, userIdFor( sessionData ), displayName, isNewJoin );
 		}
 
 		return true;
@@ -565,43 +692,95 @@ class {
 		return channelsSnapshot().contains( channel ) ? channel : "";
 	}
 
-	// Adds this connection to presence, then broadcasts the updated
-	// roster for that channel — deferred via runAsync() rather than sent
+	// Adds this connection to one channel's presence, then broadcasts the
+	// updated roster (and, only for a genuinely new join, a "joined"
+	// system message) — both deferred via runAsync() rather than sent
 	// inline here. authorize() runs *before* Stomp.bx registers the
 	// subscription (see _handleSubscribe: it calls authorizeFn(), then
 	// only on a true return adds the subscriber to its own registry), so
 	// a synchronous stomp.send() from inside authorize() would race that
-	// registration and never reach the very connection that just joined —
-	// its first roster snapshot would always be missing itself. Confirmed
-	// directly: a synchronous version of this send worked for everyone
-	// already in the channel but the joiner's own client never saw it.
-	// runAsync() pushes the actual send onto another thread, which loses
-	// that race every time against Stomp's own registration step
-	// (in-memory, no I/O, completes as soon as authorize() returns)
-	// immediately following.
-	function onJoin( connId, channel, userId, displayName ){
+	// registration and never reach the very connection that just
+	// subscribed — its first roster snapshot would always be missing
+	// itself. Confirmed directly: a synchronous version of this send
+	// worked for everyone already in the channel but the joiner's own
+	// client never saw it. runAsync() pushes the actual send onto another
+	// thread, which loses that race every time against Stomp's own
+	// registration step (in-memory, no I/O, completes as soon as
+	// authorize() returns) immediately following.
+	function onSubscribeChannel( connId, channel, userId, displayName, isNewJoin ){
 		lock name="#variables.presenceLock#" type="exclusive" timeout="5" {
-			variables.presence[ connId ] = { channel: channel, userId: userId, displayName: displayName };
+			if ( !structKeyExists( variables.presence, channel ) ){
+				variables.presence[ channel ] = {};
+			}
+			variables.presence[ channel ][ connId ] = { userId: userId, displayName: displayName };
 		}
 		runAsync( () => {
 			variables.stomp.send( variables.DEST_PREFIX & channel, { type: "presence", members: membersInChannel( channel ) } );
-			variables.stomp.send( variables.DEST_PREFIX & channel, { type: "system", text: displayName & " joined ##" & channel } );
+			if ( isNewJoin ){
+				variables.stomp.send( variables.DEST_PREFIX & channel, { type: "system", text: displayName & " joined ##" & channel } );
+			}
 		} );
 	}
 
-	function onLeave( connId ){
-		var channel     = "";
+	// An explicit leave — a real UNSUBSCRIBE (see interceptFrame()), never
+	// fired for a mere disconnect (that's onDisconnect() below). Deletes
+	// the membership row (persistLeave() itself refuses "general", the
+	// real enforcement point — see its docblock), removes this connId from
+	// the channel's presence, and — only if it actually was present, so a
+	// stray UNSUBSCRIBE for a channel this connection was never in is a
+	// silent no-op — broadcasts the updated roster and a "left" system
+	// message. Deferred via runAsync(), the same trick onSubscribeChannel()
+	// uses but for the opposite ordering problem: interceptFrame() calls
+	// this *before* forwarding the raw UNSUBSCRIBE to Stomp's own handler,
+	// so a synchronous send here would go out while the leaving connection
+	// is still registered in Stomp's subscriber registry. Unlike the join
+	// side, this isn't a reliable fix — confirmed directly that the
+	// leaving connection can still receive one or both of these (a genuine
+	// race between this runAsync thread and Stomp's own synchronous
+	// _handleUnsubscribe, not the "loses every time" relationship the join
+	// side gets from racing a single very next statement). It's kept
+	// anyway because it reduces how often it happens and costs nothing,
+	// not because it's guaranteed — and it has no visible effect either
+	// way: the client has already navigated off this channel and deleted
+	// its local state for it (see the view's leaveChannel()) before the
+	// UNSUBSCRIBE frame is even sent, so a stray self-received message
+	// here lands in state nothing renders.
+	function leaveChannel( connId, channel, connection ){
+		var sessionData = sessionFor( connection );
+		persistLeave( rawUserIdFor( sessionData ), channel );
+
 		var displayName = "";
 		lock name="#variables.presenceLock#" type="exclusive" timeout="5" {
-			if ( structKeyExists( variables.presence, connId ) ){
-				channel     = variables.presence[ connId ].channel;
-				displayName = variables.presence[ connId ].displayName;
-				structDelete( variables.presence, connId );
+			if ( structKeyExists( variables.presence, channel ) && structKeyExists( variables.presence[ channel ], connId ) ){
+				displayName = variables.presence[ channel ][ connId ].displayName;
+				structDelete( variables.presence[ channel ], connId );
 			}
 		}
-		if ( len( channel ) ){
+		if ( len( displayName ) ){
+			runAsync( () => {
+				variables.stomp.send( variables.DEST_PREFIX & channel, { type: "presence", members: membersInChannel( channel ) } );
+				variables.stomp.send( variables.DEST_PREFIX & channel, { type: "system", text: displayName & " left ##" & channel } );
+			} );
+		}
+	}
+
+	// The whole connection is gone — removes this connId from every
+	// channel's presence it was in (there can be several now) and
+	// broadcasts each affected channel's updated roster, but posts no
+	// "left" system message anywhere: see class docblock for why a
+	// disconnect and an explicit leaveChannel() are treated differently.
+	function onDisconnect( connId ){
+		var affectedChannels = [];
+		lock name="#variables.presenceLock#" type="exclusive" timeout="5" {
+			for ( var channel in variables.presence ){
+				if ( structKeyExists( variables.presence[ channel ], connId ) ){
+					structDelete( variables.presence[ channel ], connId );
+					affectedChannels.append( channel );
+				}
+			}
+		}
+		for ( var channel in affectedChannels ){
 			variables.stomp.send( variables.DEST_PREFIX & channel, { type: "presence", members: membersInChannel( channel ) } );
-			variables.stomp.send( variables.DEST_PREFIX & channel, { type: "system", text: displayName & " left ##" & channel } );
 		}
 	}
 
@@ -611,9 +790,9 @@ class {
 	function membersInChannel( channel ){
 		var members = [];
 		lock name="#variables.presenceLock#" type="readonly" timeout="5" {
-			for ( var connId in variables.presence ){
-				if ( variables.presence[ connId ].channel == channel ){
-					members.append( { userId: variables.presence[ connId ].userId, displayName: variables.presence[ connId ].displayName } );
+			if ( structKeyExists( variables.presence, channel ) ){
+				for ( var connId in variables.presence[ channel ] ){
+					members.append( { userId: variables.presence[ channel ][ connId ].userId, displayName: variables.presence[ channel ][ connId ].displayName } );
 				}
 			}
 		}
