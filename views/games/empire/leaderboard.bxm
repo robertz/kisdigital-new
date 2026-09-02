@@ -1,0 +1,47 @@
+<bx:include template="../../partials/_head.bxm">
+<bx:output>
+<div class="container py-5">
+	<div class="c-project-hero">
+		<p class="c-project-hero__eyebrow">Game</p>
+		<h1 class="c-project-hero__title">Leaderboard</h1>
+		<p class="c-project-hero__tagline">Ranked by net worth — credits, resources, planets, and military all rolled into one credits-equivalent score.</p>
+	</div>
+</div>
+</bx:output>
+
+<bx:include template="_chrome.bxm">
+
+<bx:output>
+<div class="container pb-5">
+	<div class="se-panel">
+		<bx:if !data.entries.len()>
+			<p class="se-empty">No empires yet — be the first to found one.</p>
+		<bx:else>
+			<table class="se-table">
+				<thead>
+					<tr>
+						<th>##</th>
+						<th>Empire</th>
+						<th>Owner</th>
+						<th>Planets</th>
+						<th>Net Worth</th>
+					</tr>
+				</thead>
+				<tbody>
+					<bx:loop array="#data.entries#" item="entry" index="rank">
+					<tr>
+						<td>#rank#</td>
+						<td>#encodeForHTML( entry.name )#</td>
+						<td>#encodeForHTML( entry.owner_name )#</td>
+						<td>#entry.planet_count#</td>
+						<td>#numberFormat( entry.net_worth )#</td>
+					</tr>
+					</bx:loop>
+				</tbody>
+			</table>
+		</bx:if>
+	</div>
+</div>
+</bx:output>
+
+<bx:include template="../../partials/_foot.bxm">

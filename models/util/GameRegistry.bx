@@ -27,6 +27,13 @@ class {
 			icon    : "bi-chat-dots",
 			tagline : "A small Slack-like chat room across a few channels, built to exercise boxlang-express's raw WebSocket support.",
 			href    : "/games/chat/"
+		},
+		{
+			slug    : "stellar-dominion",
+			name    : "Stellar Dominion",
+			icon    : "bi-globe2",
+			tagline : 'A persistent, turn-based multiplayer space empire — build your economy, grow your fleet, and raid your rivals. Inspired by the classic BBS door game "Solar Realms Elite."',
+			href    : "/games/empire"
 		}
 	];
 

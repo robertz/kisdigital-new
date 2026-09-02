@@ -1,0 +1,57 @@
+<bx:include template="../../partials/_head.bxm">
+<bx:output>
+<div class="container py-5">
+	<div class="c-project-hero">
+		<p class="c-project-hero__eyebrow">Game</p>
+		<h1 class="c-project-hero__title">Battle History</h1>
+		<p class="c-project-hero__tagline">Every attack you've made or received.</p>
+	</div>
+</div>
+</bx:output>
+
+<bx:include template="_chrome.bxm">
+
+<bx:output>
+<div class="container pb-5">
+	<div class="se-panel">
+		<bx:if !data.battles.len()>
+			<p class="se-empty">No battles yet.</p>
+		<bx:else>
+			<table class="se-table">
+				<thead>
+					<tr>
+						<th>When</th>
+						<th>Role</th>
+						<th>Opponent</th>
+						<th>Outcome</th>
+						<th>Plunder</th>
+					</tr>
+				</thead>
+				<tbody>
+					<bx:loop array="#data.battles#" item="battle">
+						<bx:set isAttacker = ( battle.attacker_empire_id == data.empire.id )>
+						<bx:set won = ( battle.outcome == "attacker_win" )>
+						<bx:set weWon = isAttacker ? won : !won>
+					<tr>
+						<td>#dateTimeFormat( battle.created, "mmm d, h:mm tt" )#</td>
+						<td>#( isAttacker ? "Attacker" : "Defender" )#</td>
+						<td>#encodeForHTML( isAttacker ? battle.defender_name : battle.attacker_name )#</td>
+						<td>#( weWon ? "Won" : "Lost" )#</td>
+						<td>
+							<bx:if won>
+								#numberFormat( battle.credits_plundered )# cr, #numberFormat( battle.food_plundered )# food, #numberFormat( battle.fuel_plundered )# fuel
+								<bx:if battle.planet_captured> &middot; planet captured</bx:if>
+							<bx:else>
+								&mdash;
+							</bx:if>
+						</td>
+					</tr>
+					</bx:loop>
+				</tbody>
+			</table>
+		</bx:if>
+	</div>
+</div>
+</bx:output>
+
+<bx:include template="../../partials/_foot.bxm">

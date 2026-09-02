@@ -22,6 +22,7 @@ authorService   = new models.services.AuthorService()
 authService     = new models.services.AuthService()
 settingsService = new models.services.SettingsService()
 sitemapService  = new models.services.SitemapService( postService )
+empireService   = new models.services.EmpireService()
 postRenderer    = new models.util.PostRenderer()
 siteDefaults    = new models.util.SiteDefaults( getSystemSetting( "SITEURL", "https://kisdigital.com" ) )
 
@@ -180,6 +181,7 @@ app.use( new routes.Games( siteDefaults ).router )
 app.use( new routes.PixelCanvas( siteDefaults ).router )
 new routes.Chat( app )
 app.use( new routes.StompChat( app, siteDefaults ).router )
+app.use( new routes.Empire( empireService, siteDefaults ).router )
 app.use( new routes.Manage( authService, postService, authorService, settingsService, postRenderer, r2Client, getSystemSetting( "R2_UPLOAD_PREFIX", "posts" ), insightsService, serverMonitor, googleOAuthClient, commentService ).router )
 
 // ── 404 / 500 (themed, matching the site's own look) ────────────────────

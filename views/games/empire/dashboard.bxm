@@ -1,0 +1,77 @@
+<bx:include template="../../partials/_head.bxm">
+<bx:output>
+<div class="container py-5">
+	<div class="c-project-hero">
+		<p class="c-project-hero__eyebrow">Game</p>
+		<h1 class="c-project-hero__title">#encodeForHTML( data.empire.name )#</h1>
+		<p class="c-project-hero__tagline">Turns remaining today: <strong>#data.empire.turns_remaining# / 20</strong> &middot; Net worth: <strong>#numberFormat( data.netWorth )#</strong> credits-equivalent</p>
+	</div>
+</div>
+</bx:output>
+
+<bx:include template="_chrome.bxm">
+
+<bx:output>
+<div class="container pb-5">
+	<div class="se-panel">
+		<h2>Empire Overview</h2>
+		<div class="se-stat-grid">
+			<div class="se-stat">
+				<div class="se-stat-label">Credits</div>
+				<div class="se-stat-value">#numberFormat( data.empire.credits )#</div>
+			</div>
+			<div class="se-stat">
+				<div class="se-stat-label">Food</div>
+				<div class="se-stat-value">#numberFormat( data.empire.food )#</div>
+			</div>
+			<div class="se-stat">
+				<div class="se-stat-label">Fuel</div>
+				<div class="se-stat-value">#numberFormat( data.empire.fuel )#</div>
+			</div>
+			<div class="se-stat">
+				<div class="se-stat-label">Population</div>
+				<div class="se-stat-value">#numberFormat( data.empire.population )#</div>
+			</div>
+			<div class="se-stat">
+				<div class="se-stat-label">Planets</div>
+				<div class="se-stat-value">#data.empire.planet_count#</div>
+			</div>
+			<div class="se-stat">
+				<div class="se-stat-label">Soldiers</div>
+				<div class="se-stat-value">#numberFormat( data.empire.soldiers )#</div>
+			</div>
+			<div class="se-stat">
+				<div class="se-stat-label">Fighters</div>
+				<div class="se-stat-value">#numberFormat( data.empire.fighters )#</div>
+			</div>
+			<div class="se-stat">
+				<div class="se-stat-label">Cruisers</div>
+				<div class="se-stat-value">#numberFormat( data.empire.cruisers )#</div>
+			</div>
+		</div>
+
+		<bx:if isDate( data.empire.shielded_until ?: "" ) && data.empire.shielded_until > now()>
+		<p class="se-cost" style="margin-top: 16px;">🛡 Shielded from attack until #dateTimeFormat( data.empire.shielded_until, "h:mm tt" )#.</p>
+		</bx:if>
+	</div>
+
+	<div class="se-panel">
+		<h2>Quick Actions</h2>
+		<div style="display: flex; gap: 12px; flex-wrap: wrap;">
+			<form method="post" action="/games/empire/income">
+				<input type="hidden" name="_csrf" value="#encodeForHTMLAttribute( data.csrfToken )#">
+				<button type="submit" class="btn btn-primary-custom" #( data.empire.turns_remaining <= 0 ? "disabled" : "" )#>Collect Income</button>
+			</form>
+			<form method="post" action="/games/empire/explore">
+				<input type="hidden" name="_csrf" value="#encodeForHTMLAttribute( data.csrfToken )#">
+				<button type="submit" class="btn btn-outline-custom" #( data.empire.turns_remaining <= 0 ? "disabled" : "" )#>Explore (costs 300 fuel)</button>
+			</form>
+		</div>
+		<bx:if data.empire.turns_remaining <= 0>
+		<p class="se-cost" style="margin-top: 12px;">You're out of turns for today — more arrive at your next visit tomorrow.</p>
+		</bx:if>
+	</div>
+</div>
+</bx:output>
+
+<bx:include template="../../partials/_foot.bxm">

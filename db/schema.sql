@@ -285,3 +285,64 @@ create index idx_stompchatdm_from_to_created
 
 create index idx_stompchatdm_to_from_created
     on StompChatDirectMessage (to_user_id, from_user_id, created);
+
+-- Stellar Dominion (/games/empire) — see
+-- db/migrations/0012_add_stellar_dominion.sql for why planets/military are
+-- flat count columns rather than their own tables in v1.
+create table Empire
+(
+    id              varchar(36)  default (uuid())           not null
+        primary key,
+    user_id         varchar(36)                              not null,
+    name            varchar(50)                              not null,
+    credits         bigint       default 1000                not null,
+    food            bigint       default 500                 not null,
+    fuel            bigint       default 500                 not null,
+    population      bigint       default 100                 not null,
+    soldiers        int          default 10                  not null,
+    fighters        int          default 5                   not null,
+    cruisers        int          default 0                   not null,
+    planet_count    int          default 3                   not null,
+    turns_remaining int          default 20                  not null,
+    last_turn_reset date         default (curdate())         not null,
+    shielded_until  timestamp                                 null,
+    created         timestamp    default CURRENT_TIMESTAMP   not null,
+    updated         timestamp    default CURRENT_TIMESTAMP   not null on update CURRENT_TIMESTAMP,
+    constraint Empire_user_id_uindex
+        unique (user_id),
+    constraint Empire_User_id_fk
+        foreign key (user_id) references User (id)
+            on update cascade on delete cascade
+);
+
+create table EmpireBattle
+(
+    id                          varchar(36) default (uuid())          not null
+        primary key,
+    attacker_empire_id          varchar(36)                            not null,
+    defender_empire_id          varchar(36)                            not null,
+    outcome                     enum ('attacker_win', 'defender_win')  not null,
+    credits_plundered           bigint      default 0                 not null,
+    food_plundered              bigint      default 0                 not null,
+    fuel_plundered              bigint      default 0                 not null,
+    planet_captured             tinyint(1)  default 0                 not null,
+    attacker_committed_soldiers int         default 0                 not null,
+    attacker_committed_fighters int         default 0                 not null,
+    attacker_committed_cruisers int         default 0                 not null,
+    attacker_power              decimal(10,2)                         not null,
+    defender_power              decimal(10,2)                         not null,
+    win_probability             decimal(5,4)                          not null,
+    created                     timestamp   default CURRENT_TIMESTAMP not null,
+    constraint EmpireBattle_Attacker_Empire_id_fk
+        foreign key (attacker_empire_id) references Empire (id)
+            on update cascade on delete cascade,
+    constraint EmpireBattle_Defender_Empire_id_fk
+        foreign key (defender_empire_id) references Empire (id)
+            on update cascade on delete cascade
+);
+
+create index idx_empirebattle_defender_created
+    on EmpireBattle (defender_empire_id, created);
+
+create index idx_empirebattle_attacker_created
+    on EmpireBattle (attacker_empire_id, created);

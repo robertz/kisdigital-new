@@ -1,0 +1,680 @@
+/**
+ * Stellar Dominion (/games/empire, routes/Empire.bx) — a persistent,
+ * turn-based, multiplayer space-empire strategy game inspired by the
+ * classic BBS door game "Solar Realms Elite." One Empire row per signed-in
+ * User (Google OAuth, same commenter/manage_user session populations
+ * StompChat.bx already established — routes/Empire.bx reuses that dual
+ * check as-is). Server-rendered only in this phase — no STOMP, no
+ * real-time layer.
+ *
+ * Turns: turns_remaining starts at DAILY_TURNS and is spent one per action.
+ * There's no scheduler anywhere in this app (confirmed by grep before this
+ * was written), so daily turn/upkeep reset is lazy — _loadById() and
+ * getEmpireByUserId() both route every read through resetTurnsIfNeeded(),
+ * the same "check and apply opportunistically on the next access" pattern
+ * StompChat.bx's pruneOldMessages() established for 30-day history
+ * retention. This guarantees every entry point sees today's state
+ * regardless of whether the caller happened to hit a GET page first.
+ *
+ * Daily upkeep (food/fuel consumption and their shortfall penalties) is
+ * applied once at that same lazy reset rather than per turn — per-turn
+ * upkeep would only ever fire when a player happens to spend a turn, so an
+ * inactive empire would never face consequences. Piggybacking on the daily
+ * reset check (which fires on the very next page load regardless of
+ * activity) makes upkeep tick over real time the same way the turn
+ * allowance itself does.
+ *
+ * Combat losses are deliberately capped, not total-annihilation: plunder is
+ * a flat percentage of the defender's current resources, the defender's
+ * military is floored at a protected minimum per unit type, planet_count
+ * never drops below 1, and a 4-hour shield blocks *any* attacker (not just
+ * the same one, which would otherwise let a group pile onto someone right
+ * after they're hit) after every attack. See attackEmpire()'s inline
+ * comments for the exact numbers.
+ */
+class {
+
+	// Starting empire state — createEmpire()
+	variables.STARTING_CREDITS    = 1000;
+	variables.STARTING_FOOD       = 500;
+	variables.STARTING_FUEL       = 500;
+	variables.STARTING_POPULATION = 100;
+	variables.STARTING_SOLDIERS   = 10;
+	variables.STARTING_FIGHTERS   = 5;
+	variables.STARTING_CRUISERS   = 0;
+	variables.STARTING_PLANETS    = 3;
+	variables.DAILY_TURNS         = 20;
+
+	// Galactic market — getMarketPrices(), buyResource(), sellResource()
+	variables.FOOD_BASE_PRICE  = 5;
+	variables.FUEL_BASE_PRICE  = 8;
+	variables.MAX_MARKET_TRADE = 500;
+
+	// Military build costs — buildMilitary()
+	variables.SOLDIER_COST_CREDITS = 50;
+	variables.SOLDIER_COST_FOOD    = 5;
+	variables.FIGHTER_COST_CREDITS = 200;
+	variables.FIGHTER_COST_FUEL    = 10;
+	variables.CRUISER_COST_CREDITS = 800;
+	variables.CRUISER_COST_FUEL    = 40;
+	variables.CRUISER_COST_FOOD    = 20;
+	variables.MAX_BUILD_QTY        = 50;
+
+	// Exploration — exploreForPlanet()
+	variables.EXPLORE_FUEL_COST      = 300;
+	variables.EXPLORE_SUCCESS_CHANCE = 0.60;
+
+	// Combat — attackEmpire()
+	variables.ATTACK_WEIGHT_SOLDIER  = 1;
+	variables.ATTACK_WEIGHT_FIGHTER  = 3;
+	variables.ATTACK_WEIGHT_CRUISER  = 8;
+	variables.DEFENSE_WEIGHT_SOLDIER = 1.2; // defender's home-turf bonus — an attacker needs a real edge, not just parity
+	variables.DEFENSE_WEIGHT_FIGHTER = 3.5;
+	variables.DEFENSE_WEIGHT_CRUISER = 9;
+	variables.WIN_PROB_MIN          = 0.05; // never a guaranteed loss...
+	variables.WIN_PROB_MAX          = 0.95; // ...or a guaranteed win/farm
+	variables.ATTRITION_RATE        = 0.10; // attacker's own losses, always
+	variables.LOSS_EXTRA_ATTRITION  = 0.20; // additional attacker losses on a failed attack (30% total)
+	variables.DEFENDER_LOSS_RATE    = 0.15; // % of defender's FULL standing force per type, on an attacker win
+	variables.DEFENDER_FLOOR_RATE   = 0.10; // defender never drops below this % of their pre-battle count per type
+	variables.PLUNDER_RATE          = 0.15; // % of defender's current resources
+	variables.PLANET_CAPTURE_CHANCE = 0.03; // rare by design — a headline event, not routine
+	variables.SHIELD_HOURS          = 4;
+
+	function getEmpireByUserId( rawUserId ){
+		if ( !len( rawUserId ) ){
+			return javacast( "null", "" );
+		}
+		var rows = queryExecute(
+			"SELECT *, ( last_turn_reset < CURDATE() ) AS needs_reset FROM Empire WHERE user_id = :userId LIMIT 1",
+			{ userId: { value: rawUserId, cfsqltype: "cf_sql_varchar" } },
+			{ returnType: "array" }
+		);
+		if ( !rows.len() ){
+			return javacast( "null", "" );
+		}
+		return resetTurnsIfNeeded( rows[ 1 ] );
+	}
+
+	// Refuses (rather than overwriting) if this user already has an empire —
+	// the unique constraint on Empire.user_id is the real backstop against a
+	// race between two concurrent creates, this check just gives a normal
+	// error response for the common case.
+	function createEmpire( rawUserId, name ){
+		var trimmedName = trim( name );
+		if ( !len( trimmedName ) ){
+			return { success: false, error: "Empire name is required." };
+		}
+		trimmedName = left( trimmedName, 50 );
+
+		if ( !isNull( getEmpireByUserId( rawUserId ) ) ){
+			return { success: false, error: "You already have an empire." };
+		}
+
+		try {
+			queryExecute(
+				"INSERT INTO Empire (
+					user_id, name, credits, food, fuel, population, soldiers, fighters, cruisers,
+					planet_count, turns_remaining, last_turn_reset
+				 ) VALUES (
+					:userId, :name, :credits, :food, :fuel, :population, :soldiers, :fighters, :cruisers,
+					:planetCount, :turns, CURDATE()
+				 )",
+				{
+					userId     : { value: rawUserId,                     cfsqltype: "cf_sql_varchar" },
+					name       : { value: trimmedName,                   cfsqltype: "cf_sql_varchar" },
+					credits    : { value: variables.STARTING_CREDITS,    cfsqltype: "cf_sql_bigint" },
+					food       : { value: variables.STARTING_FOOD,       cfsqltype: "cf_sql_bigint" },
+					fuel       : { value: variables.STARTING_FUEL,       cfsqltype: "cf_sql_bigint" },
+					population : { value: variables.STARTING_POPULATION, cfsqltype: "cf_sql_bigint" },
+					soldiers   : { value: variables.STARTING_SOLDIERS,   cfsqltype: "cf_sql_integer" },
+					fighters   : { value: variables.STARTING_FIGHTERS,   cfsqltype: "cf_sql_integer" },
+					cruisers   : { value: variables.STARTING_CRUISERS,   cfsqltype: "cf_sql_integer" },
+					planetCount: { value: variables.STARTING_PLANETS,    cfsqltype: "cf_sql_integer" },
+					turns      : { value: variables.DAILY_TURNS,         cfsqltype: "cf_sql_integer" }
+				}
+			);
+		} catch ( any e ){
+			return { success: false, error: "You already have an empire." };
+		}
+
+		return { success: true, empire: getEmpireByUserId( rawUserId ) };
+	}
+
+	// The lazy daily-reset entry point — if last_turn_reset is before today,
+	// applies upkeep, resets turns, and persists both. Called by every
+	// method below that loads an empire (via _loadById()/
+	// getEmpireByUserId()), so every entry point is self-consistent
+	// regardless of whether the caller happened to hit a GET page first.
+	// Already-reset-today is the overwhelmingly common case and costs only
+	// a struct-key check.
+	//
+	// needs_reset is computed by the SELECT that loaded empire
+	// (`last_turn_reset < CURDATE()`, see _loadById()/getEmpireByUserId())
+	// rather than compared here against BoxLang's own now() — confirmed
+	// directly that the app container and the database server disagree on
+	// wall-clock time by several hours, so comparing empire.last_turn_reset
+	// (a value MySQL wrote via CURDATE()) against a BoxLang-computed
+	// "today" caused every single request to see last_turn_reset as
+	// "yesterday" and reapply daily upkeep on every request, not once a
+	// day. Deciding "is it a new day" and writing last_turn_reset both
+	// happen entirely on MySQL's own clock now — the two can never
+	// disagree with each other, only (harmlessly) with whatever time zone
+	// a human reads the results in.
+	function resetTurnsIfNeeded( empire ){
+		if ( !( empire.needs_reset ?: false ) ){
+			return empire;
+		}
+
+		var updated = _applyDailyUpkeep( empire );
+		updated.turns_remaining = variables.DAILY_TURNS;
+
+		queryExecute(
+			"UPDATE Empire SET
+				food = :food, fuel = :fuel, population = :population,
+				soldiers = :soldiers, fighters = :fighters, cruisers = :cruisers,
+				turns_remaining = :turns, last_turn_reset = CURDATE()
+			 WHERE id = :id",
+			{
+				food      : { value: updated.food,       cfsqltype: "cf_sql_bigint" },
+				fuel      : { value: updated.fuel,        cfsqltype: "cf_sql_bigint" },
+				population: { value: updated.population,  cfsqltype: "cf_sql_bigint" },
+				soldiers  : { value: updated.soldiers,    cfsqltype: "cf_sql_integer" },
+				fighters  : { value: updated.fighters,    cfsqltype: "cf_sql_integer" },
+				cruisers  : { value: updated.cruisers,    cfsqltype: "cf_sql_integer" },
+				turns     : { value: variables.DAILY_TURNS, cfsqltype: "cf_sql_integer" },
+				id        : { value: empire.id,           cfsqltype: "cf_sql_varchar" }
+			}
+		);
+
+		return updated;
+	}
+
+	// Returns a duplicate of empire with upkeep applied — doesn't write the
+	// database itself, resetTurnsIfNeeded() does that once with the result.
+	private function _applyDailyUpkeep( empire ){
+		var e = duplicate( empire );
+
+		var foodNeeded = int( e.population / 10 );
+		if ( e.food >= foodNeeded ){
+			e.food -= foodNeeded;
+		} else {
+			e.food = 0;
+			e.population = int( e.population * 0.95 );
+		}
+
+		var fuelNeeded = ( e.fighters * 1 ) + ( e.cruisers * 3 ); // soldiers are ground troops, no fleet upkeep
+		if ( e.fuel >= fuelNeeded ){
+			e.fuel -= fuelNeeded;
+		} else {
+			e.fuel = 0;
+			e.fighters -= int( e.fighters * 0.10 );
+			e.cruisers -= int( e.cruisers * 0.10 );
+		}
+
+		return e;
+	}
+
+	private function _loadById( empireId ){
+		var rows = queryExecute(
+			"SELECT *, ( last_turn_reset < CURDATE() ) AS needs_reset FROM Empire WHERE id = :id LIMIT 1",
+			{ id: { value: empireId, cfsqltype: "cf_sql_varchar" } },
+			{ returnType: "array" }
+		);
+		if ( !rows.len() ){
+			return javacast( "null", "" );
+		}
+		return resetTurnsIfNeeded( rows[ 1 ] );
+	}
+
+	// Deterministic pseudo-random value in [0,1) derived from seedString
+	// (today's date + a resource name) — the market price is stable for the
+	// whole day and only moves at the next day's first read, with no stored
+	// price row at all since this is a pure function of the date.
+	private function _deterministicRandom( seedString ){
+		var hex = left( hash( seedString, "MD5" ), 8 );
+		return inputBaseN( hex, 16 ) / 4294967295;
+	}
+
+	function getMarketPrices(){
+		var today = dateFormat( now(), "yyyy-mm-dd" );
+		var foodFactor = 0.8 + ( _deterministicRandom( today & "-food" ) * 0.4 ); // ±20% band
+		var fuelFactor = 0.8 + ( _deterministicRandom( today & "-fuel" ) * 0.4 );
+		return {
+			food: int( variables.FOOD_BASE_PRICE * foodFactor ),
+			fuel: int( variables.FUEL_BASE_PRICE * fuelFactor )
+		};
+	}
+
+	function collectIncome( empireId ){
+		var empire = _loadById( empireId );
+		if ( isNull( empire ) ){
+			return { success: false, error: "Empire not found." };
+		}
+		if ( empire.turns_remaining <= 0 ){
+			return { success: false, error: "No turns remaining today." };
+		}
+
+		var newCredits = empire.credits + ( empire.planet_count * 100 ) + ( int( empire.population / 10 ) * 5 );
+		var popCap = empire.planet_count * 1000;
+		var newPopulation = empire.population + int( empire.population * 0.02 );
+		if ( newPopulation > popCap ){
+			newPopulation = popCap;
+		}
+
+		queryExecute(
+			"UPDATE Empire SET credits = :credits, population = :population, turns_remaining = turns_remaining - 1
+			 WHERE id = :id AND turns_remaining > 0",
+			{
+				credits   : { value: newCredits,    cfsqltype: "cf_sql_bigint" },
+				population: { value: newPopulation, cfsqltype: "cf_sql_bigint" },
+				id        : { value: empireId,      cfsqltype: "cf_sql_varchar" }
+			}
+		);
+
+		return { success: true, empire: _loadById( empireId ) };
+	}
+
+	// resource is always validated against "food"/"fuel" before being
+	// interpolated as a column name — never passed through unvalidated, the
+	// same "narrow to a known-safe whitelist first" reasoning
+	// StompChat.bx's _normalizeChannelName() uses before a value becomes
+	// part of a destination string.
+	function buyResource( empireId, resource, qty ){
+		if ( !listFindNoCase( "food,fuel", resource ) ){
+			return { success: false, error: "Invalid resource." };
+		}
+		var column = lCase( resource );
+		var quantity = int( qty );
+		if ( quantity <= 0 || quantity > variables.MAX_MARKET_TRADE ){
+			return { success: false, error: "Quantity must be between 1 and #variables.MAX_MARKET_TRADE#." };
+		}
+
+		var empire = _loadById( empireId );
+		if ( isNull( empire ) ){
+			return { success: false, error: "Empire not found." };
+		}
+		if ( empire.turns_remaining <= 0 ){
+			return { success: false, error: "No turns remaining today." };
+		}
+
+		var unitPrice = getMarketPrices()[ column ];
+		var totalCost = unitPrice * quantity;
+		if ( totalCost > empire.credits ){
+			return { success: false, error: "Not enough credits." };
+		}
+
+		queryExecute(
+			"UPDATE Empire SET credits = credits - :cost, #column# = #column# + :qty, turns_remaining = turns_remaining - 1
+			 WHERE id = :id AND turns_remaining > 0",
+			{
+				cost: { value: totalCost, cfsqltype: "cf_sql_bigint" },
+				qty : { value: quantity,  cfsqltype: "cf_sql_bigint" },
+				id  : { value: empireId,  cfsqltype: "cf_sql_varchar" }
+			}
+		);
+
+		return { success: true, empire: _loadById( empireId ) };
+	}
+
+	function sellResource( empireId, resource, qty ){
+		if ( !listFindNoCase( "food,fuel", resource ) ){
+			return { success: false, error: "Invalid resource." };
+		}
+		var column = lCase( resource );
+		var quantity = int( qty );
+		if ( quantity <= 0 || quantity > variables.MAX_MARKET_TRADE ){
+			return { success: false, error: "Quantity must be between 1 and #variables.MAX_MARKET_TRADE#." };
+		}
+
+		var empire = _loadById( empireId );
+		if ( isNull( empire ) ){
+			return { success: false, error: "Empire not found." };
+		}
+		if ( empire.turns_remaining <= 0 ){
+			return { success: false, error: "No turns remaining today." };
+		}
+		if ( empire[ column ] < quantity ){
+			return { success: false, error: "You don't have that much #column# to sell." };
+		}
+
+		var unitPrice = getMarketPrices()[ column ];
+		var totalGain = unitPrice * quantity;
+
+		queryExecute(
+			"UPDATE Empire SET credits = credits + :gain, #column# = #column# - :qty, turns_remaining = turns_remaining - 1
+			 WHERE id = :id AND turns_remaining > 0",
+			{
+				gain: { value: totalGain, cfsqltype: "cf_sql_bigint" },
+				qty : { value: quantity,  cfsqltype: "cf_sql_bigint" },
+				id  : { value: empireId,  cfsqltype: "cf_sql_varchar" }
+			}
+		);
+
+		return { success: true, empire: _loadById( empireId ) };
+	}
+
+	// unitType validated against the same fixed whitelist reasoning as
+	// buyResource()/sellResource() above.
+	function buildMilitary( empireId, unitType, qty ){
+		if ( !listFindNoCase( "soldiers,fighters,cruisers", unitType ) ){
+			return { success: false, error: "Invalid unit type." };
+		}
+		var column = lCase( unitType );
+		var quantity = int( qty );
+		if ( quantity <= 0 || quantity > variables.MAX_BUILD_QTY ){
+			return { success: false, error: "Quantity must be between 1 and #variables.MAX_BUILD_QTY#." };
+		}
+
+		var empire = _loadById( empireId );
+		if ( isNull( empire ) ){
+			return { success: false, error: "Empire not found." };
+		}
+		if ( empire.turns_remaining <= 0 ){
+			return { success: false, error: "No turns remaining today." };
+		}
+
+		var creditsCost = 0;
+		var fuelCost    = 0;
+		var foodCost    = 0;
+		if ( column == "soldiers" ){
+			creditsCost = variables.SOLDIER_COST_CREDITS * quantity;
+			foodCost    = variables.SOLDIER_COST_FOOD * quantity;
+		} else if ( column == "fighters" ){
+			creditsCost = variables.FIGHTER_COST_CREDITS * quantity;
+			fuelCost    = variables.FIGHTER_COST_FUEL * quantity;
+		} else {
+			creditsCost = variables.CRUISER_COST_CREDITS * quantity;
+			fuelCost    = variables.CRUISER_COST_FUEL * quantity;
+			foodCost    = variables.CRUISER_COST_FOOD * quantity;
+		}
+
+		if ( creditsCost > empire.credits ){
+			return { success: false, error: "Not enough credits." };
+		}
+		if ( fuelCost > empire.fuel ){
+			return { success: false, error: "Not enough fuel." };
+		}
+		if ( foodCost > empire.food ){
+			return { success: false, error: "Not enough food." };
+		}
+
+		queryExecute(
+			"UPDATE Empire SET
+				credits = credits - :credits, fuel = fuel - :fuel, food = food - :food,
+				#column# = #column# + :qty, turns_remaining = turns_remaining - 1
+			 WHERE id = :id AND turns_remaining > 0",
+			{
+				credits: { value: creditsCost, cfsqltype: "cf_sql_bigint" },
+				fuel   : { value: fuelCost,    cfsqltype: "cf_sql_bigint" },
+				food   : { value: foodCost,    cfsqltype: "cf_sql_bigint" },
+				qty    : { value: quantity,    cfsqltype: "cf_sql_integer" },
+				id     : { value: empireId,    cfsqltype: "cf_sql_varchar" }
+			}
+		);
+
+		return { success: true, empire: _loadById( empireId ) };
+	}
+
+	function exploreForPlanet( empireId ){
+		var empire = _loadById( empireId );
+		if ( isNull( empire ) ){
+			return { success: false, error: "Empire not found." };
+		}
+		if ( empire.turns_remaining <= 0 ){
+			return { success: false, error: "No turns remaining today." };
+		}
+		if ( empire.fuel < variables.EXPLORE_FUEL_COST ){
+			return { success: false, error: "Not enough fuel to explore (needs #variables.EXPLORE_FUEL_COST#)." };
+		}
+
+		var succeeded = rand() < variables.EXPLORE_SUCCESS_CHANCE;
+		var planetGain = succeeded ? 1 : 0;
+		var soldierLoss = succeeded ? 0 : int( empire.soldiers * variables.ATTRITION_RATE ); // "scouting party lost"
+
+		queryExecute(
+			"UPDATE Empire SET
+				fuel = fuel - :fuelCost, planet_count = planet_count + :planetGain,
+				soldiers = soldiers - :soldierLoss, turns_remaining = turns_remaining - 1
+			 WHERE id = :id AND turns_remaining > 0",
+			{
+				fuelCost   : { value: variables.EXPLORE_FUEL_COST, cfsqltype: "cf_sql_bigint" },
+				planetGain : { value: planetGain,  cfsqltype: "cf_sql_integer" },
+				soldierLoss: { value: soldierLoss, cfsqltype: "cf_sql_integer" },
+				id         : { value: empireId,    cfsqltype: "cf_sql_varchar" }
+			}
+		);
+
+		return { success: true, succeeded: succeeded, empire: _loadById( empireId ) };
+	}
+
+	// Every other empire not currently shielded — a rough military bucket
+	// instead of exact counts is deliberate fog of war, computed in SQL so
+	// the view never sees (and can't accidentally leak) real numbers.
+	function listAttackTargets( empireId ){
+		return queryExecute(
+			"SELECT id, name, planet_count,
+				CASE
+					WHEN (soldiers + fighters + cruisers) < 20 THEN 'Small'
+					WHEN (soldiers + fighters + cruisers) < 100 THEN 'Medium'
+					WHEN (soldiers + fighters + cruisers) < 300 THEN 'Large'
+					ELSE 'Huge'
+				END AS rough_military
+			 FROM Empire
+			 WHERE id != :id AND ( shielded_until IS NULL OR shielded_until <= NOW() )
+			 ORDER BY name ASC",
+			{ id: { value: empireId, cfsqltype: "cf_sql_varchar" } },
+			{ returnType: "array" }
+		);
+	}
+
+	// The amount lost when currentCount takes lossRate% damage, clamped so
+	// the remainder never drops below floorRate% of the original — returns
+	// the loss amount itself (what to subtract), not the remainder.
+	private function _lossWithFloor( currentCount, lossRate, floorRate ){
+		if ( currentCount <= 0 ){
+			return 0;
+		}
+		var floorValue = ceiling( currentCount * floorRate );
+		var afterLoss = currentCount - int( currentCount * lossRate );
+		if ( afterLoss < floorValue ){
+			afterLoss = floorValue;
+		}
+		return currentCount - afterLoss;
+	}
+
+	// Full combat resolution: validates the attack, computes power/win
+	// probability, rolls the outcome, applies attrition to the attacker and
+	// (on a win) plunder/losses to the defender within the protected floor,
+	// sets the defender's shield, and logs an EmpireBattle row. See the
+	// class docblock and variables.* constants above for the exact numbers
+	// and the reasoning behind each cap.
+	function attackEmpire( attackerEmpireId, defenderEmpireId, committed ){
+		if ( attackerEmpireId == defenderEmpireId ){
+			return { success: false, error: "You can't attack your own empire." };
+		}
+
+		var attacker = _loadById( attackerEmpireId );
+		var defender = _loadById( defenderEmpireId );
+		if ( isNull( attacker ) || isNull( defender ) ){
+			return { success: false, error: "Empire not found." };
+		}
+		if ( attacker.turns_remaining <= 0 ){
+			return { success: false, error: "No turns remaining today." };
+		}
+		if ( isDate( defender.shielded_until ?: "" ) && defender.shielded_until > now() ){
+			return { success: false, error: "That empire is currently shielded from attack." };
+		}
+
+		var commitSoldiers = int( committed.soldiers ?: 0 );
+		var commitFighters = int( committed.fighters ?: 0 );
+		var commitCruisers = int( committed.cruisers ?: 0 );
+		if ( commitSoldiers < 0 ) commitSoldiers = 0;
+		if ( commitFighters < 0 ) commitFighters = 0;
+		if ( commitCruisers < 0 ) commitCruisers = 0;
+		if ( commitSoldiers > attacker.soldiers ) commitSoldiers = attacker.soldiers;
+		if ( commitFighters > attacker.fighters ) commitFighters = attacker.fighters;
+		if ( commitCruisers > attacker.cruisers ) commitCruisers = attacker.cruisers;
+		if ( ( commitSoldiers + commitFighters + commitCruisers ) == 0 ){
+			return { success: false, error: "You must commit at least one unit to attack." };
+		}
+
+		var attackPower = ( commitSoldiers * variables.ATTACK_WEIGHT_SOLDIER )
+			+ ( commitFighters * variables.ATTACK_WEIGHT_FIGHTER )
+			+ ( commitCruisers * variables.ATTACK_WEIGHT_CRUISER );
+		var defensePower = ( defender.soldiers * variables.DEFENSE_WEIGHT_SOLDIER )
+			+ ( defender.fighters * variables.DEFENSE_WEIGHT_FIGHTER )
+			+ ( defender.cruisers * variables.DEFENSE_WEIGHT_CRUISER );
+
+		var winProbability = ( attackPower + defensePower ) > 0 ? ( attackPower / ( attackPower + defensePower ) ) : 0.5;
+		if ( winProbability < variables.WIN_PROB_MIN ) winProbability = variables.WIN_PROB_MIN;
+		if ( winProbability > variables.WIN_PROB_MAX ) winProbability = variables.WIN_PROB_MAX;
+
+		var attackerWon = rand() < winProbability;
+
+		// Attacker attrition: 10% always, +20% more (30% total) on a loss —
+		// attacking is a real risk, not a free roll.
+		var attritionRate = attackerWon ? variables.ATTRITION_RATE : ( variables.ATTRITION_RATE + variables.LOSS_EXTRA_ATTRITION );
+		var attackerSoldierLoss = int( commitSoldiers * attritionRate );
+		var attackerFighterLoss = int( commitFighters * attritionRate );
+		var attackerCruiserLoss = int( commitCruisers * attritionRate );
+
+		var creditsPlundered = 0;
+		var foodPlundered    = 0;
+		var fuelPlundered    = 0;
+		var defenderSoldierLoss = 0;
+		var defenderFighterLoss = 0;
+		var defenderCruiserLoss = 0;
+		var planetCaptured = false;
+
+		if ( attackerWon ){
+			defenderSoldierLoss = _lossWithFloor( defender.soldiers, variables.DEFENDER_LOSS_RATE, variables.DEFENDER_FLOOR_RATE );
+			defenderFighterLoss = _lossWithFloor( defender.fighters, variables.DEFENDER_LOSS_RATE, variables.DEFENDER_FLOOR_RATE );
+			defenderCruiserLoss = _lossWithFloor( defender.cruisers, variables.DEFENDER_LOSS_RATE, variables.DEFENDER_FLOOR_RATE );
+
+			creditsPlundered = int( defender.credits * variables.PLUNDER_RATE );
+			foodPlundered    = int( defender.food * variables.PLUNDER_RATE );
+			fuelPlundered    = int( defender.fuel * variables.PLUNDER_RATE );
+
+			if ( defender.planet_count > 1 && rand() < variables.PLANET_CAPTURE_CHANCE ){
+				planetCaptured = true;
+			}
+		}
+
+		var shieldExpiry = dateAdd( "h", variables.SHIELD_HOURS, now() );
+
+		queryExecute(
+			"UPDATE Empire SET
+				soldiers = soldiers - :soldierLoss, fighters = fighters - :fighterLoss, cruisers = cruisers - :cruiserLoss,
+				credits = credits + :creditsGain, food = food + :foodGain, fuel = fuel + :fuelGain,
+				planet_count = planet_count + :planetGain, turns_remaining = turns_remaining - 1
+			 WHERE id = :id AND turns_remaining > 0",
+			{
+				soldierLoss : { value: attackerSoldierLoss,       cfsqltype: "cf_sql_integer" },
+				fighterLoss : { value: attackerFighterLoss,       cfsqltype: "cf_sql_integer" },
+				cruiserLoss : { value: attackerCruiserLoss,       cfsqltype: "cf_sql_integer" },
+				creditsGain : { value: creditsPlundered,          cfsqltype: "cf_sql_bigint" },
+				foodGain    : { value: foodPlundered,             cfsqltype: "cf_sql_bigint" },
+				fuelGain    : { value: fuelPlundered,             cfsqltype: "cf_sql_bigint" },
+				planetGain  : { value: planetCaptured ? 1 : 0,    cfsqltype: "cf_sql_integer" },
+				id          : { value: attackerEmpireId,          cfsqltype: "cf_sql_varchar" }
+			}
+		);
+
+		queryExecute(
+			"UPDATE Empire SET
+				soldiers = soldiers - :soldierLoss, fighters = fighters - :fighterLoss, cruisers = cruisers - :cruiserLoss,
+				credits = credits - :creditsLoss, food = food - :foodLoss, fuel = fuel - :fuelLoss,
+				planet_count = planet_count - :planetLoss, shielded_until = :shieldedUntil
+			 WHERE id = :id",
+			{
+				soldierLoss  : { value: defenderSoldierLoss,   cfsqltype: "cf_sql_integer" },
+				fighterLoss  : { value: defenderFighterLoss,   cfsqltype: "cf_sql_integer" },
+				cruiserLoss  : { value: defenderCruiserLoss,   cfsqltype: "cf_sql_integer" },
+				creditsLoss  : { value: creditsPlundered,      cfsqltype: "cf_sql_bigint" },
+				foodLoss     : { value: foodPlundered,         cfsqltype: "cf_sql_bigint" },
+				fuelLoss     : { value: fuelPlundered,         cfsqltype: "cf_sql_bigint" },
+				planetLoss   : { value: planetCaptured ? 1 : 0, cfsqltype: "cf_sql_integer" },
+				shieldedUntil: { value: shieldExpiry,          cfsqltype: "cf_sql_timestamp" },
+				id           : { value: defenderEmpireId,      cfsqltype: "cf_sql_varchar" }
+			}
+		);
+
+		queryExecute(
+			"INSERT INTO EmpireBattle (
+				attacker_empire_id, defender_empire_id, outcome, credits_plundered, food_plundered, fuel_plundered,
+				planet_captured, attacker_committed_soldiers, attacker_committed_fighters, attacker_committed_cruisers,
+				attacker_power, defender_power, win_probability
+			 ) VALUES (
+				:attackerId, :defenderId, :outcome, :creditsPlundered, :foodPlundered, :fuelPlundered,
+				:planetCaptured, :commitSoldiers, :commitFighters, :commitCruisers,
+				:attackPower, :defensePower, :winProbability
+			 )",
+			{
+				attackerId       : { value: attackerEmpireId,                          cfsqltype: "cf_sql_varchar" },
+				defenderId       : { value: defenderEmpireId,                          cfsqltype: "cf_sql_varchar" },
+				outcome          : { value: attackerWon ? "attacker_win" : "defender_win", cfsqltype: "cf_sql_varchar" },
+				creditsPlundered : { value: creditsPlundered,                          cfsqltype: "cf_sql_bigint" },
+				foodPlundered    : { value: foodPlundered,                             cfsqltype: "cf_sql_bigint" },
+				fuelPlundered    : { value: fuelPlundered,                             cfsqltype: "cf_sql_bigint" },
+				planetCaptured   : { value: planetCaptured ? 1 : 0,                    cfsqltype: "cf_sql_bit" },
+				commitSoldiers   : { value: commitSoldiers,                            cfsqltype: "cf_sql_integer" },
+				commitFighters   : { value: commitFighters,                            cfsqltype: "cf_sql_integer" },
+				commitCruisers   : { value: commitCruisers,                            cfsqltype: "cf_sql_integer" },
+				attackPower      : { value: attackPower,   cfsqltype: "cf_sql_decimal", scale: 2 },
+				defensePower     : { value: defensePower,  cfsqltype: "cf_sql_decimal", scale: 2 },
+				winProbability   : { value: winProbability, cfsqltype: "cf_sql_decimal", scale: 4 }
+			}
+		);
+
+		return {
+			success         : true,
+			attackerWon     : attackerWon,
+			winProbability  : winProbability,
+			creditsPlundered: creditsPlundered,
+			foodPlundered   : foodPlundered,
+			fuelPlundered   : fuelPlundered,
+			planetCaptured  : planetCaptured,
+			attacker        : _loadById( attackerEmpireId ),
+			defender        : _loadById( defenderEmpireId )
+		};
+	}
+
+	function getLeaderboard( limit = 50 ){
+		return queryExecute(
+			"SELECT e.id, e.name, u.display_name AS owner_name, e.planet_count,
+				(e.credits + e.food*2 + e.fuel*3 + e.planet_count*1000 + e.soldiers*50 + e.fighters*200 + e.cruisers*800) AS net_worth
+			 FROM Empire e
+			 JOIN User u ON u.id = e.user_id
+			 ORDER BY net_worth DESC
+			 LIMIT #int( limit )#",
+			{},
+			{ returnType: "array" }
+		);
+	}
+
+	// Pure calculation shared conceptually with getLeaderboard()'s SQL
+	// expression (kept in sync by hand — same weighting, no single source of
+	// truth across SQL/BoxLang in this codebase's existing style) for
+	// anywhere a struct's net worth needs computing outside a query, e.g.
+	// the dashboard.
+	function getNetWorth( empire ){
+		return empire.credits + ( empire.food * 2 ) + ( empire.fuel * 3 ) + ( empire.planet_count * 1000 )
+			+ ( empire.soldiers * 50 ) + ( empire.fighters * 200 ) + ( empire.cruisers * 800 );
+	}
+
+	function getBattleLogForEmpire( empireId, limit = 50 ){
+		return queryExecute(
+			"SELECT b.*, a.name AS attacker_name, d.name AS defender_name
+			 FROM EmpireBattle b
+			 JOIN Empire a ON a.id = b.attacker_empire_id
+			 JOIN Empire d ON d.id = b.defender_empire_id
+			 WHERE b.attacker_empire_id = :id OR b.defender_empire_id = :id
+			 ORDER BY b.created DESC
+			 LIMIT #int( limit )#",
+			{ id: { value: empireId, cfsqltype: "cf_sql_varchar" } },
+			{ returnType: "array" }
+		);
+	}
+
+}

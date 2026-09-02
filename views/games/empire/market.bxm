@@ -1,0 +1,82 @@
+<bx:include template="../../partials/_head.bxm">
+<bx:output>
+<div class="container py-5">
+	<div class="c-project-hero">
+		<p class="c-project-hero__eyebrow">Game</p>
+		<h1 class="c-project-hero__title">Galactic Market</h1>
+		<p class="c-project-hero__tagline">Prices drift &plusmn;20% day to day. Up to 500 units per trade.</p>
+	</div>
+</div>
+</bx:output>
+
+<bx:include template="_chrome.bxm">
+
+<bx:output>
+<div class="container pb-5">
+	<div class="se-panel">
+		<h2>Today's Prices</h2>
+		<div class="se-stat-grid">
+			<div class="se-stat">
+				<div class="se-stat-label">Food</div>
+				<div class="se-stat-value">#data.prices.food# cr/unit</div>
+			</div>
+			<div class="se-stat">
+				<div class="se-stat-label">Fuel</div>
+				<div class="se-stat-value">#data.prices.fuel# cr/unit</div>
+			</div>
+			<div class="se-stat">
+				<div class="se-stat-label">Your Credits</div>
+				<div class="se-stat-value">#numberFormat( data.empire.credits )#</div>
+			</div>
+		</div>
+	</div>
+
+	<div class="se-panel">
+		<h2>Buy</h2>
+		<form method="post" action="/games/empire/market/buy">
+			<input type="hidden" name="_csrf" value="#encodeForHTMLAttribute( data.csrfToken )#">
+			<div class="se-form-row">
+				<div>
+					<label for="buyResource">Resource</label>
+					<select id="buyResource" name="resource" class="se-input">
+						<option value="food">Food</option>
+						<option value="fuel">Fuel</option>
+					</select>
+				</div>
+				<div>
+					<label for="buyQty">Quantity</label>
+					<input type="number" id="buyQty" name="qty" class="se-input" min="1" max="500" value="50" required>
+				</div>
+				<div>
+					<button type="submit" class="btn btn-primary-custom">Buy</button>
+				</div>
+			</div>
+		</form>
+	</div>
+
+	<div class="se-panel">
+		<h2>Sell</h2>
+		<form method="post" action="/games/empire/market/sell">
+			<input type="hidden" name="_csrf" value="#encodeForHTMLAttribute( data.csrfToken )#">
+			<div class="se-form-row">
+				<div>
+					<label for="sellResource">Resource</label>
+					<select id="sellResource" name="resource" class="se-input">
+						<option value="food">Food</option>
+						<option value="fuel">Fuel</option>
+					</select>
+				</div>
+				<div>
+					<label for="sellQty">Quantity</label>
+					<input type="number" id="sellQty" name="qty" class="se-input" min="1" max="500" value="50" required>
+				</div>
+				<div>
+					<button type="submit" class="btn btn-outline-custom">Sell</button>
+				</div>
+			</div>
+		</form>
+	</div>
+</div>
+</bx:output>
+
+<bx:include template="../../partials/_foot.bxm">

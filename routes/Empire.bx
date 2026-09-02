@@ -1,0 +1,352 @@
+/**
+ * /games/empire — Stellar Dominion, a persistent, turn-based, multiplayer
+ * space-empire strategy game (see models/services/EmpireService.bx for the
+ * actual game rules/formulas — this class is thin HTTP glue over it).
+ * Phase 1 is server-rendered forms only, no STOMP/WebSocket.
+ *
+ * Auth: same dual-session check routes/StompChat.bx established — a
+ * signed-in visitor is either req.session.commenter or
+ * req.session.manage_user (mutually exclusive, same underlying User table).
+ * Duplicated here rather than shared (small, and StompChat.bx's own version
+ * is private to that class) — matches this codebase's existing tolerance
+ * for a little repetition over a premature shared util (see flashSet()'s
+ * own comment in routes/Auth.bx for the same reasoning applied there).
+ * Unlike StompChat.bx's WebSocket connections, a normal HTTP request here
+ * already has req.session populated by boxExpressSession() middleware, so
+ * there's no manual cookie/sessionCache lookup needed.
+ *
+ * Flash messages: same req.session._flash pattern as routes/Auth.bx and
+ * routes/Manage.bx (set-then-redirect, read-and-clear on the next request)
+ * — every mutating POST here redirects back to a GET page rather than
+ * rendering directly, so a page reload never resubmits the action.
+ */
+class {
+
+	variables.empireService = "";
+	variables.siteDefaults  = "";
+
+	function init( required empireService, required siteDefaults ){
+		variables.empireService = arguments.empireService;
+		variables.siteDefaults  = arguments.siteDefaults;
+
+		this.router = boxExpressRouter();
+		this.router.get( "/games/empire", ( req, res, next ) => page( req, res, next ) );
+		this.router.post( "/games/empire/create", ( req, res, next ) => createEmpireHandler( req, res, next ) );
+		this.router.post( "/games/empire/income", ( req, res, next ) => incomeHandler( req, res, next ) );
+		this.router.post( "/games/empire/explore", ( req, res, next ) => exploreHandler( req, res, next ) );
+		this.router.get( "/games/empire/market", ( req, res, next ) => marketPage( req, res, next ) );
+		this.router.post( "/games/empire/market/buy", ( req, res, next ) => buyHandler( req, res, next ) );
+		this.router.post( "/games/empire/market/sell", ( req, res, next ) => sellHandler( req, res, next ) );
+		this.router.get( "/games/empire/military", ( req, res, next ) => militaryPage( req, res, next ) );
+		this.router.post( "/games/empire/military/build", ( req, res, next ) => buildHandler( req, res, next ) );
+		this.router.get( "/games/empire/attack", ( req, res, next ) => attackPage( req, res, next ) );
+		this.router.post( "/games/empire/attack/:targetEmpireId", ( req, res, next ) => attackHandler( req, res, next ) );
+		this.router.get( "/games/empire/leaderboard", ( req, res, next ) => leaderboardPage( req, res, next ) );
+		this.router.get( "/games/empire/battles", ( req, res, next ) => battlesPage( req, res, next ) );
+
+		return this;
+	}
+
+	// GET /games/empire — dashboard, or the empire-creation form if this
+	// user doesn't have one yet.
+	function page( req, res, next ){
+		if ( !_requireAuth( req, res ) ){
+			return;
+		}
+		var empire = variables.empireService.getEmpireByUserId( rawUserIdFor( req.session ) );
+		var flash  = flashGet( req );
+
+		if ( isNull( empire ) ){
+			res.render( "games/empire/create", {
+				pageTitle   : "Create Your Empire — Stellar Dominion",
+				canonicalUrl: variables.siteDefaults.canonicalUrl( req.path ),
+				meta        : variables.siteDefaults.defaultMeta( req.path ),
+				csrfToken   : req.csrfToken(),
+				error       : flash.empireError ?: ""
+			} );
+			return;
+		}
+
+		res.render( "games/empire/dashboard", {
+			pageTitle   : "Stellar Dominion",
+			canonicalUrl: variables.siteDefaults.canonicalUrl( req.path ),
+			meta        : variables.siteDefaults.defaultMeta( req.path ),
+			activeNav   : "dashboard",
+			empire      : empire,
+			netWorth    : variables.empireService.getNetWorth( empire ),
+			csrfToken   : req.csrfToken(),
+			message     : flash.empireMessage ?: "",
+			error       : flash.empireError ?: ""
+		} );
+	}
+
+	function createEmpireHandler( req, res, next ){
+		if ( !_requireAuth( req, res ) ){
+			return;
+		}
+		var result = variables.empireService.createEmpire( rawUserIdFor( req.session ), req.body.name ?: "" );
+		if ( !result.success ){
+			flashSet( req, { empireError: result.error } );
+		}
+		res.redirect( "/games/empire" );
+	}
+
+	function incomeHandler( req, res, next ){
+		if ( !_requireAuth( req, res ) ){
+			return;
+		}
+		var empire = _currentEmpireOrRedirect( req, res );
+		if ( isNull( empire ) ){
+			return;
+		}
+		var result = variables.empireService.collectIncome( empire.id );
+		flashSet( req, result.success ? { empireMessage: "Collected income." } : { empireError: result.error } );
+		res.redirect( "/games/empire" );
+	}
+
+	function exploreHandler( req, res, next ){
+		if ( !_requireAuth( req, res ) ){
+			return;
+		}
+		var empire = _currentEmpireOrRedirect( req, res );
+		if ( isNull( empire ) ){
+			return;
+		}
+		var result = variables.empireService.exploreForPlanet( empire.id );
+		if ( !result.success ){
+			flashSet( req, { empireError: result.error } );
+		} else if ( result.succeeded ){
+			flashSet( req, { empireMessage: "Your scouts discovered a new planet!" } );
+		} else {
+			flashSet( req, { empireError: "Exploration failed — your scouting party was lost." } );
+		}
+		res.redirect( "/games/empire" );
+	}
+
+	function marketPage( req, res, next ){
+		if ( !_requireAuth( req, res ) ){
+			return;
+		}
+		var empire = _currentEmpireOrRedirect( req, res );
+		if ( isNull( empire ) ){
+			return;
+		}
+		var flash = flashGet( req );
+		res.render( "games/empire/market", {
+			pageTitle   : "Galactic Market — Stellar Dominion",
+			canonicalUrl: variables.siteDefaults.canonicalUrl( req.path ),
+			meta        : variables.siteDefaults.defaultMeta( req.path ),
+			activeNav   : "market",
+			empire      : empire,
+			prices      : variables.empireService.getMarketPrices(),
+			csrfToken   : req.csrfToken(),
+			message     : flash.empireMessage ?: "",
+			error       : flash.empireError ?: ""
+		} );
+	}
+
+	function buyHandler( req, res, next ){
+		if ( !_requireAuth( req, res ) ){
+			return;
+		}
+		var empire = _currentEmpireOrRedirect( req, res );
+		if ( isNull( empire ) ){
+			return;
+		}
+		var result = variables.empireService.buyResource( empire.id, req.body.resource ?: "", req.body.qty ?: 0 );
+		flashSet( req, result.success ? { empireMessage: "Purchase complete." } : { empireError: result.error } );
+		res.redirect( "/games/empire/market" );
+	}
+
+	function sellHandler( req, res, next ){
+		if ( !_requireAuth( req, res ) ){
+			return;
+		}
+		var empire = _currentEmpireOrRedirect( req, res );
+		if ( isNull( empire ) ){
+			return;
+		}
+		var result = variables.empireService.sellResource( empire.id, req.body.resource ?: "", req.body.qty ?: 0 );
+		flashSet( req, result.success ? { empireMessage: "Sale complete." } : { empireError: result.error } );
+		res.redirect( "/games/empire/market" );
+	}
+
+	function militaryPage( req, res, next ){
+		if ( !_requireAuth( req, res ) ){
+			return;
+		}
+		var empire = _currentEmpireOrRedirect( req, res );
+		if ( isNull( empire ) ){
+			return;
+		}
+		var flash = flashGet( req );
+		res.render( "games/empire/military", {
+			pageTitle   : "Shipyard — Stellar Dominion",
+			canonicalUrl: variables.siteDefaults.canonicalUrl( req.path ),
+			meta        : variables.siteDefaults.defaultMeta( req.path ),
+			activeNav   : "military",
+			empire      : empire,
+			csrfToken   : req.csrfToken(),
+			message     : flash.empireMessage ?: "",
+			error       : flash.empireError ?: ""
+		} );
+	}
+
+	function buildHandler( req, res, next ){
+		if ( !_requireAuth( req, res ) ){
+			return;
+		}
+		var empire = _currentEmpireOrRedirect( req, res );
+		if ( isNull( empire ) ){
+			return;
+		}
+		var result = variables.empireService.buildMilitary( empire.id, req.body.unitType ?: "", req.body.qty ?: 0 );
+		flashSet( req, result.success ? { empireMessage: "Construction complete." } : { empireError: result.error } );
+		res.redirect( "/games/empire/military" );
+	}
+
+	function attackPage( req, res, next ){
+		if ( !_requireAuth( req, res ) ){
+			return;
+		}
+		var empire = _currentEmpireOrRedirect( req, res );
+		if ( isNull( empire ) ){
+			return;
+		}
+		var flash = flashGet( req );
+		res.render( "games/empire/attack", {
+			pageTitle   : "Attack — Stellar Dominion",
+			canonicalUrl: variables.siteDefaults.canonicalUrl( req.path ),
+			meta        : variables.siteDefaults.defaultMeta( req.path ),
+			activeNav   : "attack",
+			empire      : empire,
+			targets     : variables.empireService.listAttackTargets( empire.id ),
+			csrfToken   : req.csrfToken(),
+			message     : flash.empireMessage ?: "",
+			error       : flash.empireError ?: ""
+		} );
+	}
+
+	function attackHandler( req, res, next ){
+		if ( !_requireAuth( req, res ) ){
+			return;
+		}
+		var empire = _currentEmpireOrRedirect( req, res );
+		if ( isNull( empire ) ){
+			return;
+		}
+
+		var committed = {
+			soldiers: req.body.soldiers ?: 0,
+			fighters: req.body.fighters ?: 0,
+			cruisers: req.body.cruisers ?: 0
+		};
+		var result = variables.empireService.attackEmpire( empire.id, req.params.targetEmpireId, committed );
+
+		if ( !result.success ){
+			flashSet( req, { empireError: result.error } );
+		} else if ( result.attackerWon ){
+			var msg = "Victory! You plundered " & result.creditsPlundered & " credits, "
+				& result.foodPlundered & " food, and " & result.fuelPlundered & " fuel.";
+			if ( result.planetCaptured ){
+				msg &= " You also captured a planet!";
+			}
+			flashSet( req, { empireMessage: msg } );
+		} else {
+			flashSet( req, { empireError: "Defeat — your fleet was repelled and took losses." } );
+		}
+		res.redirect( "/games/empire/attack" );
+	}
+
+	function leaderboardPage( req, res, next ){
+		if ( !_requireAuth( req, res ) ){
+			return;
+		}
+		res.render( "games/empire/leaderboard", {
+			pageTitle   : "Leaderboard — Stellar Dominion",
+			canonicalUrl: variables.siteDefaults.canonicalUrl( req.path ),
+			meta        : variables.siteDefaults.defaultMeta( req.path ),
+			activeNav   : "leaderboard",
+			entries     : variables.empireService.getLeaderboard()
+		} );
+	}
+
+	function battlesPage( req, res, next ){
+		if ( !_requireAuth( req, res ) ){
+			return;
+		}
+		var empire = _currentEmpireOrRedirect( req, res );
+		if ( isNull( empire ) ){
+			return;
+		}
+		res.render( "games/empire/battles", {
+			pageTitle   : "Battle History — Stellar Dominion",
+			canonicalUrl: variables.siteDefaults.canonicalUrl( req.path ),
+			meta        : variables.siteDefaults.defaultMeta( req.path ),
+			activeNav   : "battles",
+			empire      : empire,
+			battles     : variables.empireService.getBattleLogForEmpire( empire.id )
+		} );
+	}
+
+	// Redirects to Google sign-in (returning to the page that triggered
+	// this) if not signed in; returns false so the caller can bail out
+	// immediately. "Signed in" checks both session populations — see class
+	// docblock.
+	private function _requireAuth( req, res ){
+		if ( !len( displayNameFor( req.session ) ) ){
+			res.redirect( "/auth/google?redirect=" & req.path );
+			return false;
+		}
+		return true;
+	}
+
+	// Loads the current user's empire, or redirects to the dashboard (which
+	// renders the creation form) and returns null if they don't have one
+	// yet — every action route needs an existing empire to act on.
+	private function _currentEmpireOrRedirect( req, res ){
+		var empire = variables.empireService.getEmpireByUserId( rawUserIdFor( req.session ) );
+		if ( isNull( empire ) ){
+			res.redirect( "/games/empire" );
+			return javacast( "null", "" );
+		}
+		return empire;
+	}
+
+	private function displayNameFor( sessionData ){
+		if ( isNull( sessionData ) ){
+			return "";
+		}
+		if ( isStruct( sessionData.commenter ?: "" ) && len( sessionData.commenter.id ?: "" ) ){
+			return sessionData.commenter.display_name;
+		}
+		if ( isStruct( sessionData.manage_user ?: "" ) && len( sessionData.manage_user.id ?: "" ) ){
+			return sessionData.manage_user.display_name;
+		}
+		return "";
+	}
+
+	private function rawUserIdFor( sessionData ){
+		if ( isNull( sessionData ) ){
+			return "";
+		}
+		if ( isStruct( sessionData.commenter ?: "" ) && len( sessionData.commenter.id ?: "" ) ){
+			return sessionData.commenter.id;
+		}
+		if ( isStruct( sessionData.manage_user ?: "" ) && len( sessionData.manage_user.id ?: "" ) ){
+			return sessionData.manage_user.id;
+		}
+		return "";
+	}
+
+	private function flashSet( req, required struct data ){
+		req.session._flash = arguments.data;
+	}
+
+	private function flashGet( req ){
+		var f = req.session._flash ?: {};
+		structDelete( req.session, "_flash" );
+		return f;
+	}
+
+}
