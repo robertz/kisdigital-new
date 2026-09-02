@@ -116,7 +116,7 @@ class {
 		if ( !result.success ){
 			flashSet( req, { empireError: result.error } );
 		} else if ( result.succeeded ){
-			flashSet( req, { empireMessage: "Your scouts discovered a new planet!" } );
+			flashSet( req, { empireMessage: "Your scouts discovered a new " & result.planetType & " world!" } );
 		} else {
 			flashSet( req, { empireError: "Exploration failed — your scouting party was lost." } );
 		}

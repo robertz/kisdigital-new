@@ -26,11 +26,22 @@
  *
  * Combat losses are deliberately capped, not total-annihilation: plunder is
  * a flat percentage of the defender's current resources, the defender's
- * military is floored at a protected minimum per unit type, planet_count
- * never drops below 1, and a 4-hour shield blocks *any* attacker (not just
- * the same one, which would otherwise let a group pile onto someone right
- * after they're hit) after every attack. See attackEmpire()'s inline
- * comments for the exact numbers.
+ * military is floored at a protected minimum per unit type, a defender
+ * always keeps at least one planet, and a 4-hour shield blocks *any*
+ * attacker (not just the same one, which would otherwise let a group pile
+ * onto someone right after they're hit) after every attack. See
+ * attackEmpire()'s inline comments for the exact numbers.
+ *
+ * Planets are real Planet rows (db/migrations/0013_...sql), not a count
+ * column — each has a type (agricultural/mining/industrial) that drives its
+ * own passive credits/food/fuel yield on Collect Income (PLANET_YIELDS) and
+ * its own net-worth contribution (PLANET_VALUES), so which planets an
+ * empire holds actually matters, not just how many. Every empire struct
+ * this service returns (via _loadById()/getEmpireByUserId()) carries a
+ * `.planets` summary struct ({agricultural, mining, industrial, total}
+ * counts) attached after resetTurnsIfNeeded() runs — the one place that
+ * turns a bare Empire row into everything the rest of this class and the
+ * views actually need.
  */
 class {
 
@@ -42,8 +53,21 @@ class {
 	variables.STARTING_SOLDIERS   = 10;
 	variables.STARTING_FIGHTERS   = 5;
 	variables.STARTING_CRUISERS   = 0;
-	variables.STARTING_PLANETS    = 3;
 	variables.DAILY_TURNS         = 20;
+
+	// Planets — every empire starts with exactly one of each type (see
+	// createEmpire()); exploreForPlanet() finds a uniformly random type.
+	// PLANET_YIELDS is per-planet, per Collect Income action. PLANET_VALUES
+	// feeds both getNetWorth() and getLeaderboard()'s SQL (interpolated
+	// directly from these constants, not duplicated as separate literals —
+	// see that method).
+	variables.PLANET_TYPES  = [ "agricultural", "mining", "industrial" ];
+	variables.PLANET_YIELDS = {
+		agricultural: { credits: 60,  food: 40, fuel: 0 },
+		mining      : { credits: 60,  food: 0,  fuel: 40 },
+		industrial  : { credits: 140, food: 0,  fuel: 0 }
+	};
+	variables.PLANET_VALUES = { agricultural: 800, mining: 800, industrial: 1200 };
 
 	// Galactic market — getMarketPrices(), buyResource(), sellResource()
 	variables.FOOD_BASE_PRICE  = 5;
@@ -93,7 +117,9 @@ class {
 		if ( !rows.len() ){
 			return javacast( "null", "" );
 		}
-		return resetTurnsIfNeeded( rows[ 1 ] );
+		var empire = resetTurnsIfNeeded( rows[ 1 ] );
+		empire.planets = _planetSummary( empire.id );
+		return empire;
 	}
 
 	// Refuses (rather than overwriting) if this user already has an empire —
@@ -111,16 +137,18 @@ class {
 			return { success: false, error: "You already have an empire." };
 		}
 
+		var newEmpireId = lCase( createGUID() );
 		try {
 			queryExecute(
 				"INSERT INTO Empire (
-					user_id, name, credits, food, fuel, population, soldiers, fighters, cruisers,
-					planet_count, turns_remaining, last_turn_reset
+					id, user_id, name, credits, food, fuel, population, soldiers, fighters, cruisers,
+					turns_remaining, last_turn_reset
 				 ) VALUES (
-					:userId, :name, :credits, :food, :fuel, :population, :soldiers, :fighters, :cruisers,
-					:planetCount, :turns, CURDATE()
+					:id, :userId, :name, :credits, :food, :fuel, :population, :soldiers, :fighters, :cruisers,
+					:turns, CURDATE()
 				 )",
 				{
+					id         : { value: newEmpireId,                   cfsqltype: "cf_sql_varchar" },
 					userId     : { value: rawUserId,                     cfsqltype: "cf_sql_varchar" },
 					name       : { value: trimmedName,                   cfsqltype: "cf_sql_varchar" },
 					credits    : { value: variables.STARTING_CREDITS,    cfsqltype: "cf_sql_bigint" },
@@ -130,12 +158,17 @@ class {
 					soldiers   : { value: variables.STARTING_SOLDIERS,   cfsqltype: "cf_sql_integer" },
 					fighters   : { value: variables.STARTING_FIGHTERS,   cfsqltype: "cf_sql_integer" },
 					cruisers   : { value: variables.STARTING_CRUISERS,   cfsqltype: "cf_sql_integer" },
-					planetCount: { value: variables.STARTING_PLANETS,    cfsqltype: "cf_sql_integer" },
 					turns      : { value: variables.DAILY_TURNS,         cfsqltype: "cf_sql_integer" }
 				}
 			);
 		} catch ( any e ){
 			return { success: false, error: "You already have an empire." };
+		}
+
+		// One of each type — a deterministic, balanced starting trio rather
+		// than a random roll, so every new empire begins on equal footing.
+		for ( var type in variables.PLANET_TYPES ){
+			_insertPlanet( newEmpireId, type );
 		}
 
 		return { success: true, empire: getEmpireByUserId( rawUserId ) };
@@ -224,7 +257,68 @@ class {
 		if ( !rows.len() ){
 			return javacast( "null", "" );
 		}
-		return resetTurnsIfNeeded( rows[ 1 ] );
+		var empire = resetTurnsIfNeeded( rows[ 1 ] );
+		empire.planets = _planetSummary( empire.id );
+		return empire;
+	}
+
+	// {agricultural, mining, industrial, total} counts for one empire —
+	// attached to every empire struct this service hands out (see
+	// _loadById()/getEmpireByUserId() above), so callers never need to
+	// query Planet themselves just to know what they're working with.
+	private function _planetSummary( empireId ){
+		var summary = { agricultural: 0, mining: 0, industrial: 0, total: 0 };
+		var rows = queryExecute(
+			"SELECT type, COUNT(*) AS cnt FROM Planet WHERE empire_id = :id GROUP BY type",
+			{ id: { value: empireId, cfsqltype: "cf_sql_varchar" } },
+			{ returnType: "array" }
+		);
+		for ( var row in rows ){
+			summary[ row.type ] = row.cnt;
+			summary.total += row.cnt;
+		}
+		return summary;
+	}
+
+	private function _insertPlanet( empireId, type ){
+		queryExecute(
+			"INSERT INTO Planet (empire_id, type) VALUES (:empireId, :type)",
+			{
+				empireId: { value: empireId, cfsqltype: "cf_sql_varchar" },
+				type    : { value: type,     cfsqltype: "cf_sql_varchar" }
+			}
+		);
+	}
+
+	private function _randomPlanetType(){
+		return variables.PLANET_TYPES[ randRange( 1, variables.PLANET_TYPES.len() ) ];
+	}
+
+	// Transfers ownership of one of the defender's planets to the attacker
+	// by updating its empire_id (never delete/recreate — a captured planet
+	// keeps its own identity/creation date). Picks uniformly at random
+	// among the defender's current planets; the caller (attackEmpire())
+	// only ever invokes this when the defender has more than one, so this
+	// never leaves them at zero. Returns false (a no-op) if the defender
+	// somehow has none — shouldn't happen given that guard, but this stays
+	// safe to call regardless.
+	private function _captureRandomPlanet( defenderEmpireId, attackerEmpireId ){
+		var rows = queryExecute(
+			"SELECT id FROM Planet WHERE empire_id = :defenderId ORDER BY RAND() LIMIT 1",
+			{ defenderId: { value: defenderEmpireId, cfsqltype: "cf_sql_varchar" } },
+			{ returnType: "array" }
+		);
+		if ( !rows.len() ){
+			return false;
+		}
+		queryExecute(
+			"UPDATE Planet SET empire_id = :attackerId WHERE id = :planetId",
+			{
+				attackerId: { value: attackerEmpireId, cfsqltype: "cf_sql_varchar" },
+				planetId  : { value: rows[ 1 ].id,      cfsqltype: "cf_sql_varchar" }
+			}
+		);
+		return true;
 	}
 
 	// Deterministic pseudo-random value in [0,1) derived from seedString
@@ -255,18 +349,36 @@ class {
 			return { success: false, error: "No turns remaining today." };
 		}
 
-		var newCredits = empire.credits + ( empire.planet_count * 100 ) + ( int( empire.population / 10 ) * 5 );
-		var popCap = empire.planet_count * 1000;
+		// Planet yields (per type, from PLANET_YIELDS) plus the flat
+		// population-based credits bonus — food/fuel only ever come from
+		// agricultural/mining planets here, buying on the market, or plunder;
+		// there's no separate "harvest" action.
+		var planetCredits = 0;
+		var planetFood    = 0;
+		var planetFuel    = 0;
+		for ( var type in variables.PLANET_TYPES ){
+			var count = empire.planets[ type ];
+			planetCredits += count * variables.PLANET_YIELDS[ type ].credits;
+			planetFood    += count * variables.PLANET_YIELDS[ type ].food;
+			planetFuel    += count * variables.PLANET_YIELDS[ type ].fuel;
+		}
+
+		var newCredits = empire.credits + planetCredits + ( int( empire.population / 10 ) * 5 );
+		var newFood    = empire.food + planetFood;
+		var newFuel    = empire.fuel + planetFuel;
+		var popCap = empire.planets.total * 1000;
 		var newPopulation = empire.population + int( empire.population * 0.02 );
 		if ( newPopulation > popCap ){
 			newPopulation = popCap;
 		}
 
 		queryExecute(
-			"UPDATE Empire SET credits = :credits, population = :population, turns_remaining = turns_remaining - 1
+			"UPDATE Empire SET credits = :credits, food = :food, fuel = :fuel, population = :population, turns_remaining = turns_remaining - 1
 			 WHERE id = :id AND turns_remaining > 0",
 			{
 				credits   : { value: newCredits,    cfsqltype: "cf_sql_bigint" },
+				food      : { value: newFood,       cfsqltype: "cf_sql_bigint" },
+				fuel      : { value: newFuel,       cfsqltype: "cf_sql_bigint" },
 				population: { value: newPopulation, cfsqltype: "cf_sql_bigint" },
 				id        : { value: empireId,      cfsqltype: "cf_sql_varchar" }
 			}
@@ -429,23 +541,24 @@ class {
 		}
 
 		var succeeded = rand() < variables.EXPLORE_SUCCESS_CHANCE;
-		var planetGain = succeeded ? 1 : 0;
 		var soldierLoss = succeeded ? 0 : int( empire.soldiers * variables.ATTRITION_RATE ); // "scouting party lost"
+		var foundType = succeeded ? _randomPlanetType() : "";
 
 		queryExecute(
 			"UPDATE Empire SET
-				fuel = fuel - :fuelCost, planet_count = planet_count + :planetGain,
-				soldiers = soldiers - :soldierLoss, turns_remaining = turns_remaining - 1
+				fuel = fuel - :fuelCost, soldiers = soldiers - :soldierLoss, turns_remaining = turns_remaining - 1
 			 WHERE id = :id AND turns_remaining > 0",
 			{
 				fuelCost   : { value: variables.EXPLORE_FUEL_COST, cfsqltype: "cf_sql_bigint" },
-				planetGain : { value: planetGain,  cfsqltype: "cf_sql_integer" },
 				soldierLoss: { value: soldierLoss, cfsqltype: "cf_sql_integer" },
 				id         : { value: empireId,    cfsqltype: "cf_sql_varchar" }
 			}
 		);
+		if ( succeeded ){
+			_insertPlanet( empireId, foundType );
+		}
 
-		return { success: true, succeeded: succeeded, empire: _loadById( empireId ) };
+		return { success: true, succeeded: succeeded, planetType: foundType, empire: _loadById( empireId ) };
 	}
 
 	// Every other empire not currently shielded — a rough military bucket
@@ -453,16 +566,17 @@ class {
 	// the view never sees (and can't accidentally leak) real numbers.
 	function listAttackTargets( empireId ){
 		return queryExecute(
-			"SELECT id, name, planet_count,
+			"SELECT e.id, e.name, COALESCE( p.planet_count, 0 ) AS planet_count,
 				CASE
-					WHEN (soldiers + fighters + cruisers) < 20 THEN 'Small'
-					WHEN (soldiers + fighters + cruisers) < 100 THEN 'Medium'
-					WHEN (soldiers + fighters + cruisers) < 300 THEN 'Large'
+					WHEN ( e.soldiers + e.fighters + e.cruisers ) < 20 THEN 'Small'
+					WHEN ( e.soldiers + e.fighters + e.cruisers ) < 100 THEN 'Medium'
+					WHEN ( e.soldiers + e.fighters + e.cruisers ) < 300 THEN 'Large'
 					ELSE 'Huge'
 				END AS rough_military
-			 FROM Empire
-			 WHERE id != :id AND ( shielded_until IS NULL OR shielded_until <= NOW() )
-			 ORDER BY name ASC",
+			 FROM Empire e
+			 LEFT JOIN ( SELECT empire_id, COUNT(*) AS planet_count FROM Planet GROUP BY empire_id ) p ON p.empire_id = e.id
+			 WHERE e.id != :id AND ( e.shielded_until IS NULL OR e.shielded_until <= NOW() )
+			 ORDER BY e.name ASC",
 			{ id: { value: empireId, cfsqltype: "cf_sql_varchar" } },
 			{ returnType: "array" }
 		);
@@ -556,7 +670,7 @@ class {
 			foodPlundered    = int( defender.food * variables.PLUNDER_RATE );
 			fuelPlundered    = int( defender.fuel * variables.PLUNDER_RATE );
 
-			if ( defender.planet_count > 1 && rand() < variables.PLANET_CAPTURE_CHANCE ){
+			if ( defender.planets.total > 1 && rand() < variables.PLANET_CAPTURE_CHANCE ){
 				planetCaptured = true;
 			}
 		}
@@ -567,7 +681,7 @@ class {
 			"UPDATE Empire SET
 				soldiers = soldiers - :soldierLoss, fighters = fighters - :fighterLoss, cruisers = cruisers - :cruiserLoss,
 				credits = credits + :creditsGain, food = food + :foodGain, fuel = fuel + :fuelGain,
-				planet_count = planet_count + :planetGain, turns_remaining = turns_remaining - 1
+				turns_remaining = turns_remaining - 1
 			 WHERE id = :id AND turns_remaining > 0",
 			{
 				soldierLoss : { value: attackerSoldierLoss,       cfsqltype: "cf_sql_integer" },
@@ -576,7 +690,6 @@ class {
 				creditsGain : { value: creditsPlundered,          cfsqltype: "cf_sql_bigint" },
 				foodGain    : { value: foodPlundered,             cfsqltype: "cf_sql_bigint" },
 				fuelGain    : { value: fuelPlundered,             cfsqltype: "cf_sql_bigint" },
-				planetGain  : { value: planetCaptured ? 1 : 0,    cfsqltype: "cf_sql_integer" },
 				id          : { value: attackerEmpireId,          cfsqltype: "cf_sql_varchar" }
 			}
 		);
@@ -585,7 +698,7 @@ class {
 			"UPDATE Empire SET
 				soldiers = soldiers - :soldierLoss, fighters = fighters - :fighterLoss, cruisers = cruisers - :cruiserLoss,
 				credits = credits - :creditsLoss, food = food - :foodLoss, fuel = fuel - :fuelLoss,
-				planet_count = planet_count - :planetLoss, shielded_until = :shieldedUntil
+				shielded_until = :shieldedUntil
 			 WHERE id = :id",
 			{
 				soldierLoss  : { value: defenderSoldierLoss,   cfsqltype: "cf_sql_integer" },
@@ -594,11 +707,14 @@ class {
 				creditsLoss  : { value: creditsPlundered,      cfsqltype: "cf_sql_bigint" },
 				foodLoss     : { value: foodPlundered,         cfsqltype: "cf_sql_bigint" },
 				fuelLoss     : { value: fuelPlundered,         cfsqltype: "cf_sql_bigint" },
-				planetLoss   : { value: planetCaptured ? 1 : 0, cfsqltype: "cf_sql_integer" },
 				shieldedUntil: { value: shieldExpiry,          cfsqltype: "cf_sql_timestamp" },
 				id           : { value: defenderEmpireId,      cfsqltype: "cf_sql_varchar" }
 			}
 		);
+
+		if ( planetCaptured ){
+			_captureRandomPlanet( defenderEmpireId, attackerEmpireId );
+		}
 
 		queryExecute(
 			"INSERT INTO EmpireBattle (
@@ -640,12 +756,27 @@ class {
 		};
 	}
 
+	// Planet value is summed via a per-type CASE interpolated straight from
+	// variables.PLANET_VALUES (fixed internal numeric constants, never user
+	// input — safe to inline) rather than hardcoded a second time in SQL,
+	// so getNetWorth() below and this stay backed by exactly one set of
+	// numbers.
 	function getLeaderboard( limit = 50 ){
 		return queryExecute(
-			"SELECT e.id, e.name, u.display_name AS owner_name, e.planet_count,
-				(e.credits + e.food*2 + e.fuel*3 + e.planet_count*1000 + e.soldiers*50 + e.fighters*200 + e.cruisers*800) AS net_worth
+			"SELECT e.id, e.name, u.display_name AS owner_name, COALESCE( p.planet_count, 0 ) AS planet_count,
+				( e.credits + e.food*2 + e.fuel*3 + COALESCE( p.planet_value, 0 ) + e.soldiers*50 + e.fighters*200 + e.cruisers*800 ) AS net_worth
 			 FROM Empire e
 			 JOIN User u ON u.id = e.user_id
+			 LEFT JOIN (
+				SELECT empire_id, COUNT(*) AS planet_count,
+					SUM( CASE type
+						WHEN 'agricultural' THEN #variables.PLANET_VALUES.agricultural#
+						WHEN 'mining' THEN #variables.PLANET_VALUES.mining#
+						WHEN 'industrial' THEN #variables.PLANET_VALUES.industrial#
+					END ) AS planet_value
+				FROM Planet
+				GROUP BY empire_id
+			 ) p ON p.empire_id = e.id
 			 ORDER BY net_worth DESC
 			 LIMIT #int( limit )#",
 			{},
@@ -659,7 +790,10 @@ class {
 	// anywhere a struct's net worth needs computing outside a query, e.g.
 	// the dashboard.
 	function getNetWorth( empire ){
-		return empire.credits + ( empire.food * 2 ) + ( empire.fuel * 3 ) + ( empire.planet_count * 1000 )
+		var planetValue = ( empire.planets.agricultural * variables.PLANET_VALUES.agricultural )
+			+ ( empire.planets.mining * variables.PLANET_VALUES.mining )
+			+ ( empire.planets.industrial * variables.PLANET_VALUES.industrial );
+		return empire.credits + ( empire.food * 2 ) + ( empire.fuel * 3 ) + planetValue
 			+ ( empire.soldiers * 50 ) + ( empire.fighters * 200 ) + ( empire.cruisers * 800 );
 	}
 

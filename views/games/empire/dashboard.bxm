@@ -34,7 +34,7 @@
 			</div>
 			<div class="se-stat">
 				<div class="se-stat-label">Planets</div>
-				<div class="se-stat-value">#data.empire.planet_count#</div>
+				<div class="se-stat-value">#data.empire.planets.total#</div>
 			</div>
 			<div class="se-stat">
 				<div class="se-stat-label">Soldiers</div>
@@ -53,6 +53,28 @@
 		<bx:if isDate( data.empire.shielded_until ?: "" ) && data.empire.shielded_until > now()>
 		<p class="se-cost" style="margin-top: 16px;">🛡 Shielded from attack until #dateTimeFormat( data.empire.shielded_until, "h:mm tt" )#.</p>
 		</bx:if>
+	</div>
+
+	<div class="se-panel">
+		<h2>Your Planets</h2>
+		<div class="se-stat-grid">
+			<div class="se-stat">
+				<div class="se-stat-label">Agricultural</div>
+				<div class="se-stat-value">#data.empire.planets.agricultural#</div>
+				<div class="se-cost">+60 cr, +40 food each</div>
+			</div>
+			<div class="se-stat">
+				<div class="se-stat-label">Mining</div>
+				<div class="se-stat-value">#data.empire.planets.mining#</div>
+				<div class="se-cost">+60 cr, +40 fuel each</div>
+			</div>
+			<div class="se-stat">
+				<div class="se-stat-label">Industrial</div>
+				<div class="se-stat-value">#data.empire.planets.industrial#</div>
+				<div class="se-cost">+140 cr each</div>
+			</div>
+		</div>
+		<p class="se-cost" style="margin-top: 14px;">Yields are collected via the Collect Income action, not automatically each turn.</p>
 	</div>
 
 	<div class="se-panel">

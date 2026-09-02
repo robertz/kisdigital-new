@@ -287,8 +287,9 @@ create index idx_stompchatdm_to_from_created
     on StompChatDirectMessage (to_user_id, from_user_id, created);
 
 -- Stellar Dominion (/games/empire) — see
--- db/migrations/0012_add_stellar_dominion.sql for why planets/military are
--- flat count columns rather than their own tables in v1.
+-- db/migrations/0012_add_stellar_dominion.sql for why military stays flat
+-- count columns in v1, and 0013_add_stellar_dominion_planets.sql for why
+-- planets (unlike military) became real rows instead.
 create table Empire
 (
     id              varchar(36)  default (uuid())           not null
@@ -302,7 +303,6 @@ create table Empire
     soldiers        int          default 10                  not null,
     fighters        int          default 5                   not null,
     cruisers        int          default 0                   not null,
-    planet_count    int          default 3                   not null,
     turns_remaining int          default 20                  not null,
     last_turn_reset date         default (curdate())         not null,
     shielded_until  timestamp                                 null,
@@ -314,6 +314,25 @@ create table Empire
         foreign key (user_id) references User (id)
             on update cascade on delete cascade
 );
+
+-- One row per planet a user owns; type drives its passive per-turn yield
+-- and its net-worth value (see EmpireService.bx's PLANET_YIELDS/
+-- PLANET_VALUES constants). Ownership transfers on a successful attack's
+-- rare capture roll by updating empire_id, not by deleting/recreating a row.
+create table Planet
+(
+    id        varchar(36)  default (uuid())                 not null
+        primary key,
+    empire_id varchar(36)                                    not null,
+    type      enum ('agricultural', 'mining', 'industrial')  not null,
+    created   timestamp    default CURRENT_TIMESTAMP         not null,
+    constraint Planet_Empire_id_fk
+        foreign key (empire_id) references Empire (id)
+            on update cascade on delete cascade
+);
+
+create index idx_planet_empire
+    on Planet (empire_id);
 
 create table EmpireBattle
 (
