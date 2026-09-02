@@ -1,73 +1,65 @@
 <bx:include template="../../partials/_head.bxm">
-<bx:output>
-<div class="container py-5">
-	<div class="c-project-hero">
-		<p class="c-project-hero__eyebrow">Game</p>
-		<h1 class="c-project-hero__title">Attack</h1>
-		<p class="c-project-hero__tagline">Commit soldiers, fighters, and/or cruisers from your own fleet. Every attack costs a turn and always costs your attacking force something — win or lose.</p>
-	</div>
-</div>
-</bx:output>
-
-<bx:include template="_chrome.bxm">
+<bx:include template="_chromeStart.bxm">
 
 <bx:output>
-<div class="container pb-5">
-	<div class="se-panel">
-		<h2>Your Fleet</h2>
-		<div class="se-stat-grid">
-			<div class="se-stat">
-				<div class="se-stat-label">Soldiers</div>
-				<div class="se-stat-value">#numberFormat( data.empire.soldiers )#</div>
-			</div>
-			<div class="se-stat">
-				<div class="se-stat-label">Fighters</div>
-				<div class="se-stat-value">#numberFormat( data.empire.fighters )#</div>
-			</div>
-			<div class="se-stat">
-				<div class="se-stat-label">Cruisers</div>
-				<div class="se-stat-value">#numberFormat( data.empire.cruisers )#</div>
-			</div>
+<div class="sd-panel">
+	<p class="sd-panel-title">Your Fleet</p>
+	<div class="sd-stat-grid">
+		<div class="sd-stat">
+			<div class="sd-stat-label">Soldiers</div>
+			<div class="sd-stat-value">#numberFormat( data.empire.soldiers )#</div>
+		</div>
+		<div class="sd-stat">
+			<div class="sd-stat-label">Fighters</div>
+			<div class="sd-stat-value">#numberFormat( data.empire.fighters )#</div>
+		</div>
+		<div class="sd-stat">
+			<div class="sd-stat-label">Cruisers</div>
+			<div class="sd-stat-value">#numberFormat( data.empire.cruisers )#</div>
 		</div>
 	</div>
+	<p class="sd-hint">Commit soldiers, fighters, and/or cruisers from your own fleet. Every attack costs a turn and always costs your attacking force something — win or lose.</p>
+</div>
 
-	<div class="se-panel">
-		<h2>Targets</h2>
-		<bx:if !data.targets.len()>
-			<p class="se-empty">No other empires are currently attackable — everyone else is shielded, or you're the only Dominion so far.</p>
-		<bx:else>
-			<table class="se-table">
-				<thead>
-					<tr>
-						<th>Empire</th>
-						<th>Planets</th>
-						<th>Fleet size</th>
-						<th></th>
-					</tr>
-				</thead>
-				<tbody>
-					<bx:loop array="#data.targets#" item="target">
-					<tr>
-						<td>#encodeForHTML( target.name )#</td>
-						<td>#target.planet_count#</td>
-						<td>#encodeForHTML( target.rough_military )#</td>
-						<td>
-							<form method="post" action="/games/empire/attack/#encodeForHTMLAttribute( target.id )#" style="display: flex; gap: 8px; align-items: center;">
-								<input type="hidden" name="_csrf" value="#encodeForHTMLAttribute( data.csrfToken )#">
-								<input type="number" name="soldiers" class="se-input" style="width: 80px;" min="0" max="#data.empire.soldiers#" value="0" title="Soldiers to commit">
-								<input type="number" name="fighters" class="se-input" style="width: 80px;" min="0" max="#data.empire.fighters#" value="0" title="Fighters to commit">
-								<input type="number" name="cruisers" class="se-input" style="width: 80px;" min="0" max="#data.empire.cruisers#" value="0" title="Cruisers to commit">
-								<button type="submit" class="btn btn-outline-custom">Attack</button>
-							</form>
-						</td>
-					</tr>
-					</bx:loop>
-				</tbody>
-			</table>
-			<p class="se-cost">Inputs left to right: soldiers, fighters, cruisers to commit to this attack.</p>
-		</bx:if>
-	</div>
+<div class="sd-panel">
+	<p class="sd-panel-title">Targets</p>
+	<bx:if !data.targets.len()>
+		<p class="sd-empty">No other empires are currently attackable — everyone else is shielded, or you're the only Dominion so far.</p>
+	<bx:else>
+		<div style="overflow-x: auto;">
+		<table class="sd-table">
+			<thead>
+				<tr>
+					<th>Empire</th>
+					<th>Planets</th>
+					<th>Fleet size</th>
+					<th></th>
+				</tr>
+			</thead>
+			<tbody>
+				<bx:loop array="#data.targets#" item="target">
+				<tr>
+					<td>#encodeForHTML( target.name )#</td>
+					<td>#target.planet_count#</td>
+					<td>#encodeForHTML( target.rough_military )#</td>
+					<td>
+						<form method="post" action="/games/empire/attack/#encodeForHTMLAttribute( target.id )#" style="display: flex; gap: 6px; align-items: center;">
+							<input type="hidden" name="_csrf" value="#encodeForHTMLAttribute( data.csrfToken )#">
+							<input type="number" name="soldiers" class="sd-input" style="width: 64px;" min="0" max="#data.empire.soldiers#" value="0" title="Soldiers to commit">
+							<input type="number" name="fighters" class="sd-input" style="width: 64px;" min="0" max="#data.empire.fighters#" value="0" title="Fighters to commit">
+							<input type="number" name="cruisers" class="sd-input" style="width: 64px;" min="0" max="#data.empire.cruisers#" value="0" title="Cruisers to commit">
+							<button type="submit" class="sd-btn sd-btn-danger">ATTACK</button>
+						</form>
+					</td>
+				</tr>
+				</bx:loop>
+			</tbody>
+		</table>
+		</div>
+		<p class="sd-hint">Inputs left to right: soldiers, fighters, cruisers to commit to this attack.</p>
+	</bx:if>
 </div>
 </bx:output>
 
+<bx:include template="_chromeEnd.bxm">
 <bx:include template="../../partials/_foot.bxm">

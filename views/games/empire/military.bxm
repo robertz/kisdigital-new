@@ -1,61 +1,50 @@
 <bx:include template="../../partials/_head.bxm">
-<bx:output>
-<div class="container py-5">
-	<div class="c-project-hero">
-		<p class="c-project-hero__eyebrow">Game</p>
-		<h1 class="c-project-hero__title">Shipyard</h1>
-		<p class="c-project-hero__tagline">Build up to 50 units per turn, whichever type you choose.</p>
-	</div>
-</div>
-</bx:output>
-
-<bx:include template="_chrome.bxm">
+<bx:include template="_chromeStart.bxm">
 
 <bx:output>
-<div class="container pb-5">
-	<div class="se-panel">
-		<h2>Your Forces</h2>
-		<div class="se-stat-grid">
-			<div class="se-stat">
-				<div class="se-stat-label">Soldiers</div>
-				<div class="se-stat-value">#numberFormat( data.empire.soldiers )#</div>
-			</div>
-			<div class="se-stat">
-				<div class="se-stat-label">Fighters</div>
-				<div class="se-stat-value">#numberFormat( data.empire.fighters )#</div>
-			</div>
-			<div class="se-stat">
-				<div class="se-stat-label">Cruisers</div>
-				<div class="se-stat-value">#numberFormat( data.empire.cruisers )#</div>
-			</div>
+<div class="sd-panel">
+	<p class="sd-panel-title">Your Forces</p>
+	<div class="sd-stat-grid">
+		<div class="sd-stat">
+			<div class="sd-stat-label">Soldiers</div>
+			<div class="sd-stat-value">#numberFormat( data.empire.soldiers )#</div>
+		</div>
+		<div class="sd-stat">
+			<div class="sd-stat-label">Fighters</div>
+			<div class="sd-stat-value">#numberFormat( data.empire.fighters )#</div>
+		</div>
+		<div class="sd-stat">
+			<div class="sd-stat-label">Cruisers</div>
+			<div class="sd-stat-value">#numberFormat( data.empire.cruisers )#</div>
 		</div>
 	</div>
+</div>
 
-	<div class="se-panel">
-		<h2>Build</h2>
-		<form method="post" action="/games/empire/military/build">
-			<input type="hidden" name="_csrf" value="#encodeForHTMLAttribute( data.csrfToken )#">
-			<div class="se-form-row">
-				<div>
-					<label for="unitType">Unit</label>
-					<select id="unitType" name="unitType" class="se-input">
-						<option value="soldiers">Soldiers — 50 cr + 5 food</option>
-						<option value="fighters">Fighters — 200 cr + 10 fuel</option>
-						<option value="cruisers">Cruisers — 800 cr + 40 fuel + 20 food</option>
-					</select>
-				</div>
-				<div>
-					<label for="buildQty">Quantity</label>
-					<input type="number" id="buildQty" name="qty" class="se-input" min="1" max="50" value="5" required>
-				</div>
-				<div>
-					<button type="submit" class="btn btn-primary-custom">Build</button>
-				</div>
+<div class="sd-panel">
+	<p class="sd-panel-title">Build</p>
+	<form method="post" action="/games/empire/military/build">
+		<input type="hidden" name="_csrf" value="#encodeForHTMLAttribute( data.csrfToken )#">
+		<div class="sd-form-row">
+			<div>
+				<label for="unitType" class="sd-label">Unit</label>
+				<select id="unitType" name="unitType" class="sd-select">
+					<option value="soldiers">Soldiers — 50 cr + 5 food</option>
+					<option value="fighters">Fighters — 200 cr + 10 fuel</option>
+					<option value="cruisers">Cruisers — 800 cr + 40 fuel + 20 food</option>
+				</select>
 			</div>
-			<p class="se-cost">Costs are checked against your current credits/food/fuel — the build is rejected if you can't afford it.</p>
-		</form>
-	</div>
+			<div>
+				<label for="buildQty" class="sd-label">Quantity</label>
+				<input type="number" id="buildQty" name="qty" class="sd-input" min="1" max="50" value="5" required>
+			</div>
+			<div>
+				<button type="submit" class="sd-btn">BUILD</button>
+			</div>
+		</div>
+		<p class="sd-hint">Costs are checked against your current credits/food/fuel — the build is rejected if you can't afford it. Max 50 units per action.</p>
+	</form>
 </div>
 </bx:output>
 
+<bx:include template="_chromeEnd.bxm">
 <bx:include template="../../partials/_foot.bxm">

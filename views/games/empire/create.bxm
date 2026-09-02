@@ -1,34 +1,23 @@
 <bx:include template="../../partials/_head.bxm">
-<bx:output>
-<div class="container py-5">
-	<div class="c-project-hero">
-		<p class="c-project-hero__eyebrow">Game</p>
-		<h1 class="c-project-hero__title">Stellar Dominion</h1>
-		<p class="c-project-hero__tagline">A persistent, turn-based multiplayer space empire — build your economy, grow your fleet, and raid your rivals. Inspired by the classic BBS door game "Solar Realms Elite."</p>
-	</div>
-</div>
-</bx:output>
-
-<bx:include template="_chrome.bxm">
+<bx:include template="_chromeStart.bxm">
 
 <bx:output>
-<div class="container pb-5" style="max-width: 480px;">
-	<div class="se-panel">
-		<h2>Found Your Empire</h2>
-		<p class="se-empty" style="margin-top: -8px; margin-bottom: 16px;">Choose a name — you'll start with 3 planets, a small fleet, and 20 turns for today.</p>
+<div class="sd-panel">
+	<p class="sd-panel-title">Found Your Empire</p>
+	<p class="sd-hint" style="margin-bottom: 16px;">Choose a name — you'll start with 3 planets (one agricultural, one mining, one industrial), a small fleet, and 20 turns for today.</p>
 
-		<form method="post" action="/games/empire/create">
-			<input type="hidden" name="_csrf" value="#encodeForHTMLAttribute( data.csrfToken )#">
-			<div class="se-form-row">
-				<div>
-					<label for="empireName">Empire name</label>
-					<input type="text" id="empireName" name="name" class="se-input" maxlength="50" placeholder="e.g. The Vega Compact" autocomplete="off" required>
-				</div>
+	<form method="post" action="/games/empire/create">
+		<input type="hidden" name="_csrf" value="#encodeForHTMLAttribute( data.csrfToken )#">
+		<div class="sd-form-row">
+			<div>
+				<label for="empireName" class="sd-label">Empire name</label>
+				<input type="text" id="empireName" name="name" class="sd-input" maxlength="50" placeholder="e.g. The Vega Compact" autocomplete="off" required>
 			</div>
-			<button type="submit" class="btn btn-primary-custom">Found Empire</button>
-		</form>
-	</div>
+		</div>
+		<button type="submit" class="sd-btn">FOUND EMPIRE</button>
+	</form>
 </div>
 </bx:output>
 
+<bx:include template="_chromeEnd.bxm">
 <bx:include template="../../partials/_foot.bxm">

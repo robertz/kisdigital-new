@@ -1,0 +1,247 @@
+<!--- Shared terminal chrome for every Stellar Dominion page — opens here,
+      closes in _chromeEnd.bxm, the same "two halves" pattern
+      views/partials/_head.bxm/_foot.bxm already use for <main>. This game
+      escapes the site's own layout entirely, same as views/main/chat.bxm —
+      no header/footer, the whole page IS the terminal, not a panel
+      floating on a webpage — since a persistent multi-page game (unlike
+      Chat's single continuous session) still benefits from real page loads
+      and a real back button, it stays server-rendered/multi-page rather
+      than chat.bxm's position:fixed single-viewport-app treatment; escaping
+      the layout here just means the black terminal background and BBS
+      chrome apply to the whole browser tab, not just an embedded card.
+      Also a deliberate nod to the BBS door games this is descended from
+      (Solar Realms Elite chief among them): an ANSI-ish color palette, a
+      monospace terminal font (JetBrains Mono, already loaded site-wide for
+      code blocks — no extra font request), CSS `border-style: double`
+      standing in for hand-drawn box-drawing art (robust at any width,
+      unlike literal ╔═╗ characters which only ever lined up in a fixed
+      80-column terminal), and a bracket-numbered menu instead of a normal
+      nav bar. Deliberately NOT theme-aware (no light-mode variant) — a
+      "light mode BBS terminal" doesn't make sense; real door games were
+      always black-background ANSI regardless of what terminal emulator or
+      time of day you dialed in from.
+      data.activeNav picks which menu item is highlighted. --->
+<bx:output>
+<style>
+	header.header, .skip-link, .c-site-footer { display: none; }
+	body {
+		padding-top: 0;
+		background: ##050a05;
+	}
+
+	.sd-terminal {
+		--sd-bg: ##050a05;
+		--sd-bg-panel: ##0a140a;
+		--sd-green: ##33ff66;
+		--sd-green-dim: ##1a8033;
+		--sd-cyan: ##33ffff;
+		--sd-amber: ##ffcc33;
+		--sd-red: ##ff4444;
+		--sd-text: ##99ffaa;
+		--sd-text-dim: ##4a7a4a;
+		font-family: 'JetBrains Mono', 'Share Tech Mono', monospace;
+		background: var(--sd-bg);
+		color: var(--sd-text);
+		min-height: 100vh;
+		max-width: 900px;
+		margin: 0 auto;
+		padding: 32px 22px 60px;
+		position: relative;
+		box-sizing: border-box;
+	}
+	/* Faint scanline overlay, fixed to the viewport rather than the
+	   (page-length, not viewport-length) .sd-terminal element so it stays
+	   correct regardless of how far the page scrolls — a subtle CRT nod,
+	   kept low-opacity so it never fights with actual content legibility. */
+	.sd-terminal::before {
+		content: "";
+		position: fixed;
+		inset: 0;
+		background: repeating-linear-gradient(
+			to bottom,
+			rgba(255, 255, 255, 0.025) 0px,
+			rgba(255, 255, 255, 0.025) 1px,
+			transparent 1px,
+			transparent 3px
+		);
+		pointer-events: none;
+		z-index: 1;
+	}
+	.sd-terminal > * { position: relative; z-index: 2; }
+
+	.sd-banner { text-align: center; margin-bottom: 18px; }
+	.sd-banner-art {
+		color: var(--sd-cyan);
+		font-size: 0.72rem;
+		line-height: 1.3;
+		white-space: pre;
+		margin: 0 auto 10px;
+		text-shadow: 0 0 8px rgba(51, 255, 255, 0.5);
+		overflow-x: auto;
+	}
+	.sd-banner-tagline {
+		color: var(--sd-text-dim);
+		font-size: 0.78rem;
+		margin: 0;
+	}
+
+	.sd-nav {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px;
+		justify-content: center;
+		margin: 16px 0 20px;
+		padding-bottom: 16px;
+		border-bottom: 1px dashed var(--sd-green-dim);
+	}
+	.sd-nav a {
+		color: var(--sd-green);
+		text-decoration: none;
+		font-size: 0.78rem;
+		font-weight: 700;
+		padding: 4px 8px;
+		border: 1px solid transparent;
+		white-space: nowrap;
+	}
+	.sd-nav a:hover { border-color: var(--sd-green-dim); background: rgba(51, 255, 102, 0.08); }
+	.sd-nav a.is-active { background: var(--sd-green); color: ##000; }
+
+	.sd-alert {
+		font-size: 0.85rem;
+		padding: 8px 14px;
+		margin-bottom: 16px;
+		border: 1px solid;
+	}
+	.sd-alert::before { content: "> "; }
+	.sd-alert-success { color: var(--sd-green); border-color: var(--sd-green-dim); background: rgba(51, 255, 102, 0.08); }
+	.sd-alert-error { color: var(--sd-red); border-color: var(--sd-red); background: rgba(255, 68, 68, 0.08); }
+
+	.sd-panel {
+		border: 3px double var(--sd-green-dim);
+		background: var(--sd-bg-panel);
+		padding: 16px 18px;
+		margin-bottom: 20px;
+	}
+	.sd-panel-title {
+		color: var(--sd-cyan);
+		font-weight: 700;
+		font-size: 0.88rem;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		margin: 0 0 14px;
+		border-bottom: 1px dashed var(--sd-green-dim);
+		padding-bottom: 8px;
+	}
+	.sd-panel-title::before { content: "─[ "; color: var(--sd-green-dim); }
+	.sd-panel-title::after { content: " ]"; color: var(--sd-green-dim); }
+
+	.sd-stat-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+		gap: 12px;
+	}
+	.sd-stat { border: 1px solid var(--sd-green-dim); padding: 10px 12px; }
+	.sd-stat-label {
+		font-size: 0.64rem;
+		text-transform: uppercase;
+		color: var(--sd-text-dim);
+		letter-spacing: 0.06em;
+	}
+	.sd-stat-value { font-size: 1.2rem; font-weight: 700; color: var(--sd-green); margin-top: 2px; }
+	.sd-stat-hint { font-size: 0.68rem; color: var(--sd-text-dim); margin-top: 4px; }
+
+	.sd-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+	.sd-table th, .sd-table td {
+		padding: 8px 10px;
+		text-align: left;
+		border-bottom: 1px solid var(--sd-green-dim);
+	}
+	.sd-table th {
+		color: var(--sd-cyan);
+		text-transform: uppercase;
+		font-size: 0.66rem;
+		letter-spacing: 0.05em;
+	}
+	.sd-table tr:last-child td { border-bottom: none; }
+
+	.sd-input, .sd-select {
+		background: ##000;
+		border: 1px solid var(--sd-green-dim);
+		color: var(--sd-green);
+		font-family: inherit;
+		padding: 6px 10px;
+		width: 100%;
+		font-size: 0.85rem;
+	}
+	.sd-input:focus, .sd-select:focus {
+		outline: none;
+		border-color: var(--sd-green);
+		box-shadow: 0 0 6px rgba(51, 255, 102, 0.4);
+	}
+
+	.sd-btn {
+		display: inline-block;
+		background: transparent;
+		border: 1px solid var(--sd-green);
+		color: var(--sd-green);
+		font-family: inherit;
+		font-weight: 700;
+		padding: 8px 16px;
+		cursor: pointer;
+		text-decoration: none;
+		font-size: 0.8rem;
+		letter-spacing: 0.03em;
+	}
+	.sd-btn::before { content: "[ "; }
+	.sd-btn::after { content: " ]"; }
+	.sd-btn:hover { background: var(--sd-green); color: ##000; }
+	.sd-btn:disabled { color: var(--sd-text-dim); border-color: var(--sd-text-dim); cursor: not-allowed; }
+	.sd-btn:disabled:hover { background: transparent; color: var(--sd-text-dim); }
+	.sd-btn-danger { border-color: var(--sd-red); color: var(--sd-red); }
+	.sd-btn-danger:hover { background: var(--sd-red); color: ##000; }
+
+	.sd-label {
+		display: block;
+		font-size: 0.68rem;
+		color: var(--sd-text-dim);
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		margin-bottom: 4px;
+	}
+	.sd-form-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 14px; }
+	.sd-form-row > div { flex: 1 1 140px; min-width: 120px; }
+	.sd-hint { color: var(--sd-text-dim); font-size: 0.74rem; margin-top: 8px; }
+	.sd-empty { color: var(--sd-text-dim); font-size: 0.85rem; }
+	.sd-shield { color: var(--sd-amber); font-size: 0.8rem; margin-top: 14px; }
+
+	@media (max-width: 600px) {
+		.sd-terminal { padding: 18px 14px 40px; }
+		.sd-banner-art { font-size: 0.5rem; }
+		.sd-nav a { font-size: 0.72rem; padding: 4px 6px; }
+	}
+</style>
+
+<div class="sd-terminal">
+	<div class="sd-banner">
+		<pre class="sd-banner-art">╔══════════════════════════════════════╗
+║        S T E L L A R   D O M I N I O N        ║
+╚══════════════════════════════════════╝</pre>
+		<p class="sd-banner-tagline">A persistent, turn-based multiplayer space empire &mdash; descended from the classic BBS door game &ldquo;Solar Realms Elite.&rdquo;</p>
+	</div>
+
+	<nav class="sd-nav">
+		<a href="/games/empire" class="#( ( data.activeNav ?: "" ) == "dashboard" ? "is-active" : "" )#">[1] DASHBOARD</a>
+		<a href="/games/empire/market" class="#( ( data.activeNav ?: "" ) == "market" ? "is-active" : "" )#">[2] MARKET</a>
+		<a href="/games/empire/military" class="#( ( data.activeNav ?: "" ) == "military" ? "is-active" : "" )#">[3] SHIPYARD</a>
+		<a href="/games/empire/attack" class="#( ( data.activeNav ?: "" ) == "attack" ? "is-active" : "" )#">[4] ATTACK</a>
+		<a href="/games/empire/leaderboard" class="#( ( data.activeNav ?: "" ) == "leaderboard" ? "is-active" : "" )#">[5] LEADERBOARD</a>
+		<a href="/games/empire/battles" class="#( ( data.activeNav ?: "" ) == "battles" ? "is-active" : "" )#">[6] BATTLES</a>
+	</nav>
+
+	<bx:if len( data.message ?: "" )>
+	<div class="sd-alert sd-alert-success">#encodeForHTML( data.message )#</div>
+	</bx:if>
+	<bx:if len( data.error ?: "" )>
+	<div class="sd-alert sd-alert-error">#encodeForHTML( data.error )#</div>
+	</bx:if>
+</bx:output>

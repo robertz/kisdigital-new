@@ -1,82 +1,72 @@
 <bx:include template="../../partials/_head.bxm">
-<bx:output>
-<div class="container py-5">
-	<div class="c-project-hero">
-		<p class="c-project-hero__eyebrow">Game</p>
-		<h1 class="c-project-hero__title">Galactic Market</h1>
-		<p class="c-project-hero__tagline">Prices drift &plusmn;20% day to day. Up to 500 units per trade.</p>
-	</div>
-</div>
-</bx:output>
-
-<bx:include template="_chrome.bxm">
+<bx:include template="_chromeStart.bxm">
 
 <bx:output>
-<div class="container pb-5">
-	<div class="se-panel">
-		<h2>Today's Prices</h2>
-		<div class="se-stat-grid">
-			<div class="se-stat">
-				<div class="se-stat-label">Food</div>
-				<div class="se-stat-value">#data.prices.food# cr/unit</div>
-			</div>
-			<div class="se-stat">
-				<div class="se-stat-label">Fuel</div>
-				<div class="se-stat-value">#data.prices.fuel# cr/unit</div>
-			</div>
-			<div class="se-stat">
-				<div class="se-stat-label">Your Credits</div>
-				<div class="se-stat-value">#numberFormat( data.empire.credits )#</div>
-			</div>
+<div class="sd-panel">
+	<p class="sd-panel-title">Today's Prices</p>
+	<div class="sd-stat-grid">
+		<div class="sd-stat">
+			<div class="sd-stat-label">Food</div>
+			<div class="sd-stat-value">#data.prices.food# cr/unit</div>
+		</div>
+		<div class="sd-stat">
+			<div class="sd-stat-label">Fuel</div>
+			<div class="sd-stat-value">#data.prices.fuel# cr/unit</div>
+		</div>
+		<div class="sd-stat">
+			<div class="sd-stat-label">Your Credits</div>
+			<div class="sd-stat-value">#numberFormat( data.empire.credits )#</div>
 		</div>
 	</div>
+	<p class="sd-hint">Prices drift &plusmn;20% day to day. Up to 500 units per trade.</p>
+</div>
 
-	<div class="se-panel">
-		<h2>Buy</h2>
-		<form method="post" action="/games/empire/market/buy">
-			<input type="hidden" name="_csrf" value="#encodeForHTMLAttribute( data.csrfToken )#">
-			<div class="se-form-row">
-				<div>
-					<label for="buyResource">Resource</label>
-					<select id="buyResource" name="resource" class="se-input">
-						<option value="food">Food</option>
-						<option value="fuel">Fuel</option>
-					</select>
-				</div>
-				<div>
-					<label for="buyQty">Quantity</label>
-					<input type="number" id="buyQty" name="qty" class="se-input" min="1" max="500" value="50" required>
-				</div>
-				<div>
-					<button type="submit" class="btn btn-primary-custom">Buy</button>
-				</div>
+<div class="sd-panel">
+	<p class="sd-panel-title">Buy</p>
+	<form method="post" action="/games/empire/market/buy">
+		<input type="hidden" name="_csrf" value="#encodeForHTMLAttribute( data.csrfToken )#">
+		<div class="sd-form-row">
+			<div>
+				<label for="buyResource" class="sd-label">Resource</label>
+				<select id="buyResource" name="resource" class="sd-select">
+					<option value="food">Food</option>
+					<option value="fuel">Fuel</option>
+				</select>
 			</div>
-		</form>
-	</div>
+			<div>
+				<label for="buyQty" class="sd-label">Quantity</label>
+				<input type="number" id="buyQty" name="qty" class="sd-input" min="1" max="500" value="50" required>
+			</div>
+			<div>
+				<button type="submit" class="sd-btn">BUY</button>
+			</div>
+		</div>
+	</form>
+</div>
 
-	<div class="se-panel">
-		<h2>Sell</h2>
-		<form method="post" action="/games/empire/market/sell">
-			<input type="hidden" name="_csrf" value="#encodeForHTMLAttribute( data.csrfToken )#">
-			<div class="se-form-row">
-				<div>
-					<label for="sellResource">Resource</label>
-					<select id="sellResource" name="resource" class="se-input">
-						<option value="food">Food</option>
-						<option value="fuel">Fuel</option>
-					</select>
-				</div>
-				<div>
-					<label for="sellQty">Quantity</label>
-					<input type="number" id="sellQty" name="qty" class="se-input" min="1" max="500" value="50" required>
-				</div>
-				<div>
-					<button type="submit" class="btn btn-outline-custom">Sell</button>
-				</div>
+<div class="sd-panel">
+	<p class="sd-panel-title">Sell</p>
+	<form method="post" action="/games/empire/market/sell">
+		<input type="hidden" name="_csrf" value="#encodeForHTMLAttribute( data.csrfToken )#">
+		<div class="sd-form-row">
+			<div>
+				<label for="sellResource" class="sd-label">Resource</label>
+				<select id="sellResource" name="resource" class="sd-select">
+					<option value="food">Food</option>
+					<option value="fuel">Fuel</option>
+				</select>
 			</div>
-		</form>
-	</div>
+			<div>
+				<label for="sellQty" class="sd-label">Quantity</label>
+				<input type="number" id="sellQty" name="qty" class="sd-input" min="1" max="500" value="50" required>
+			</div>
+			<div>
+				<button type="submit" class="sd-btn">SELL</button>
+			</div>
+		</div>
+	</form>
 </div>
 </bx:output>
 
+<bx:include template="_chromeEnd.bxm">
 <bx:include template="../../partials/_foot.bxm">
