@@ -18,7 +18,7 @@
 					<th>Net Worth</th>
 				</tr>
 			</thead>
-			<tbody>
+			<tbody id="leaderboardBody">
 				<bx:loop array="#data.entries#" item="entry" index="rank">
 				<tr>
 					<td>#rank#</td>

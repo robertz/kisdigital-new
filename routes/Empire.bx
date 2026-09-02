@@ -1,11 +1,11 @@
 /**
  * /games/empire — Stellar Dominion, a persistent, turn-based, multiplayer
  * space-empire strategy game (see models/services/EmpireService.bx for the
- * actual game rules/formulas — this class is thin HTTP glue over it).
- * Phase 1 is server-rendered forms only, no STOMP/WebSocket.
+ * actual game rules/formulas — this class is thin HTTP glue over it, plus
+ * the live-notification layer described below).
  *
- * Auth: same dual-session check routes/StompChat.bx established — a
- * signed-in visitor is either req.session.commenter or
+ * Auth (HTTP side): same dual-session check routes/StompChat.bx
+ * established — a signed-in visitor is either req.session.commenter or
  * req.session.manage_user (mutually exclusive, same underlying User table).
  * Duplicated here rather than shared (small, and StompChat.bx's own version
  * is private to that class) — matches this codebase's existing tolerance
@@ -13,21 +13,53 @@
  * own comment in routes/Auth.bx for the same reasoning applied there).
  * Unlike StompChat.bx's WebSocket connections, a normal HTTP request here
  * already has req.session populated by boxExpressSession() middleware, so
- * there's no manual cookie/sessionCache lookup needed.
+ * there's no manual cookie/sessionCache lookup needed for the HTTP routes —
+ * only sessionFor() (the WS side, below) needs that.
  *
  * Flash messages: same req.session._flash pattern as routes/Auth.bx and
  * routes/Manage.bx (set-then-redirect, read-and-clear on the next request)
  * — every mutating POST here redirects back to a GET page rather than
  * rendering directly, so a page reload never resubmits the action.
+ *
+ * Live layer (Phase 2): a second, separate STOMP broker from
+ * routes/StompChat.bx's own (boxExpressStomp() instances are isolated from
+ * each other — confirmed by reading Stomp.bx directly,
+ * variables.subscribersByDestination is per-instance, so there's no
+ * destination-namespace collision risk even without one). Much simpler
+ * than StompChat.bx's socket because a player never SENDs anything over
+ * it — this is a pure server-to-client push channel, so authorize()
+ * refuses `access == "publish"` unconditionally for every destination, and
+ * there's no raw-frame interception, identity stamping, or presence
+ * tracking, no wrapper connection needed for onClose either (nothing else
+ * claims that slot). Two destinations:
+ *   /queue/empire/<empireId> — one player's personal notification inbox.
+ *     SUBSCRIBE only succeeds if the connection's own resolved session
+ *     maps to that exact empire id (same "own inbox only" privacy
+ *     boundary StompChat.bx's DM inbox uses, keyed by empire id here since
+ *     that's the identity EmpireService already works in) — re-checked
+ *     against the connection's own session on every SUBSCRIBE, not a value
+ *     trusted from CONNECT time.
+ *   /topic/empire-leaderboard — public broadcast, any authenticated
+ *     connection may SUBSCRIBE.
+ * EmpireService.bx itself stays STOMP-agnostic (matches AuthService/
+ * PostService's plain-service shape) — this class pushes after calling it:
+ * _broadcastLeaderboard() runs after every successful turn-spending action,
+ * and attackHandler() additionally notifies the defender directly on a
+ * successful attack (win or lose — they should know either way).
  */
 class {
 
+	variables.app           = "";
 	variables.empireService = "";
 	variables.siteDefaults  = "";
+	variables.stomp         = "";
+	variables.sessionStore  = "";
 
-	function init( required empireService, required siteDefaults ){
+	function init( required app, required empireService, required siteDefaults ){
+		variables.app           = arguments.app;
 		variables.empireService = arguments.empireService;
 		variables.siteDefaults  = arguments.siteDefaults;
+		variables.sessionStore  = boxExpressCacheStore( "sessionCache" );
 
 		this.router = boxExpressRouter();
 		this.router.get( "/games/empire", ( req, res, next ) => page( req, res, next ) );
@@ -43,6 +75,12 @@ class {
 		this.router.post( "/games/empire/attack/:targetEmpireId", ( req, res, next ) => attackHandler( req, res, next ) );
 		this.router.get( "/games/empire/leaderboard", ( req, res, next ) => leaderboardPage( req, res, next ) );
 		this.router.get( "/games/empire/battles", ( req, res, next ) => battlesPage( req, res, next ) );
+
+		variables.stomp = boxExpressStomp( {
+			authenticate: ( login, passcode, host, connection ) => authenticate( connection ),
+			authorize   : ( login, destination, access, connection ) => authorize( destination, access, connection )
+		} );
+		variables.app.ws( "/games/empire/socket", ( connection ) => variables.stomp.handler()( connection ) );
 
 		return this;
 	}
@@ -61,6 +99,7 @@ class {
 				pageTitle   : "Create Your Empire — Stellar Dominion",
 				canonicalUrl: variables.siteDefaults.canonicalUrl( req.path ),
 				meta        : variables.siteDefaults.defaultMeta( req.path ),
+				empireId    : "",
 				csrfToken   : req.csrfToken(),
 				error       : flash.empireError ?: ""
 			} );
@@ -73,6 +112,7 @@ class {
 			meta        : variables.siteDefaults.defaultMeta( req.path ),
 			activeNav   : "dashboard",
 			empire      : empire,
+			empireId    : empire.id,
 			netWorth    : variables.empireService.getNetWorth( empire ),
 			csrfToken   : req.csrfToken(),
 			message     : flash.empireMessage ?: "",
@@ -101,6 +141,9 @@ class {
 		}
 		var result = variables.empireService.collectIncome( empire.id );
 		flashSet( req, result.success ? { empireMessage: "Collected income." } : { empireError: result.error } );
+		if ( result.success ){
+			_broadcastLeaderboard();
+		}
 		res.redirect( "/games/empire" );
 	}
 
@@ -120,6 +163,9 @@ class {
 		} else {
 			flashSet( req, { empireError: "Exploration failed — your scouting party was lost." } );
 		}
+		if ( result.success ){
+			_broadcastLeaderboard();
+		}
 		res.redirect( "/games/empire" );
 	}
 
@@ -138,6 +184,7 @@ class {
 			meta        : variables.siteDefaults.defaultMeta( req.path ),
 			activeNav   : "market",
 			empire      : empire,
+			empireId    : empire.id,
 			prices      : variables.empireService.getMarketPrices(),
 			csrfToken   : req.csrfToken(),
 			message     : flash.empireMessage ?: "",
@@ -155,6 +202,9 @@ class {
 		}
 		var result = variables.empireService.buyResource( empire.id, req.body.resource ?: "", req.body.qty ?: 0 );
 		flashSet( req, result.success ? { empireMessage: "Purchase complete." } : { empireError: result.error } );
+		if ( result.success ){
+			_broadcastLeaderboard();
+		}
 		res.redirect( "/games/empire/market" );
 	}
 
@@ -168,6 +218,9 @@ class {
 		}
 		var result = variables.empireService.sellResource( empire.id, req.body.resource ?: "", req.body.qty ?: 0 );
 		flashSet( req, result.success ? { empireMessage: "Sale complete." } : { empireError: result.error } );
+		if ( result.success ){
+			_broadcastLeaderboard();
+		}
 		res.redirect( "/games/empire/market" );
 	}
 
@@ -186,6 +239,7 @@ class {
 			meta        : variables.siteDefaults.defaultMeta( req.path ),
 			activeNav   : "military",
 			empire      : empire,
+			empireId    : empire.id,
 			csrfToken   : req.csrfToken(),
 			message     : flash.empireMessage ?: "",
 			error       : flash.empireError ?: ""
@@ -202,6 +256,9 @@ class {
 		}
 		var result = variables.empireService.buildMilitary( empire.id, req.body.unitType ?: "", req.body.qty ?: 0 );
 		flashSet( req, result.success ? { empireMessage: "Construction complete." } : { empireError: result.error } );
+		if ( result.success ){
+			_broadcastLeaderboard();
+		}
 		res.redirect( "/games/empire/military" );
 	}
 
@@ -220,6 +277,7 @@ class {
 			meta        : variables.siteDefaults.defaultMeta( req.path ),
 			activeNav   : "attack",
 			empire      : empire,
+			empireId    : empire.id,
 			targets     : variables.empireService.listAttackTargets( empire.id ),
 			csrfToken   : req.csrfToken(),
 			message     : flash.empireMessage ?: "",
@@ -255,18 +313,41 @@ class {
 		} else {
 			flashSet( req, { empireError: "Defeat — your fleet was repelled and took losses." } );
 		}
+
+		if ( result.success ){
+			// Notify the defender directly — win or lose, they should know
+			// either way — then broadcast the leaderboard, which the attack
+			// itself may have moved for both sides.
+			variables.stomp.send( "/queue/empire/" & result.defender.id, {
+				type            : "attacked",
+				attackerName    : empire.name,
+				outcome         : result.attackerWon ? "attacker_win" : "defender_win",
+				creditsPlundered: result.creditsPlundered,
+				foodPlundered   : result.foodPlundered,
+				fuelPlundered   : result.fuelPlundered,
+				planetCaptured  : result.planetCaptured
+			} );
+			_broadcastLeaderboard();
+		}
 		res.redirect( "/games/empire/attack" );
 	}
 
+	// The only page reachable without an empire (spectating is fine — no
+	// _currentEmpireOrRedirect() bounce here), so empireId is looked up
+	// directly rather than via that helper, and may end up "" — the client
+	// script just skips the personal-inbox subscription in that case, still
+	// subscribing to the leaderboard topic regardless.
 	function leaderboardPage( req, res, next ){
 		if ( !_requireAuth( req, res ) ){
 			return;
 		}
+		var empire = variables.empireService.getEmpireByUserId( rawUserIdFor( req.session ) );
 		res.render( "games/empire/leaderboard", {
 			pageTitle   : "Leaderboard — Stellar Dominion",
 			canonicalUrl: variables.siteDefaults.canonicalUrl( req.path ),
 			meta        : variables.siteDefaults.defaultMeta( req.path ),
 			activeNav   : "leaderboard",
+			empireId    : isNull( empire ) ? "" : empire.id,
 			entries     : variables.empireService.getLeaderboard()
 		} );
 	}
@@ -285,6 +366,7 @@ class {
 			meta        : variables.siteDefaults.defaultMeta( req.path ),
 			activeNav   : "battles",
 			empire      : empire,
+			empireId    : empire.id,
 			battles     : variables.empireService.getBattleLogForEmpire( empire.id )
 		} );
 	}
@@ -347,6 +429,61 @@ class {
 		var f = req.session._flash ?: {};
 		structDelete( req.session, "_flash" );
 		return f;
+	}
+
+	// Resolves the site session for a WebSocket connection from its
+	// handshake cookies — the same "connect.sid" -> sessionCache lookup
+	// boxExpressSession()'s own middleware does internally, just invoked by
+	// hand since app.ws() never runs that middleware (see class docblock).
+	// Identical to routes/StompChat.bx's own sessionFor().
+	function sessionFor( connection ){
+		var sessionId = connection.cookies[ "connect.sid" ] ?: "";
+		if ( !len( sessionId ) ){
+			return javacast( "null", "" );
+		}
+		return variables.sessionStore.get( sessionId );
+	}
+
+	function authenticate( connection ){
+		return len( displayNameFor( sessionFor( connection ) ) ) > 0;
+	}
+
+	// SUBSCRIBE is the only access this ever grants — publish is refused
+	// unconditionally, for every destination, since a player never sends
+	// anything over this socket (see class docblock).
+	function authorize( destination, access, connection ){
+		if ( access != "subscribe" ){
+			return false;
+		}
+
+		var sessionData = sessionFor( connection );
+		if ( !len( displayNameFor( sessionData ) ) ){
+			return false;
+		}
+
+		if ( destination == "/topic/empire-leaderboard" ){
+			return true;
+		}
+
+		var inboxPrefix = "/queue/empire/";
+		if ( len( destination ) > len( inboxPrefix ) && left( destination, len( inboxPrefix ) ) == inboxPrefix ){
+			var targetEmpireId = mid( destination, len( inboxPrefix ) + 1, len( destination ) - len( inboxPrefix ) );
+			var myEmpire = variables.empireService.getEmpireByUserId( rawUserIdFor( sessionData ) );
+			return !isNull( myEmpire ) && myEmpire.id == targetEmpireId;
+		}
+
+		return false;
+	}
+
+	// Re-fetches and re-broadcasts the current leaderboard — called after
+	// every successful turn-spending action (see class docblock). Cheap
+	// enough at this app's scale to just always recompute rather than try
+	// to diff what changed.
+	private function _broadcastLeaderboard(){
+		variables.stomp.send( "/topic/empire-leaderboard", {
+			type   : "leaderboard",
+			entries: variables.empireService.getLeaderboard()
+		} );
 	}
 
 }

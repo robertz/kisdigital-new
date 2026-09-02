@@ -1,3 +1,89 @@
 <bx:output>
 </div>
+
+<!--- @stomp/stompjs's UMD bundle — a real STOMP client library rather than
+      hand-rolling frame parsing again (views/main/chat.bxm and the old
+      views/games/stomp-chat.bxm hand-roll their own because they also
+      construct and send frames; this socket only ever receives, so there's
+      no send-side parser to justify reimplementing the receive side too).
+      Pinned version + SRI, same pattern _head.bxm already uses for Prism
+      via cdnjs — cdnjs itself only carries the old (pre-@stomp) "stomp.js"
+      v2 package, so this one loads from jsDelivr instead, the CDN that
+      package's own docs point to. Exposes window.StompJs.Client. --->
+<script src="https://cdn.jsdelivr.net/npm/@stomp/stompjs@7.3.0/bundles/stomp.umd.min.js" integrity="sha256-apCnXx9DlxYKIwf6t9XePS9l7WuP/qO97pjt+cwfbvs=" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script>
+(function () {
+	// EMPIRE_ID is "" on the one page reachable with no empire at all
+	// (routes/Empire.bx's create-empire render) and on leaderboardPage()
+	// for a spectator who hasn't founded one yet — either way, skip the
+	// personal-inbox subscription, but a leaderboard table (if present on
+	// this page) still gets live updates regardless of whether this
+	// visitor has an empire of their own.
+	var EMPIRE_ID = #JSONSerialize( data.empireId ?: "" )#;
+	var leaderboardBody = document.getElementById( "leaderboardBody" );
+	if ( !EMPIRE_ID && !leaderboardBody ) {
+		return;
+	}
+
+	var client = new StompJs.Client( {
+		brokerURL: ( location.protocol === "https:" ? "wss:" : "ws:" ) + "//" + location.host + "/games/empire/socket",
+		reconnectDelay: 3000,
+		onConnect: function () {
+			if ( EMPIRE_ID ) {
+				client.subscribe( "/queue/empire/" + EMPIRE_ID, function ( message ) {
+					try {
+						var payload = JSON.parse( message.body );
+						if ( payload.type === "attacked" ) showAttackBanner( payload );
+					} catch ( e ) { /* ignore malformed body */ }
+				} );
+			}
+			if ( leaderboardBody ) {
+				client.subscribe( "/topic/empire-leaderboard", function ( message ) {
+					try {
+						var payload = JSON.parse( message.body );
+						if ( payload.type === "leaderboard" ) renderLeaderboard( payload.entries );
+					} catch ( e ) { /* ignore malformed body */ }
+				} );
+			}
+		}
+	} );
+	client.activate();
+
+	// Same .sd-alert styling language _chromeStart.bxm already established
+	// for flash messages — not a new visual system, just inserted live
+	// right after the nav instead of being server-rendered.
+	function showAttackBanner( payload ) {
+		var won = payload.outcome !== "attacker_win"; // "attacker_win" means WE (the defender) lost
+		var el = document.createElement( "div" );
+		el.className = "sd-alert " + ( won ? "sd-alert-success" : "sd-alert-error" );
+		var msg = "INCOMING TRANSMISSION: " + payload.attackerName + " attacked you — ";
+		msg += won ? "you repelled them!" : "you were defeated.";
+		if ( !won ) {
+			msg += " Lost " + payload.creditsPlundered + " cr, " + payload.foodPlundered + " food, " + payload.fuelPlundered + " fuel.";
+			if ( payload.planetCaptured ) msg += " A planet was captured!";
+		}
+		el.textContent = msg;
+		document.querySelector( ".sd-nav" ).insertAdjacentElement( "afterend", el );
+	}
+
+	function renderLeaderboard( entries ) {
+		leaderboardBody.innerHTML = "";
+		entries.forEach( function ( entry, i ) {
+			var tr = document.createElement( "tr" );
+			var rank = document.createElement( "td" );
+			rank.textContent = i + 1;
+			var name = document.createElement( "td" );
+			name.textContent = entry.name;
+			var owner = document.createElement( "td" );
+			owner.textContent = entry.owner_name;
+			var planets = document.createElement( "td" );
+			planets.textContent = entry.planet_count;
+			var netWorth = document.createElement( "td" );
+			netWorth.textContent = entry.net_worth.toLocaleString();
+			tr.append( rank, name, owner, planets, netWorth );
+			leaderboardBody.appendChild( tr );
+		} );
+	}
+})();
+</script>
 </bx:output>
