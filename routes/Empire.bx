@@ -186,6 +186,11 @@ class {
 			empire      : empire,
 			empireId    : empire.id,
 			prices      : variables.empireService.getMarketPrices(),
+			marketItems : [
+				{ key: "food",      label: "Food" },
+				{ key: "fuel",      label: "Fuel" },
+				{ key: "equipment", label: "Equipment" }
+			],
 			csrfToken   : req.csrfToken(),
 			message     : flash.empireMessage ?: "",
 			error       : flash.empireError ?: ""

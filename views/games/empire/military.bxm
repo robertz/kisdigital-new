@@ -17,6 +17,10 @@
 			<div class="sd-stat-label">Cruisers</div>
 			<div class="sd-stat-value">#numberFormat( data.empire.cruisers )#</div>
 		</div>
+		<div class="sd-stat">
+			<div class="sd-stat-label">Equipment</div>
+			<div class="sd-stat-value">#numberFormat( data.empire.equipment )#</div>
+		</div>
 	</div>
 </div>
 
@@ -29,8 +33,8 @@
 				<label for="unitType" class="sd-label">Unit</label>
 				<select id="unitType" name="unitType" class="sd-select">
 					<option value="soldiers">Soldiers — 50 cr + 5 food</option>
-					<option value="fighters">Fighters — 200 cr + 10 fuel</option>
-					<option value="cruisers">Cruisers — 800 cr + 40 fuel + 20 food</option>
+					<option value="fighters">Fighters — 200 cr + 10 fuel + 5 equipment</option>
+					<option value="cruisers">Cruisers — 800 cr + 40 fuel + 20 food + 20 equipment</option>
 				</select>
 			</div>
 			<div>
@@ -41,7 +45,7 @@
 				<button type="submit" class="sd-btn">BUILD</button>
 			</div>
 		</div>
-		<p class="sd-hint">Costs are checked against your current credits/food/fuel — the build is rejected if you can't afford it. Max 50 units per action.</p>
+		<p class="sd-hint">Costs are checked against your current credits/food/fuel/equipment — the build is rejected if you can't afford it. Max 50 units per action.</p>
 	</form>
 </div>
 </bx:output>

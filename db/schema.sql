@@ -303,6 +303,7 @@ create table Empire
     soldiers        int          default 10                  not null,
     fighters        int          default 5                   not null,
     cruisers        int          default 0                   not null,
+    equipment       bigint       default 0                   not null,
     turns_remaining int          default 20                  not null,
     last_turn_reset date         default (curdate())         not null,
     shielded_until  timestamp                                 null,
@@ -333,6 +334,27 @@ create table Planet
 
 create index idx_planet_empire
     on Planet (empire_id);
+
+-- One row per successful market trade; getMarketPrices() sums today's rows
+-- per resource (buy qty minus sell qty) to price off real supply/demand
+-- instead of a fixed daily random walk (see EmpireService.bx).
+create table MarketTrade
+(
+    id         varchar(36)                   default (uuid())         not null
+        primary key,
+    empire_id  varchar(36)                                            not null,
+    resource   enum ('food', 'fuel', 'equipment')                     not null,
+    direction  enum ('buy', 'sell')                                   not null,
+    qty        int                                                    not null,
+    unit_price int                                                    not null,
+    created    timestamp                     default CURRENT_TIMESTAMP not null,
+    constraint MarketTrade_Empire_id_fk
+        foreign key (empire_id) references Empire (id)
+            on update cascade on delete cascade
+);
+
+create index idx_market_trade_resource_created
+    on MarketTrade (resource, created);
 
 create table EmpireBattle
 (

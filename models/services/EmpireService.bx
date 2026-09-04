@@ -63,26 +63,41 @@ class {
 	// see that method).
 	variables.PLANET_TYPES  = [ "agricultural", "mining", "industrial" ];
 	variables.PLANET_YIELDS = {
-		agricultural: { credits: 60,  food: 40, fuel: 0 },
-		mining      : { credits: 60,  food: 0,  fuel: 40 },
-		industrial  : { credits: 140, food: 0,  fuel: 0 }
+		agricultural: { credits: 60,  food: 40, fuel: 0,  equipment: 0  },
+		mining      : { credits: 60,  food: 0,  fuel: 40, equipment: 0  },
+		industrial  : { credits: 140, food: 0,  fuel: 0,  equipment: 20 }
 	};
 	variables.PLANET_VALUES = { agricultural: 800, mining: 800, industrial: 1200 };
 
-	// Galactic market — getMarketPrices(), buyResource(), sellResource()
-	variables.FOOD_BASE_PRICE  = 5;
-	variables.FUEL_BASE_PRICE  = 8;
-	variables.MAX_MARKET_TRADE = 500;
+	// Galactic market — getMarketPrices(), buyResource(), sellResource().
+	// Prices are no longer a fixed daily random walk: getMarketPrices()
+	// prices each resource off today's actual buy/sell volume logged to
+	// MarketTrade (db/migrations/0014_...sql), clamped to
+	// [base * MARKET_PRICE_MIN_MULT, base * MARKET_PRICE_MAX_MULT].
+	// MARKET_PRESSURE_UNITS is how much net today-volume (in units, buys
+	// positive/sells negative) it takes to swing a resource's price the
+	// full distance to its clamp.
+	variables.FOOD_BASE_PRICE       = 5;
+	variables.FUEL_BASE_PRICE       = 8;
+	variables.EQUIPMENT_BASE_PRICE  = 25;
+	variables.MAX_MARKET_TRADE      = 500;
+	variables.MARKET_PRESSURE_UNITS = 2000;
+	variables.MARKET_PRICE_MIN_MULT = 0.5;
+	variables.MARKET_PRICE_MAX_MULT = 1.5;
 
-	// Military build costs — buildMilitary()
-	variables.SOLDIER_COST_CREDITS = 50;
-	variables.SOLDIER_COST_FOOD    = 5;
-	variables.FIGHTER_COST_CREDITS = 200;
-	variables.FIGHTER_COST_FUEL    = 10;
-	variables.CRUISER_COST_CREDITS = 800;
-	variables.CRUISER_COST_FUEL    = 40;
-	variables.CRUISER_COST_FOOD    = 20;
-	variables.MAX_BUILD_QTY        = 50;
+	// Military build costs — buildMilitary(). Soldiers stay basic,
+	// equipment-free infantry; fighters/cruisers are hardware and draw down
+	// the Equipment Industrial planets produce.
+	variables.SOLDIER_COST_CREDITS  = 50;
+	variables.SOLDIER_COST_FOOD     = 5;
+	variables.FIGHTER_COST_CREDITS  = 200;
+	variables.FIGHTER_COST_FUEL     = 10;
+	variables.FIGHTER_COST_EQUIPMENT = 5;
+	variables.CRUISER_COST_CREDITS  = 800;
+	variables.CRUISER_COST_FUEL     = 40;
+	variables.CRUISER_COST_FOOD     = 20;
+	variables.CRUISER_COST_EQUIPMENT = 20;
+	variables.MAX_BUILD_QTY         = 50;
 
 	// Exploration — exploreForPlanet()
 	variables.EXPLORE_FUEL_COST      = 300;
@@ -321,23 +336,41 @@ class {
 		return true;
 	}
 
-	// Deterministic pseudo-random value in [0,1) derived from seedString
-	// (today's date + a resource name) — the market price is stable for the
-	// whole day and only moves at the next day's first read, with no stored
-	// price row at all since this is a pure function of the date.
-	private function _deterministicRandom( seedString ){
-		var hex = left( hash( seedString, "MD5" ), 8 );
-		return inputBaseN( hex, 16 ) / 4294967295;
-	}
-
+	// Real supply/demand: today's net trade volume per resource (buys minus
+	// sells, both computed entirely in SQL against CURDATE() — never mixed
+	// with BoxLang's own now(), per the timezone-mismatch bug this app hit
+	// with the daily turn-reset check) pushes that resource's price up or
+	// down from its base, clamped to a fixed band. A resource nobody has
+	// traded today returns to exactly its base price.
 	function getMarketPrices(){
-		var today = dateFormat( now(), "yyyy-mm-dd" );
-		var foodFactor = 0.8 + ( _deterministicRandom( today & "-food" ) * 0.4 ); // ±20% band
-		var fuelFactor = 0.8 + ( _deterministicRandom( today & "-fuel" ) * 0.4 );
-		return {
-			food: int( variables.FOOD_BASE_PRICE * foodFactor ),
-			fuel: int( variables.FUEL_BASE_PRICE * fuelFactor )
+		var volumeRows = queryExecute(
+			"SELECT resource, SUM( CASE direction WHEN 'buy' THEN qty ELSE -qty END ) AS netQty
+			 FROM MarketTrade
+			 WHERE created >= CURDATE()
+			 GROUP BY resource",
+			{},
+			{ returnType: "array" }
+		);
+		var netQtyByResource = { food: 0, fuel: 0, equipment: 0 };
+		for ( var row in volumeRows ){
+			netQtyByResource[ row.resource ] = row.netQty;
+		}
+
+		var basePrices = {
+			food     : variables.FOOD_BASE_PRICE,
+			fuel     : variables.FUEL_BASE_PRICE,
+			equipment: variables.EQUIPMENT_BASE_PRICE
 		};
+		var prices = {};
+		for ( var resource in basePrices ){
+			var base = basePrices[ resource ];
+			var swing = netQtyByResource[ resource ] / variables.MARKET_PRESSURE_UNITS;
+			var price = base * ( 1 + swing );
+			price = max( price, base * variables.MARKET_PRICE_MIN_MULT );
+			price = min( price, base * variables.MARKET_PRICE_MAX_MULT );
+			prices[ resource ] = int( price );
+		}
+		return prices;
 	}
 
 	function collectIncome( empireId ){
@@ -353,19 +386,22 @@ class {
 		// population-based credits bonus — food/fuel only ever come from
 		// agricultural/mining planets here, buying on the market, or plunder;
 		// there's no separate "harvest" action.
-		var planetCredits = 0;
-		var planetFood    = 0;
-		var planetFuel    = 0;
+		var planetCredits   = 0;
+		var planetFood      = 0;
+		var planetFuel      = 0;
+		var planetEquipment = 0;
 		for ( var type in variables.PLANET_TYPES ){
 			var count = empire.planets[ type ];
-			planetCredits += count * variables.PLANET_YIELDS[ type ].credits;
-			planetFood    += count * variables.PLANET_YIELDS[ type ].food;
-			planetFuel    += count * variables.PLANET_YIELDS[ type ].fuel;
+			planetCredits   += count * variables.PLANET_YIELDS[ type ].credits;
+			planetFood      += count * variables.PLANET_YIELDS[ type ].food;
+			planetFuel      += count * variables.PLANET_YIELDS[ type ].fuel;
+			planetEquipment += count * variables.PLANET_YIELDS[ type ].equipment;
 		}
 
-		var newCredits = empire.credits + planetCredits + ( int( empire.population / 10 ) * 5 );
-		var newFood    = empire.food + planetFood;
-		var newFuel    = empire.fuel + planetFuel;
+		var newCredits   = empire.credits + planetCredits + ( int( empire.population / 10 ) * 5 );
+		var newFood      = empire.food + planetFood;
+		var newFuel      = empire.fuel + planetFuel;
+		var newEquipment = empire.equipment + planetEquipment;
 		var popCap = empire.planets.total * 1000;
 		var newPopulation = empire.population + int( empire.population * 0.02 );
 		if ( newPopulation > popCap ){
@@ -373,12 +409,13 @@ class {
 		}
 
 		queryExecute(
-			"UPDATE Empire SET credits = :credits, food = :food, fuel = :fuel, population = :population, turns_remaining = turns_remaining - 1
+			"UPDATE Empire SET credits = :credits, food = :food, fuel = :fuel, equipment = :equipment, population = :population, turns_remaining = turns_remaining - 1
 			 WHERE id = :id AND turns_remaining > 0",
 			{
 				credits   : { value: newCredits,    cfsqltype: "cf_sql_bigint" },
 				food      : { value: newFood,       cfsqltype: "cf_sql_bigint" },
 				fuel      : { value: newFuel,       cfsqltype: "cf_sql_bigint" },
+				equipment : { value: newEquipment,  cfsqltype: "cf_sql_bigint" },
 				population: { value: newPopulation, cfsqltype: "cf_sql_bigint" },
 				id        : { value: empireId,      cfsqltype: "cf_sql_varchar" }
 			}
@@ -393,7 +430,7 @@ class {
 	// StompChat.bx's _normalizeChannelName() uses before a value becomes
 	// part of a destination string.
 	function buyResource( empireId, resource, qty ){
-		if ( !listFindNoCase( "food,fuel", resource ) ){
+		if ( !listFindNoCase( "food,fuel,equipment", resource ) ){
 			return { success: false, error: "Invalid resource." };
 		}
 		var column = lCase( resource );
@@ -425,12 +462,13 @@ class {
 				id  : { value: empireId,  cfsqltype: "cf_sql_varchar" }
 			}
 		);
+		_logMarketTrade( empireId, column, "buy", quantity, unitPrice );
 
 		return { success: true, empire: _loadById( empireId ) };
 	}
 
 	function sellResource( empireId, resource, qty ){
-		if ( !listFindNoCase( "food,fuel", resource ) ){
+		if ( !listFindNoCase( "food,fuel,equipment", resource ) ){
 			return { success: false, error: "Invalid resource." };
 		}
 		var column = lCase( resource );
@@ -462,8 +500,25 @@ class {
 				id  : { value: empireId,  cfsqltype: "cf_sql_varchar" }
 			}
 		);
+		_logMarketTrade( empireId, column, "sell", quantity, unitPrice );
 
 		return { success: true, empire: _loadById( empireId ) };
+	}
+
+	// column has already passed the "food,fuel,equipment" whitelist check
+	// in both callers above by the time this runs.
+	private function _logMarketTrade( empireId, resource, direction, qty, unitPrice ){
+		queryExecute(
+			"INSERT INTO MarketTrade ( empire_id, resource, direction, qty, unit_price )
+			 VALUES ( :empireId, :resource, :direction, :qty, :unitPrice )",
+			{
+				empireId : { value: empireId,  cfsqltype: "cf_sql_varchar" },
+				resource : { value: resource,  cfsqltype: "cf_sql_varchar" },
+				direction: { value: direction, cfsqltype: "cf_sql_varchar" },
+				qty      : { value: qty,       cfsqltype: "cf_sql_integer" },
+				unitPrice: { value: unitPrice, cfsqltype: "cf_sql_integer" }
+			}
+		);
 	}
 
 	// unitType validated against the same fixed whitelist reasoning as
@@ -486,19 +541,22 @@ class {
 			return { success: false, error: "No turns remaining today." };
 		}
 
-		var creditsCost = 0;
-		var fuelCost    = 0;
-		var foodCost    = 0;
+		var creditsCost   = 0;
+		var fuelCost      = 0;
+		var foodCost      = 0;
+		var equipmentCost = 0;
 		if ( column == "soldiers" ){
 			creditsCost = variables.SOLDIER_COST_CREDITS * quantity;
 			foodCost    = variables.SOLDIER_COST_FOOD * quantity;
 		} else if ( column == "fighters" ){
-			creditsCost = variables.FIGHTER_COST_CREDITS * quantity;
-			fuelCost    = variables.FIGHTER_COST_FUEL * quantity;
+			creditsCost   = variables.FIGHTER_COST_CREDITS * quantity;
+			fuelCost      = variables.FIGHTER_COST_FUEL * quantity;
+			equipmentCost = variables.FIGHTER_COST_EQUIPMENT * quantity;
 		} else {
-			creditsCost = variables.CRUISER_COST_CREDITS * quantity;
-			fuelCost    = variables.CRUISER_COST_FUEL * quantity;
-			foodCost    = variables.CRUISER_COST_FOOD * quantity;
+			creditsCost   = variables.CRUISER_COST_CREDITS * quantity;
+			fuelCost      = variables.CRUISER_COST_FUEL * quantity;
+			foodCost      = variables.CRUISER_COST_FOOD * quantity;
+			equipmentCost = variables.CRUISER_COST_EQUIPMENT * quantity;
 		}
 
 		if ( creditsCost > empire.credits ){
@@ -510,18 +568,22 @@ class {
 		if ( foodCost > empire.food ){
 			return { success: false, error: "Not enough food." };
 		}
+		if ( equipmentCost > empire.equipment ){
+			return { success: false, error: "Not enough equipment." };
+		}
 
 		queryExecute(
 			"UPDATE Empire SET
-				credits = credits - :credits, fuel = fuel - :fuel, food = food - :food,
+				credits = credits - :credits, fuel = fuel - :fuel, food = food - :food, equipment = equipment - :equipment,
 				#column# = #column# + :qty, turns_remaining = turns_remaining - 1
 			 WHERE id = :id AND turns_remaining > 0",
 			{
-				credits: { value: creditsCost, cfsqltype: "cf_sql_bigint" },
-				fuel   : { value: fuelCost,    cfsqltype: "cf_sql_bigint" },
-				food   : { value: foodCost,    cfsqltype: "cf_sql_bigint" },
-				qty    : { value: quantity,    cfsqltype: "cf_sql_integer" },
-				id     : { value: empireId,    cfsqltype: "cf_sql_varchar" }
+				credits  : { value: creditsCost,   cfsqltype: "cf_sql_bigint" },
+				fuel     : { value: fuelCost,      cfsqltype: "cf_sql_bigint" },
+				food     : { value: foodCost,      cfsqltype: "cf_sql_bigint" },
+				equipment: { value: equipmentCost, cfsqltype: "cf_sql_bigint" },
+				qty      : { value: quantity,      cfsqltype: "cf_sql_integer" },
+				id       : { value: empireId,      cfsqltype: "cf_sql_varchar" }
 			}
 		);
 
@@ -764,7 +826,7 @@ class {
 	function getLeaderboard( limit = 50 ){
 		return queryExecute(
 			"SELECT e.id, e.name, u.display_name AS owner_name, COALESCE( p.planet_count, 0 ) AS planet_count,
-				( e.credits + e.food*2 + e.fuel*3 + COALESCE( p.planet_value, 0 ) + e.soldiers*50 + e.fighters*200 + e.cruisers*800 ) AS net_worth
+				( e.credits + e.food*2 + e.fuel*3 + e.equipment*6 + COALESCE( p.planet_value, 0 ) + e.soldiers*50 + e.fighters*200 + e.cruisers*800 ) AS net_worth
 			 FROM Empire e
 			 JOIN User u ON u.id = e.user_id
 			 LEFT JOIN (
@@ -793,7 +855,7 @@ class {
 		var planetValue = ( empire.planets.agricultural * variables.PLANET_VALUES.agricultural )
 			+ ( empire.planets.mining * variables.PLANET_VALUES.mining )
 			+ ( empire.planets.industrial * variables.PLANET_VALUES.industrial );
-		return empire.credits + ( empire.food * 2 ) + ( empire.fuel * 3 ) + planetValue
+		return empire.credits + ( empire.food * 2 ) + ( empire.fuel * 3 ) + ( empire.equipment * 6 ) + planetValue
 			+ ( empire.soldiers * 50 ) + ( empire.fighters * 200 ) + ( empire.cruisers * 800 );
 	}
 

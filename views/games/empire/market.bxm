@@ -3,68 +3,47 @@
 
 <bx:output>
 <div class="sd-panel">
-	<p class="sd-panel-title">Today's Prices</p>
-	<div class="sd-stat-grid">
-		<div class="sd-stat">
-			<div class="sd-stat-label">Food</div>
-			<div class="sd-stat-value">#data.prices.food# cr/unit</div>
-		</div>
-		<div class="sd-stat">
-			<div class="sd-stat-label">Fuel</div>
-			<div class="sd-stat-value">#data.prices.fuel# cr/unit</div>
-		</div>
-		<div class="sd-stat">
-			<div class="sd-stat-label">Your Credits</div>
-			<div class="sd-stat-value">#numberFormat( data.empire.credits )#</div>
-		</div>
-	</div>
-	<p class="sd-hint">Prices drift &plusmn;20% day to day. Up to 500 units per trade.</p>
-</div>
+	<p class="sd-panel-title">Galactic Market</p>
+	<p class="sd-hint" style="margin-bottom: 14px;">Your Credits: <strong style="color: var(--sd-green);">#numberFormat( data.empire.credits )#</strong></p>
 
-<div class="sd-panel">
-	<p class="sd-panel-title">Buy</p>
-	<form method="post" action="/games/empire/market/buy">
-		<input type="hidden" name="_csrf" value="#encodeForHTMLAttribute( data.csrfToken )#">
-		<div class="sd-form-row">
-			<div>
-				<label for="buyResource" class="sd-label">Resource</label>
-				<select id="buyResource" name="resource" class="sd-select">
-					<option value="food">Food</option>
-					<option value="fuel">Fuel</option>
-				</select>
-			</div>
-			<div>
-				<label for="buyQty" class="sd-label">Quantity</label>
-				<input type="number" id="buyQty" name="qty" class="sd-input" min="1" max="500" value="50" required>
-			</div>
-			<div>
-				<button type="submit" class="sd-btn">BUY</button>
-			</div>
-		</div>
-	</form>
-</div>
+	<table class="sd-table">
+		<thead>
+			<tr>
+				<th>Resource</th>
+				<th>Price</th>
+				<th>You Have</th>
+				<th>Buy</th>
+				<th>Sell</th>
+			</tr>
+		</thead>
+		<tbody>
+			<bx:loop array="#data.marketItems#" item="item">
+			<tr>
+				<td>#item.label#</td>
+				<td>#data.prices[ item.key ]# cr/unit</td>
+				<td>#numberFormat( data.empire[ item.key ] )#</td>
+				<td>
+					<form method="post" action="/games/empire/market/buy" class="sd-form-row" style="gap: 6px;">
+						<input type="hidden" name="_csrf" value="#encodeForHTMLAttribute( data.csrfToken )#">
+						<input type="hidden" name="resource" value="#item.key#">
+						<input type="number" name="qty" class="sd-input" style="width: 90px;" min="1" max="500" value="50" required>
+						<button type="submit" class="sd-btn">BUY</button>
+					</form>
+				</td>
+				<td>
+					<form method="post" action="/games/empire/market/sell" class="sd-form-row" style="gap: 6px;">
+						<input type="hidden" name="_csrf" value="#encodeForHTMLAttribute( data.csrfToken )#">
+						<input type="hidden" name="resource" value="#item.key#">
+						<input type="number" name="qty" class="sd-input" style="width: 90px;" min="1" max="500" value="50" required>
+						<button type="submit" class="sd-btn">SELL</button>
+					</form>
+				</td>
+			</tr>
+			</bx:loop>
+		</tbody>
+	</table>
 
-<div class="sd-panel">
-	<p class="sd-panel-title">Sell</p>
-	<form method="post" action="/games/empire/market/sell">
-		<input type="hidden" name="_csrf" value="#encodeForHTMLAttribute( data.csrfToken )#">
-		<div class="sd-form-row">
-			<div>
-				<label for="sellResource" class="sd-label">Resource</label>
-				<select id="sellResource" name="resource" class="sd-select">
-					<option value="food">Food</option>
-					<option value="fuel">Fuel</option>
-				</select>
-			</div>
-			<div>
-				<label for="sellQty" class="sd-label">Quantity</label>
-				<input type="number" id="sellQty" name="qty" class="sd-input" min="1" max="500" value="50" required>
-			</div>
-			<div>
-				<button type="submit" class="sd-btn">SELL</button>
-			</div>
-		</div>
-	</form>
+	<p class="sd-hint" style="margin-top: 12px;">Prices move with today's buying and selling pressure. Up to 500 units per trade.</p>
 </div>
 </bx:output>
 

@@ -39,6 +39,10 @@
 			<div class="sd-stat-label">Cruisers</div>
 			<div class="sd-stat-value">#numberFormat( data.empire.cruisers )#</div>
 		</div>
+		<div class="sd-stat">
+			<div class="sd-stat-label">Equipment</div>
+			<div class="sd-stat-value">#numberFormat( data.empire.equipment )#</div>
+		</div>
 	</div>
 
 	<bx:if isDate( data.empire.shielded_until ?: "" ) && data.empire.shielded_until > now()>
@@ -62,7 +66,7 @@
 		<div class="sd-stat">
 			<div class="sd-stat-label">Industrial</div>
 			<div class="sd-stat-value">#data.empire.planets.industrial#</div>
-			<div class="sd-stat-hint">+140 cr each</div>
+			<div class="sd-stat-hint">+140 cr, +20 equipment each</div>
 		</div>
 	</div>
 	<p class="sd-hint">Yields are collected via the Collect Income action, not automatically each turn.</p>
