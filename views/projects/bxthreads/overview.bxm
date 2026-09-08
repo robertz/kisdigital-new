@@ -1,0 +1,83 @@
+<bx:include template="../../partials/_head.bxm">
+<bx:output>
+<div class="container py-5">
+	<div class="c-project-hero">
+		<p class="c-project-hero__eyebrow">Project</p>
+		<h1 class="c-project-hero__title">bxThreads</h1>
+		<p class="c-project-hero__tagline">A public <a href="https://boxlang.io" target="_blank" rel="noopener" class="c-post-link">BoxLang</a> port of DismalThreads — a Reddit-style forum app — built on <a href="/projects/boxlang-express" class="c-post-link">boxlang-express</a> instead of ColdBox, with no cbwire. Plain server-rendered HTML, fetch()-driven actions, and a STOMP-based realtime layer for comments, votes, and notifications.</p>
+		<div class="c-project-hero__actions">
+			<a href="https://github.com/robertz/bxthreads" target="_blank" rel="noopener" class="btn btn-primary-custom">View on GitHub</a>
+		</div>
+	</div>
+
+	<div class="c-project-features">
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-broadcast"></i> Realtime over STOMP</p>
+			<p class="c-project-feature__body">One shared broker (<code class="bx-inline">ws/Stomp.bx</code>) drives live comment, vote, and notification broadcasts plus per-forum presence — no polling.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-trophy"></i> Achievements</p>
+			<p class="c-project-feature__body">Tiered, data-driven achievement tracks evaluated inline after posting, commenting, and voting — thresholds live entirely in an <code class="bx-inline">AchievementTiers</code> table, not code.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-link-45deg"></i> Link previews</p>
+			<p class="c-project-feature__body">Pasting a link into the post editor scrapes OG/Twitter tags, oEmbed, and JSON-LD for a title and preview card; a server-side image proxy resizes the preview image so the browser never downloads a full-resolution original.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-shield-check"></i> Two auth models</p>
+			<p class="c-project-feature__body">Session-cookie auth for pages/actions, a constant-time-compared <code class="bx-inline">X-Api-Key</code> header for the admin REST API — CSRF, secure cookies, and per-IP rate limiting on login/signup on top.</p>
+		</div>
+	</div>
+
+	<div class="c-post__body c-docs-body">
+
+		<h2>Setup</h2>
+		<p>Requires <a href="https://boxlang.io/" target="_blank" rel="noopener" class="c-post-link">BoxLang</a> + <a href="https://www.ortussolutions.com/products/commandbox" target="_blank" rel="noopener" class="c-post-link">CommandBox</a>, and MySQL for the <code class="bx-inline">dismal</code> datasource. The fastest path installs dependencies, prompts for every <code class="bx-inline">.env</code> value, and creates the database plus an <code class="bx-inline">admin</code>/<code class="bx-inline">admin</code> login if one doesn't exist yet:</p>
+		<pre class="bx-code"><span class="bx-code-label">bash</span><code>boxlang setup.bxs</code></pre>
+		<p>Re-running it is safe — it reuses whatever's already in <code class="bx-inline">.env</code> as the new defaults and never touches a database that already exists. To do it by hand instead:</p>
+		<pre class="bx-code"><span class="bx-code-label">bash</span><code>box install
+cp .env.example .env       ## fill in real values
+mysql -u root -p < db/schema.sql
+boxlang --bx-config ./boxlang.json app.bxs</code></pre>
+		<p>Serves on <code class="bx-inline">http://localhost:$APP_PORT</code> (default <code class="bx-inline">3000</code>).</p>
+
+		<h2>Project layout</h2>
+		<table class="bx-table">
+			<tr><th>Path</th><th>Contents</th></tr>
+			<tr><td><code class="bx-inline">lib/</code></td><td>Framework-ish infrastructure: config, DI container (<code class="bx-inline">AppContext</code>), sessions, view rendering, SQL helper, request context</td></tr>
+			<tr><td><code class="bx-inline">models/beans</code></td><td>Plain data beans (<code class="bx-inline">Post</code>, <code class="bx-inline">Comment</code>, <code class="bx-inline">User</code>, <code class="bx-inline">Forum</code>, <code class="bx-inline">Vote</code>, ...)</td></tr>
+			<tr><td><code class="bx-inline">models/dao</code></td><td><code class="bx-inline">DismalDAO</code> — raw data access</td></tr>
+			<tr><td><code class="bx-inline">models/services</code></td><td>Business logic: users, activity, achievements, sitemap, spider/link-preview detection, image proxying</td></tr>
+			<tr><td><code class="bx-inline">routes/</code></td><td><code class="bx-inline">AppRouter</code> (pages), <code class="bx-inline">ActionsRouter</code> (session-authenticated mutations), <code class="bx-inline">ApiRouter</code> (X-Api-Key admin REST API)</td></tr>
+			<tr><td><code class="bx-inline">ws/</code></td><td>STOMP broker (<code class="bx-inline">Stomp.bx</code>), broadcast (<code class="bx-inline">Broadcast.bx</code>), and forum presence (<code class="bx-inline">Presence.bx</code>)</td></tr>
+			<tr><td><code class="bx-inline">views/</code></td><td><code class="bx-inline">.bxm</code> templates, composed through <code class="bx-inline">lib/View.bx</code> — boxlang-express has no built-in layout support</td></tr>
+		</table>
+
+		<h2>Architecture notes</h2>
+		<ul>
+			<li><strong>DI</strong>: <code class="bx-inline">lib/AppContext.bx</code> is a simple registry — services/DAOs/beans are registered once in <code class="bx-inline">app.bxs</code> and scanned from <code class="bx-inline">models/beans</code>, <code class="bx-inline">models/dao</code>, <code class="bx-inline">models/services</code>.</li>
+			<li><strong>Sessions</strong>: cookie name <code class="bx-inline">dt_sid</code>, 30-day maxAge, backed by boxlang-express's in-memory session middleware — shared with the WebSocket layer since <code class="bx-inline">app.ws()</code> routes sit outside the HTTP middleware chain.</li>
+			<li><strong>Realtime</strong>: one shared STOMP broker drives comment/vote/notification broadcasts and forum presence over <code class="bx-inline">/stomp</code>.</li>
+			<li><strong>Moderation</strong>: a moderator-only user profile view with grant/revoke for a super-admin role.</li>
+			<li><strong>Error handling</strong>: full error messages only in <code class="bx-inline">APP_ENV=development</code>; production returns a generic 500.</li>
+		</ul>
+
+		<h2>Security</h2>
+		<p>A dedicated hardening pass covered:</p>
+		<ul>
+			<li>CSRF protection on every session-authenticated page/action route (hidden field for form POSTs, header for fetch()-driven JS) — <code class="bx-inline">/api/*</code> stays X-Api-Key only</li>
+			<li>Full session destruction on logout, secure cookies outside development</li>
+			<li>A pinned JVM DNS cache TTL closing a rebinding TOCTOU window between the link-preview/image-proxy SSRF safety check and the actual fetch's own DNS re-resolve</li>
+			<li>Constant-time comparison for the API key check</li>
+			<li>Per-IP rate limiting on login/signup</li>
+			<li>Post-login/signup redirects allowlisted to same-origin paths</li>
+		</ul>
+
+		<h2>Testing</h2>
+		<pre class="bx-code"><span class="bx-code-label">bash</span><code>box run-script test</code></pre>
+		<p>Runs the <a href="https://testbox.ortusbooks.com/" target="_blank" rel="noopener" class="c-post-link">TestBox</a> suite (<code class="bx-inline">tests/specs/unit</code>, <code class="bx-inline">tests/specs/integration</code>) via <code class="bx-inline">tests/runner.bxs</code>.</p>
+
+	</div>
+</div>
+</bx:output>
+<bx:include template="../../partials/_foot.bxm">

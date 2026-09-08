@@ -57,6 +57,12 @@ class {
 			name    : "stripe-development",
 			icon    : "bi-credit-card",
 			tagline : "A local dashboard, playground, and webhook receiver for exercising the Stripe API in test mode — no Stripe SDK dependency."
+		},
+		{
+			slug    : "bxthreads",
+			name    : "bxThreads",
+			icon    : "bi-chat-square-text",
+			tagline : "A public boxlang-express port of DismalThreads, a Reddit-style forum — server-rendered HTML, fetch()-driven actions, and a STOMP realtime layer for comments, votes, and notifications."
 		}
 	];
 
