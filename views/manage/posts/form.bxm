@@ -385,9 +385,13 @@
 			}
 
 			// Downscales an image file to maxWidth before upload — cover images
-			// and inline post images alike are capped at 800px wide, since
-			// nothing in the layout renders them any larger and R2 storage/
-			// bandwidth aren't worth spending on pixels no reader ever sees.
+			// and inline post images alike are capped at 1600px wide. Nothing
+			// in the layout renders wider than ~800 CSS pixels, but that cap
+			// has to be in real image pixels, not CSS pixels: on a 2x/3x
+			// (retina) display, an 800px-wide source stretched across an
+			// 800px-wide box is upsampled and comes out soft — unreadable for
+			// anything with fine detail like code or UI screenshots. 1600px
+			// covers 2x displays at full column width.
 			// GIFs are passed through untouched: drawing one to a canvas
 			// flattens it to its first frame, killing any animation.
 			function resizeImageFile(file, maxWidth){
@@ -425,7 +429,7 @@
 			// image" button, which isn't inside the folder-browsing picker).
 			function uploadImageFile(file, path){
 				var uploadPath = path || document.getElementById('editor-cover-browse-modal').dataset.defaultPath || '';
-				return resizeImageFile(file, 800).then(function(sizedFile){
+				return resizeImageFile(file, 1600).then(function(sizedFile){
 					return fetch('/manage/posts/upload-url', {
 						method: 'POST',
 						headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': csrfToken },
