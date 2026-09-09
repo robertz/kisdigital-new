@@ -63,7 +63,7 @@
 								<span class="c-status-badge c-status-badge--draft">Draft</span>
 							</bx:if>
 							<bx:if !data.isNew && len( data.post.getSlug() )>
-								<a href="#data.post.getPostUrl()#" target="_blank" rel="noopener" class="c-post-editor__link">
+								<a href="#data.post.getPostUrl()#" target="_blank" rel="noopener" class="c-post-editor__link" id="editor-post-link">
 									<bx:if data.post.getStatus() == "published" && !data.post.getIsScheduled()>
 										View live <i class="bi bi-box-arrow-up-right"></i>
 									<bx:else>
@@ -858,8 +858,12 @@
 						// The server auto-generates/uniques the slug when it's
 						// submitted blank (routes/Manage.bx's savePost()) — reflect
 						// whatever actually got saved, since this is an AJAX save
-						// with no page reload to pick it up otherwise.
+						// with no page reload to pick it up otherwise. Same reason
+						// the View live/Preview link's href needs updating: it was
+						// rendered once at page load from the old slug.
 						if (slugEl && result.data.slug) slugEl.value = result.data.slug;
+						var postLinkEl = document.getElementById('editor-post-link');
+						if (postLinkEl && result.data.postUrl) postLinkEl.href = result.data.postUrl;
 					}
 				})
 				.catch(function(){

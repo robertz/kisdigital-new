@@ -420,7 +420,14 @@ class {
 		}
 
 		if ( isAjax( req ) ){
-			res.json( { success: true, message: "Post saved.", slug: saveResult.slug } );
+			// Reloaded rather than built from saveResult/bean directly — the
+			// post URL also depends on publish_date, which savePost() may
+			// have resolved differently than what the form submitted (e.g.
+			// defaulting to now() when a post is freshly published with no
+			// explicit date), so this is the one source of truth for what
+			// actually got persisted.
+			var savedBean = variables.postService.getPostById( postId );
+			res.json( { success: true, message: "Post saved.", slug: savedBean.getSlug(), postUrl: savedBean.getPostUrl() } );
 			return;
 		}
 
