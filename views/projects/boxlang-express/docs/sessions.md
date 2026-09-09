@@ -78,6 +78,7 @@ The named cache (`"sessions"` here) has to already be registered in `boxlang.jso
 See [Configuration](/projects/boxlang-express/docs/config) for the full datasource block. Two _separate_ things worth knowing, found by actually running it against a real database rather than trusting the docs:
 
 - Keep `"default"` in the `caches` block alongside your own entry — overriding `caches` replaces it wholesale, and BoxLang's own query engine depends on a `"default"` cache existing somewhere in it.
+- **`autoCreate: true` is currently unreliable, and declaring `"default"` does *not* fix it.** It can fail at BoxLang startup with `Cache [default] does not exist`, because `JDBCStore`'s own auto-create check runs a query internally, and cache creation order isn't guaranteed to reach `"default"` first — this reproduced the same way whether `"default"` was declared or not, and regardless of where it sat in the JSON. The two bullets above are unrelated fixes for unrelated problems. Safest path: create the table yourself once (a migration, or a one-time script) and leave `autoCreate: false`, as in the example above — that sidesteps the internal query entirely.
 
 ## The session cookie
 

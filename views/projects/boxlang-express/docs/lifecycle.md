@@ -29,7 +29,7 @@ app.get( "/admin/stats", ( req, res ) => {
 
 ## Graceful shutdown (Ctrl-C / SIGTERM)
 
-The server registers a JVM shutdown hook when it starts, so `Ctrl-C` or `SIGTERM` always triggers a clean `close()` — the listening socket is released and the dev-mode file watcher (if enabled) is stopped, whichever way the process ends. `close()` itself is safe to call more than once.
+The server registers a JVM shutdown hook when it starts, so `Ctrl-C` or `SIGTERM` always triggers a clean `close()` — the listening socket is released, the dev-mode file watcher (if enabled) is stopped, and every job registered via [`app.schedule()`](/projects/boxlang-express/docs/scheduler) is cancelled, whichever way the process ends. `close()` itself is safe to call more than once.
 
 ## Port already in use
 

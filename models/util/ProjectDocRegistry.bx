@@ -23,7 +23,8 @@ class {
 			{ page_slug: "sessions",          title: "Sessions" },
 			{ page_slug: "static-files",      title: "Static Files & Uploads" },
 			{ page_slug: "errors",            title: "Error Handling" },
-			{ page_slug: "lifecycle",         title: "Process Lifecycle" }
+			{ page_slug: "lifecycle",         title: "Process Lifecycle" },
+			{ page_slug: "scheduler",         title: "Scheduler" }
 		],
 		"boxlang-ssg": [
 			{ page_slug: "getting-started",     title: "Getting Started" },

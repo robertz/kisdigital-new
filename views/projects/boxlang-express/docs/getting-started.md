@@ -40,7 +40,7 @@ Need a config file (datasources, module settings, etc.)? See [Configuration](/pr
 
 ## Dev-mode auto-reload
 
-Add one line to restart the process automatically whenever a watched `.bx`/`.bxs`/`.bxm` file changes:
+Add one line to restart the process automatically whenever a watched `.bx`/`.bxs` file changes (`.bxm` views don't need this — they're re-read from disk on every request already):
 
 ```bxs
 app.set( "reloadOnChange", true )

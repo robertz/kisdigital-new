@@ -53,6 +53,7 @@ Middleware and routes share one stack, run in the order they were registered. A 
 | `boxExpressCors(options)` | Cross-Origin Resource Sharing — sets `Access-Control-*` headers and answers preflight requests — see below |
 | `boxExpressRateLimit(options)` | Fixed-window rate limiting, keyed by `req.ip` by default — see below |
 | `boxExpressCsrf(options)` | CSRF protection via `req.session` — exposes `req.csrfToken()` — see below |
+| `boxExpressStomp(options)` | STOMP 1.2 pub/sub broker on top of `app.ws()` — see [WebSockets](/projects/boxlang-express/docs/websockets) |
 | `boxExpressRouter()` | Returns a mountable `Router` — see [Routing](/projects/boxlang-express/docs/routing) |
 
 ```bxs
@@ -112,10 +113,13 @@ app.use( boxExpressCors( { origin: [ "https://a.com", "https://b.com" ], credent
 | `origin` | `true` | `true` reflects the request's `Origin`; `false` disables CORS entirely; a string allows only that exact origin; an array allows any origin in the list |
 | `methods` | `GET,HEAD,PUT,PATCH,POST,DELETE` | `Access-Control-Allow-Methods` on a preflight response |
 | `allowedHeaders` | _reflects the preflight's own request_ | `Access-Control-Allow-Headers` on a preflight response |
+| `exposedHeaders` | _none_ | `Access-Control-Expose-Headers` on every response |
 | `credentials` | `false` | sets `Access-Control-Allow-Credentials: true` when `true` |
 | `maxAge` | _none_ | `Access-Control-Max-Age` (seconds) on a preflight response |
+| `preflightContinue` | `false` | call `next()` for a preflight instead of answering it directly |
+| `optionsSuccessStatus` | `204` | status code for a handled preflight |
 
-A CORS preflight — an `OPTIONS` request carrying `Access-Control-Request-Method` — is answered directly by this middleware (`204`, the relevant headers, no body) rather than falling through to the router, since nothing would otherwise be registered to handle `OPTIONS` on an arbitrary route.
+A CORS preflight — an `OPTIONS` request carrying `Access-Control-Request-Method` — is answered directly by this middleware (`204`, the relevant headers, no body) rather than falling through to the router, since nothing would otherwise be registered to handle `OPTIONS` on an arbitrary route. Pass `{ preflightContinue: true }` if a later handler needs to see the preflight request itself instead.
 
 ## Rate limiting (boxExpressRateLimit)
 
