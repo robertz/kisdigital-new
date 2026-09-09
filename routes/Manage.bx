@@ -60,6 +60,7 @@ class {
 
 		this.router.get( "/manage", auth, ( req, res ) => dashboard( req, res ) );
 		this.router.get( "/manage/dashboard/traffic-data", auth, ( req, res ) => trafficData( req, res ) );
+		this.router.get( "/manage/dashboard/insights-data", admin, ( req, res ) => insightsData( req, res ) );
 
 		this.router.get( "/manage/posts", auth, ( req, res ) => postsList( req, res ) );
 		this.router.post( "/manage/posts/:id/toggle-featured", admin, ( req, res ) => toggleFeatured( req, res ) );
@@ -261,19 +262,23 @@ class {
 
 	// ── Dashboard ────────────────────────────────────────────────────────────
 
-	// GET /manage
+	// GET /manage — zeroResultSearches/recentActivity/contentHealth are all
+	// small, uncached queries against Post/SearchLog/TagPost (a personal
+	// blog's worth of rows, not RequestLog's volume), so they stay inline.
+	// insightsTotal and server used to be fetched here too, but both are
+	// slow enough on a cold cache to be the actual reason this page felt
+	// slow to load — same reasoning that already split the traffic card
+	// out (see trafficData() below), now applied to these two as well: the
+	// shell renders immediately with a loading skeleton, insightsData()/
+	// serverData() fill each card in over AJAX once they resolve.
 	function dashboard( req, res ){
-		var serverSnapshot = serverFetch( () => variables.serverMonitor.getSnapshot() );
-
 		res.render( "manage/index", {
 			pageTitle       : "Dashboard",
 			manageSection   : "dashboard",
 			manageUser      : req.session.manage_user,
 			zeroResultSearches : variables.postService.getZeroResultSearches( 30 ),
 			recentActivity     : variables.postService.getRecentActivity( 8 ),
-			contentHealth      : variables.postService.getContentHealth(),
-			insightsTotal      : insightsFetch( () => variables.insightsService.getTotal( 30 ) ),
-			server             : isNull( serverSnapshot ) ? javacast( "null", "" ) : _formatServerSnapshot( serverSnapshot )
+			contentHealth      : variables.postService.getContentHealth()
 		} );
 	}
 
@@ -285,6 +290,17 @@ class {
 	function trafficData( req, res ){
 		var traffic = buildTrafficChartData( insightsFetch( () => variables.insightsService.getDailyTotals( 30 ), [] ) );
 		res.json( { success: true, traffic: traffic } );
+	}
+
+	// GET /manage/dashboard/insights-data — the Analytics card's own visitor
+	// total, same "don't block the shell on this" reasoning as
+	// trafficData() above (a COUNT(DISTINCT ip_address) scan against
+	// RequestLog, with a bot-filtering REGEXP that can't use an index —
+	// measured at ~350ms on a cold cache locally, and only grows with
+	// RequestLog's row count).
+	function insightsData( req, res ){
+		var total = insightsFetch( () => variables.insightsService.getTotal( 30 ) );
+		res.json( { success: !isNull( total ), total: isNull( total ) ? 0 : total.total } );
 	}
 
 	/**

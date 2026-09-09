@@ -223,45 +223,73 @@
 			</a>
 
 			<bx:if isAdmin>
-				<!--- Insights card (admin) --->
+				<!--- Insights card (admin) — total is fetched over AJAX after
+				      this shell renders (see insightsData() in Manage.bx),
+				      same "don't block the page on a slow RequestLog scan"
+				      reasoning as the traffic card above. --->
 				<a href="/manage/insights" class="c-manage-dashboard__card c-manage-dashboard__card--link">
 					<div class="c-manage-dashboard__card-head">
 						<span class="c-manage-dashboard__icon"><i class="bi bi-bar-chart"></i></span>
 						<span class="c-manage-dashboard__eyebrow">Analytics</span>
 					</div>
-					<bx:if isNull( data.insightsTotal )>
-						<h2 class="c-manage-dashboard__title">Insights</h2>
-						<p class="c-manage-dashboard__meta">Couldn't load this &mdash; see server logs.</p>
-					<bx:else>
-						<h2 class="c-manage-dashboard__title">#numberFormat( data.insightsTotal.total )#</h2>
-						<p class="c-manage-dashboard__meta">visitors in the last 30 days</p>
-					</bx:if>
+					<h2 class="c-manage-dashboard__title" id="analytics-total"><span class="c-dashboard-skeleton-text" aria-hidden="true"></span></h2>
+					<p class="c-manage-dashboard__meta" id="analytics-meta">visitors in the last 30 days</p>
 					<div class="c-manage-dashboard__card-foot">
 						<span class="c-manage-dashboard__cta">
 							View insights <i class="bi bi-arrow-right"></i>
 						</span>
 					</div>
 				</a>
+				<script>
+				(function(){
+					var totalEl = document.getElementById('analytics-total');
+					var metaEl  = document.getElementById('analytics-meta');
+					fetch('/manage/dashboard/insights-data', { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+						.then(function(res){ return res.json(); })
+						.then(function(data){
+							if (!data.success) return Promise.reject();
+							totalEl.textContent = data.total.toLocaleString();
+						})
+						.catch(function(){
+							totalEl.textContent = 'Insights';
+							metaEl.textContent = "Couldn't load this — see server logs.";
+						});
+				})();
+				</script>
 
-				<!--- Server card (admin) --->
+				<!--- Server card (admin) — same AJAX-after-shell pattern,
+				      reusing the existing /manage/server/data endpoint the
+				      server-monitor page's own polling loop already uses. --->
 				<a href="/manage/server" class="c-manage-dashboard__card c-manage-dashboard__card--link">
 					<div class="c-manage-dashboard__card-head">
 						<span class="c-manage-dashboard__icon"><i class="bi bi-hdd-stack"></i></span>
 						<span class="c-manage-dashboard__eyebrow">System</span>
 					</div>
-					<bx:if isNull( data.server )>
-						<h2 class="c-manage-dashboard__title">Server</h2>
-						<p class="c-manage-dashboard__meta">Couldn't load this &mdash; see server logs.</p>
-					<bx:else>
-						<h2 class="c-manage-dashboard__title">#data.server.memory.heapPercent#% heap</h2>
-						<p class="c-manage-dashboard__meta">#encodeForHTML( data.server.memory.heapUsed )# of #encodeForHTML( data.server.memory.heapMax )# &middot; up #encodeForHTML( data.server.jvm.uptime )#</p>
-					</bx:if>
+					<h2 class="c-manage-dashboard__title" id="server-heap"><span class="c-dashboard-skeleton-text" aria-hidden="true"></span></h2>
+					<p class="c-manage-dashboard__meta" id="server-meta"><span class="c-dashboard-skeleton-text" aria-hidden="true"></span></p>
 					<div class="c-manage-dashboard__card-foot">
 						<span class="c-manage-dashboard__cta">
 							View server <i class="bi bi-arrow-right"></i>
 						</span>
 					</div>
 				</a>
+				<script>
+				(function(){
+					var heapEl = document.getElementById('server-heap');
+					var metaEl = document.getElementById('server-meta');
+					fetch('/manage/server/data', { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+						.then(function(res){ return res.json(); })
+						.then(function(data){
+							if (!data.success) return Promise.reject();
+							heapEl.textContent = data.server.memory.heapPercent + '% heap';
+							metaEl.textContent = data.server.memory.heapUsed + ' of ' + data.server.memory.heapMax + ' · up ' + data.server.jvm.uptime;
+						})
+						.catch(function(){
+							heapEl.textContent = 'Server';
+							metaEl.textContent = "Couldn't load this — see server logs.";
+						});
+				})();
+				</script>
 
 				<!--- Authors card (admin) --->
 				<a href="/manage/authors" class="c-manage-dashboard__card c-manage-dashboard__card--link">
