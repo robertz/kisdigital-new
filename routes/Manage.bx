@@ -239,18 +239,18 @@ class {
 	// case an attacker gets one or two extra guesses in that race, not an
 	// unlimited bypass.
 	private function _isLoginRateLimited( required string key, numeric maxAttempts = 5 ){
-		var count = cache( "default" ).get( arguments.key );
+		var count = cache( "persistentCache" ).get( arguments.key );
 		return count.isPresent() && count.get() >= arguments.maxAttempts;
 	}
 
 	private function _recordFailedLogin( required string key, numeric windowSeconds = 900 ){
-		var count = cache( "default" ).get( arguments.key );
+		var count = cache( "persistentCache" ).get( arguments.key );
 		var current = count.isPresent() ? count.get() : 0;
-		cache( "default" ).set( arguments.key, current + 1, arguments.windowSeconds );
+		cache( "persistentCache" ).set( arguments.key, current + 1, arguments.windowSeconds );
 	}
 
 	private function _clearLoginAttempts( required string key ){
-		cache( "default" ).clear( arguments.key );
+		cache( "persistentCache" ).clear( arguments.key );
 	}
 
 	// GET /manage/logout

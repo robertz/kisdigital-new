@@ -117,7 +117,7 @@ class {
 	 * full-site equivalent of PostService.getDailyViewTotals(), which only
 	 * ever counted individual post-page views.
 	 *
-	 * Cached per calendar day in cache("default") rather than as one 30-day
+	 * Cached per calendar day in cache("persistentCache") rather than as one 30-day
 	 * blob: every day except today is over and immutable, so once a day's
 	 * total is computed it's cached for a week (long enough to survive a
 	 * quiet cache, short enough that a stale value can't linger forever)
@@ -140,7 +140,7 @@ class {
 		for ( var i = days; i >= 1; i-- ){
 			var dayMidnight = dateAdd( "d", -i, todayMidnight );
 			var dayKey      = dateFormat( dayMidnight, "yyyy-mm-dd" );
-			var cached      = cache( "default" ).get( "insights:dailyTotal:" & dayKey );
+			var cached      = cache( "persistentCache" ).get( "insights:dailyTotal:" & dayKey );
 			if ( cached.isPresent() ){
 				totalsByDate[ dayKey ] = cached.get();
 			} else {
@@ -167,7 +167,7 @@ class {
 				var dayKey = dateFormat( dayMidnight, "yyyy-mm-dd" );
 				var total  = countsByDate.keyExists( dayKey ) ? countsByDate[ dayKey ] : 0;
 				totalsByDate[ dayKey ] = total;
-				cache( "default" ).set( "insights:dailyTotal:" & dayKey, total, 604800 );
+				cache( "persistentCache" ).set( "insights:dailyTotal:" & dayKey, total, 604800 );
 			}
 		}
 
@@ -262,13 +262,13 @@ class {
 	// tighter than a few minutes buys nothing. Not used by getDailyTotals()
 	// itself, which already caches per calendar day rather than per query.
 	private function _cached( required string key, required numeric ttlSeconds, required fn ){
-		var cached = cache( "default" ).get( arguments.key );
+		var cached = cache( "persistentCache" ).get( arguments.key );
 		if ( cached.isPresent() ){
 			return cached.get();
 		}
 
 		var result = arguments.fn();
-		cache( "default" ).set( arguments.key, result, arguments.ttlSeconds );
+		cache( "persistentCache" ).set( arguments.key, result, arguments.ttlSeconds );
 		return result;
 	}
 

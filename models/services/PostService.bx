@@ -1138,13 +1138,13 @@ class {
 	// freshly-published post or a new search shows up quickly, long enough
 	// that repeated hits within a browsing session are free.
 	private function _cached( required string key, required numeric ttlSeconds, required fn ){
-		var cached = cache( "default" ).get( arguments.key );
+		var cached = cache( "persistentCache" ).get( arguments.key );
 		if ( cached.isPresent() ){
 			return cached.get();
 		}
 
 		var result = arguments.fn();
-		cache( "default" ).set( arguments.key, result, arguments.ttlSeconds );
+		cache( "persistentCache" ).set( arguments.key, result, arguments.ttlSeconds );
 		return result;
 	}
 

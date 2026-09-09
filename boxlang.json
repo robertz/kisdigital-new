@@ -19,6 +19,20 @@
 				"evictionPolicy": "LRU"
 			}
 		},
+		"persistentCache": {
+			"provider": "BoxCacheProvider",
+			"properties": {
+				"objectStore": "JDBCStore",
+				"datasource": "chron",
+				"table": "Cache",
+				"autoCreate": false,
+				"maxObjects": 5000,
+				"evictionPolicy": "LRU",
+				"evictCount": 500,
+				"defaultTimeout": 604800,
+				"reapFrequency": 300
+			}
+		},
 		"sessionCache": {
 			"provider": "BoxCacheProvider",
 			"properties": {
