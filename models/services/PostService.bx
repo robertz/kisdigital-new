@@ -631,10 +631,13 @@ class {
 	 * Creates or updates a post from a PostBean.
 	 *
 	 * Slug is auto-generated from the title when the bean's slug is blank, and
-	 * made unique within the Post table. Returns the post id.
+	 * made unique within the Post table.
 	 *
 	 * @param {PostBean} bean - Populated PostBean to persist.
-	 * @return {string} The post id (new UUID on create, existing id on update).
+	 * @return {struct} { id, slug } — id is the new UUID on create or the
+	 *         existing id on update; slug is whatever was actually persisted
+	 *         (the caller's own bean never gets this back otherwise, since
+	 *         auto-generation/uniquing happens entirely in here).
 	 */
 	function savePost( required PostBean bean ){
 		var isNew     = !len( trim( bean.getId() ) );
@@ -687,7 +690,7 @@ class {
 			);
 		}
 
-		return postId;
+		return { "id": postId, "slug": finalSlug };
 	}
 
 	/**

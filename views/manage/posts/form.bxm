@@ -853,7 +853,14 @@
 					saveBtn.disabled = false;
 					saveBtn.innerHTML = originalHtml;
 					showFlash(result.ok ? 'success' : 'error', result.ok ? result.data.message : result.data.error);
-					if (result.ok) clearDraft();
+					if (result.ok) {
+						clearDraft();
+						// The server auto-generates/uniques the slug when it's
+						// submitted blank (routes/Manage.bx's savePost()) — reflect
+						// whatever actually got saved, since this is an AJAX save
+						// with no page reload to pick it up otherwise.
+						if (slugEl && result.data.slug) slugEl.value = result.data.slug;
+					}
 				})
 				.catch(function(){
 					// Network/parse failure — fall back to a real form submit.

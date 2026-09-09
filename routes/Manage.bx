@@ -409,7 +409,8 @@ class {
 		}
 
 		var bean = postFromForm( req );
-		var postId = variables.postService.savePost( bean );
+		var saveResult = variables.postService.savePost( bean );
+		var postId = saveResult.id;
 		variables.postService.syncTags( postId, req.body.tags ?: "" );
 
 		if ( isNew ){
@@ -419,7 +420,7 @@ class {
 		}
 
 		if ( isAjax( req ) ){
-			res.json( { success: true, message: "Post saved." } );
+			res.json( { success: true, message: "Post saved.", slug: saveResult.slug } );
 			return;
 		}
 
