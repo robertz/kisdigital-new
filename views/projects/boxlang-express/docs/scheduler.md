@@ -59,6 +59,7 @@ Explicit non-goals for this first version:
 - **No cron-expression parsing** — fixed-interval only.
 - **No persistence across restarts** — in-memory only, single process; a restart forgets every scheduled job.
 - **No missed-run catch-up** after downtime.
-- **No clustering/distributed coordination** — an app running multiple instances behind a load balancer gets the same job firing once *per instance*, not once total.
+
+To run a job exactly once across a cluster of instances instead of once per instance, pass `{ clustered: true }` — see [Cluster Support](/projects/boxlang-express/docs/cluster).
 
 If what you actually need is push messaging rather than periodic polling — notifying connected clients when something happens — see [WebSockets](/projects/boxlang-express/docs/websockets) instead.

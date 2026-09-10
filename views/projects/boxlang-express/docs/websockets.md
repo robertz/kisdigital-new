@@ -150,7 +150,9 @@ A listener's own exception is caught and logged, not allowed to break delivery t
 
 ### What's still not built
 
-This is a real, if intentionally smaller, first version — not the whole STOMP ecosystem some brokers support. Deliberately not built: **multi-node clustering** (SocketBox's `ClusterManager`/`ClusterPeer` — peer WebSocket connections between server processes, cache-backed peer discovery — a distributed-systems feature this project has no cache-abstraction or multi-node deployment story to build against yet) and **binary bodies** (the underlying WebSocket transport here only carries text frames, so this is a hard limit of the transport, not a broker choice — `content-length` is honored on read/write so a body containing an embedded NUL byte still round-trips correctly, but genuinely binary octets can't). Destination matching (both the subscriber registry and exchange bindings) is exact-string only — `/topic/a` and `/topic/a/` are different destinations.
+This is a real, if intentionally smaller, first version — not the whole STOMP ecosystem some brokers support. Deliberately not built: **binary bodies** (the underlying WebSocket transport here only carries text frames, so this is a hard limit of the transport, not a broker choice — `content-length` is honored on read/write so a body containing an embedded NUL byte still round-trips correctly, but genuinely binary octets can't). Destination matching (both the subscriber registry and exchange bindings) is exact-string only — `/topic/a` and `/topic/a/` are different destinations.
+
+To relay a publish to every other process in a cluster instead of just this one's local subscribers, pass `boxExpressStomp({ cluster: app.getClusterManager() })` — see [Cluster Support](/projects/boxlang-express/docs/cluster).
 
 Header values are escaped per the STOMP spec (backslash, newline, colon), not just stripped, so a destination or login value built from request-derived input can't break a frame's structure.
 
