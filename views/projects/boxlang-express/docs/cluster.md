@@ -37,7 +37,7 @@ Off by default — an app that never opts in pays nothing for any of this. Confi
 | `secretKey` | recommended | Gates the relay mesh's `/__cluster` endpoint — every instance must share the same value, sourced from an environment variable, never a literal in source. |
 | `peerIdleTimeoutSeconds` | — | Default `30`. How long a missed heartbeat is tolerated before a peer is considered gone. |
 
-`cacheProvider` is validated at startup via BoxLang's own `IObjectStore.isDistributed()` (`true` for `JDBCStore`, `false` for the in-memory `ConcurrentStore` default) — not just documented as a footgun. A store that reports `isDistributed() == false` can still be allowed explicitly via `allowedObjectStores`. See [Sessions](/projects/boxlang-express/docs/sessions) for the same `JDBCStore` cache setup, including its own `autoCreate` gotcha.
+`cacheProvider` is validated at startup via BoxLang's own `IObjectStore.isDistributed()` (`true` for `JDBCStore`, `false` for the in-memory `ConcurrentStore` default) — not just documented as a mistake waiting to happen. A store that reports `isDistributed() == false` can still be allowed explicitly via `allowedObjectStores`. See [Sessions](/projects/boxlang-express/docs/sessions) for the same `JDBCStore` cache setup, including its own `autoCreate` gotcha.
 
 ## Clustered scheduled jobs
 
