@@ -54,6 +54,24 @@
 	margin-bottom: 0;
 }
 
+.c-about-hero__extra {
+	max-width: 620px;
+	margin-top: 2rem;
+	padding-top: 2rem;
+	border-top: 1px solid var(--ui-border-subtle);
+}
+
+.c-about-hero__extra p {
+	font-size: 1.05rem;
+	color: var(--text-secondary);
+	line-height: 1.65;
+	margin-bottom: 1rem;
+}
+
+.c-about-hero__extra p:last-child {
+	margin-bottom: 0;
+}
+
 .c-about-posts {
 	background: var(--site-background-color);
 }

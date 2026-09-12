@@ -21,6 +21,11 @@
 				<bx:if len( data.author.getAbout() )>
 				<p class="c-about-hero__bio">#encodeForHTML( data.author.getAbout() )#</p>
 				</bx:if>
+				<div class="c-about-hero__extra">
+					<p>I'm a senior ColdFusion developer who's been in the CFML trenches long enough to have opinions about all of it &mdash; from crusty tag-based components to whatever comes next. Most of my day job is stitching e-commerce platforms together (Shopify, Amazon, eBay, Walmart, and a few you've probably never had to integrate with) so that inventory and orders don't lie to each other.</p>
+					<p>Outside work I build things nobody asked for. I wrote my own Express.js-style module for BoxLang because there were no alternatives, then used it to rebuild my own blog. I ported Zork.  When I'm not writing code, I'm reading Dungeon Crawler Carl, James S.A. Corey, or Rothfuss, min-maxing a City of Heroes build, or doing calisthenics because apparently that's a thing now.</p>
+					<p>I like systems with real rules and earned progression &mdash; in games, in code, in most things. If it's held together with duct tape, I probably built the duct tape myself and documented why.</p>
+				</div>
 			</div>
 		</div>
 	</div>
