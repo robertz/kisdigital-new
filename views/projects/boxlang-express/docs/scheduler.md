@@ -40,6 +40,8 @@ Every job's tick is driven by one shared `ScheduledExecutorService` per app, but
 
 A thrown error inside a job is caught and logged (`[Scheduler] job 'name' threw: ...`), never left to kill future ticks of that job or any other — same posture as the STOMP broker's server-side listener guard (see [WebSockets](/projects/boxlang-express/docs/websockets)).
 
+A job body that never returns at all (blocks forever with no timeout of its own) is a separate failure mode from a thrown error — nothing throws, so the catch above never fires, and with `allowOverlap: false` every future tick would otherwise be skipped forever thinking the previous run is still in flight. A stall watchdog guards against this: a run still marked active past `max(intervalMs * 10, 30000)`ms has its `runningFlag` force-reset (logged as `[Scheduler] job '...' has been running for ...ms ... — forcing it open...`) so future ticks aren't blocked permanently. If the stalled run does eventually finish, it harmlessly resets a flag that's already been reset.
+
 ## Introspection and shutdown
 
 ```bxs

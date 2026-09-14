@@ -48,7 +48,7 @@ app.post( "/announce", ( req, res ) => {
 `send()` is safe to call this way from more than one thread at once — each connection funnels through its own per-connection lock, so two writers can't interleave on the shared channel, the same reasoning and fix shape as `res.sse()`'s emitter thread-safety (see [Server-Sent Events](/projects/boxlang-express/docs/server-sent-events)).
 
 > [!NOTE] Every callback runs on its own thread
-> `onMessage`/`onClose` are dispatched onto their own virtual thread, never called directly from the I/O thread — a blocking handler doesn't stall other connections. A handler that mutates shared state (a rooms/subscribers struct, like the broadcast pattern above) still needs its own locking around that mutation; nothing here serializes two connections' callbacks against each other.
+> The `app.ws()` connect callback and `onMessage`/`onClose` are all dispatched onto their own virtual thread, never called directly from the I/O thread — a blocking handler (including a synchronous `send()` in the connect callback) doesn't stall other connections. A handler that mutates shared state (a rooms/subscribers struct, like the broadcast pattern above) still needs its own locking around that mutation; nothing here serializes two connections' callbacks against each other.
 
 ## STOMP pub/sub
 
