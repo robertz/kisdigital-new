@@ -47,6 +47,10 @@ Every terminal method funnels through the same internal path that writes headers
 | `res.getBytesWritten()` | Returns the body byte count sent so far; `0` for a response still in flight |
 | `res.onBeforeSend(callback)` | Registers a callback that runs once, synchronously, the instant before headers are flushed — the last point guaranteed to run after every downstream handler but still early enough to add a header |
 
+### Header value validation
+
+`res.set()`/`res.header()` and `res.cookie()` refuse a value containing CR/LF, any other control character, or a character above Latin-1 — the request fails with a 500 (`BoxExpress.InvalidHeaderValue`) instead of sending the header. Undertow narrows each header character to 8 bits when writing (CVE-2026-19879, no upstream fix yet), which would turn something like U+010A into a bare line feed and open the door to header injection. Tab and printable Latin-1 pass through untouched. If a header value is built from user input, this is the guard that keeps it from splitting the response.
+
 ## Examples
 
 ```bxs

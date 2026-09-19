@@ -24,6 +24,14 @@ Path matching is exact only — no `:params`, no mount paths. An upgrade request
 
 There's no `onOpen`/`onError` callback — the connection is handed to the `app.ws()` callback at open time instead, which serves the same purpose, and errors surface as a connection close rather than a separate event.
 
+## Message size limit
+
+Incoming messages are capped at 1 MB by default. A larger one is refused and the connection closed with a `1009` (message too big), so an unauthenticated client can't make the server buffer an unbounded message — Undertow's own default is unlimited (CVE-2026-81624, no upstream fix yet). This applies to every `app.ws()` route, including STOMP and the cluster relay. Change the limit with `app.set( "wsMaxMessageSize", bytes )` before `listen()`:
+
+```bxs
+app.set( "wsMaxMessageSize", 65536 )   // 64 KB
+```
+
 ## Broadcasting to multiple clients
 
 `connection` is a plain object, the same way `res.sse()`'s `emitter` is — nothing ties it to being used only inside the callback it was handed to. Stash it somewhere shared and another route can call `.send()` on it directly:
