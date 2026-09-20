@@ -56,7 +56,7 @@ stomp = boxExpressStomp( { cluster: app.getClusterManager() } )
 app.ws( "/stomp", stomp.handler() )
 ```
 
-Opens a mesh of outbound WebSocket connections to every live peer. A `SEND`/`stomp.send()` that would otherwise only reach local subscribers is also relayed to every other instance, which delivers it to *its own* local subscribers through the exact same subscriber/exchange/listener path a real client's `SEND` uses. A message that arrives via the relay is never relayed back out, so it can't loop. See [WebSockets](/projects/boxlang-express/docs/websockets) for everything else about the STOMP broker.
+Opens a mesh of outbound WebSocket connections to every live peer. A `SEND`/`stomp.send()` that would otherwise only reach local subscribers is also relayed to every other instance, which delivers it to *its own* local subscribers through the exact same subscriber/exchange/listener path a real client's `SEND` uses. A message that arrives via the relay is never relayed back out, so it can't loop. `stomp.sendToUser()` and `stomp.sendToConnection()` are relayed the same way, so the recipient is reached on whichever node holds their connection, and `stomp.getClusterPresence()` reports the logins connected across the whole cluster. See [WebSockets](/projects/boxlang-express/docs/websockets) for everything else about the STOMP broker.
 
 ## Inspecting the cluster
 

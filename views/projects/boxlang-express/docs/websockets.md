@@ -18,8 +18,9 @@ Path matching is exact only — no `:params`, no mount paths. An upgrade request
 ## WebSocketConnection
 
 - `onMessage(callback)` — `callback(text)`, one call per text frame received.
-- `onClose(callback)` — `callback(code, reason)`, fires whether the client disconnected or `close()` was called locally.
-- `send(data)` — writes one text frame. Complex data is JSON-serialized unless it's already a simple value, matching `res.sse()`'s emitter convention. No-ops once the connection is closed rather than throwing, so broadcasting to many connections doesn't blow up the whole loop on one stale one.
+- `onBinary(callback)` — `callback(bytes)` (a Java `byte[]`) for each binary message. Binary messages are dropped if none is registered; outbound messages are always text.
+- `onClose(callback)` — `callback(code, reason)`, fires exactly once whether the client disconnected, the connection dropped, or `close()` was called locally (a locally-initiated close did not fire it before 0.2.15). A write that fails or times out also closes the connection and fires it, so your cleanup runs instead of leaving a zombie.
+- `send(data)` — writes one text frame. Complex data is JSON-serialized unless it's already a simple value, matching `res.sse()`'s emitter convention. No-ops once the connection is closed rather than throwing, so broadcasting to many connections doesn't blow up the whole loop on one stale one. The underlying write is bounded by a hard 5s timeout, so a peer that vanishes mid-write can't hang the caller.
 - `close()` / `isClosed()`.
 
 There's no `onOpen`/`onError` callback — the connection is handed to the `app.ws()` callback at open time instead, which serves the same purpose, and errors surface as a connection close rather than a separate event.
@@ -31,6 +32,10 @@ Incoming messages are capped at 1 MB by default. A larger one is refused and the
 ```bxs
 app.set( "wsMaxMessageSize", 65536 )   // 64 KB
 ```
+
+## Idle timeout
+
+`app.set( "wsIdleTimeoutMs", ms )` (default `0`, off) drops a connection that has sent nothing — no message, no ping, no pong — for that long, and fires its `onClose`. The server pings every third of that period, and a healthy client (every browser, automatically) answers, so a quiet but alive connection is never dropped; one whose peer vanished, or that ignores pings, is. It's opt-in because the right value depends on your clients; `60000` is a reasonable start. Together with the message size limit above, this bounds what an unauthenticated client can make the server hold (CVE-2026-81624).
 
 ## Broadcasting to multiple clients
 
@@ -60,7 +65,7 @@ app.post( "/announce", ( req, res ) => {
 
 ## STOMP pub/sub
 
-`middleware/Stomp` layers a full [STOMP](https://stomp.github.io/) 1.2 pub/sub broker (destination-based `SUBSCRIBE`/`SEND`) on top of `app.ws()` — the shape most chat/notification/live-update use cases actually want, rather than tracking connections and destinations by hand:
+`middleware/Stomp` layers a full [STOMP](https://stomp.github.io/) 1.0/1.1/1.2 pub/sub broker (destination-based `SUBSCRIBE`/`SEND`) on top of `app.ws()` — the shape most chat/notification/live-update use cases actually want, rather than tracking connections and destinations by hand:
 
 ```bxs
 stomp = boxExpressStomp()
@@ -92,6 +97,68 @@ app.ws( "/stomp", stomp.handler() )
 `connectionMetadata` is a plain struct, empty until `authenticate()` populates it — mutations persist for the life of the connection (the same struct instance every later `authorize()` call for that connection receives) and are echoed back to the client as extra `CONNECTED` headers. Attach whatever per-connection state your app needs once at connect time (a user id, a tenant, roles) instead of re-deriving it on every frame.
 
 `stomp.send(destination, data, headers)` is the server-side publish path for app code outside any connection's own message handling — `data` is JSON-serialized unless it's already a simple value.
+
+An `authenticate`, `authorize` or `onSend` callback that throws doesn't leave the client with no reply: the exception is logged server-side and the client gets a generic `ERROR` (authenticate and authorize fail closed).
+
+### Message headers
+
+Application headers on a client `SEND` (`reply-to`, `correlation-id`, anything custom) are forwarded on the `MESSAGE` frame. The headers the protocol or broker owns (`destination`, `transaction`, `receipt`, `content-length`, `message-id`, `subscription`, `ack`) are not copied, so a client can't forge them. Frames may use `\n` or `\r\n` line endings, and `content-length` is an octet count, so multi-byte bodies round-trip.
+
+### Protocol versions
+
+`CONNECT`'s `accept-version` is negotiated and the connection is served in the highest version both sides offer (no header means 1.0). Per version:
+
+- **1.2** escapes `\\`, newline, CR and `:` in header values; **1.1** the same minus CR; **1.0** not at all. `CONNECT`/`CONNECTED` frames are never escaped.
+- 1.0/1.1 clients acknowledge by `message-id` instead of 1.2's separate `ack` header.
+- 1.0 clients may `SUBSCRIBE` without an `id` and `UNSUBSCRIBE` by `destination`.
+- Heart-beating only exists from 1.1.
+
+Only `MESSAGE` frames follow the connection's version for escaping; `ERROR`/`RECEIPT` use 1.2's. An unsupported version gets an `ERROR` listing `1.0,1.1,1.2`. A second `CONNECT` on an already-connected socket is an `ERROR`. A subscription `id` already in use on the same connection is rejected with an `ERROR` (ids must be unique per connection, per spec).
+
+### Limits
+
+Each bounds what clients can make the broker hold or wait on; pass `0` to disable one. The first seven are per connection, the last two are per node. Exceeding a cap gets an `ERROR` and leaves the connection open, except where noted:
+
+| Option | Default | Effect |
+|---|---|---|
+| `connectTimeoutMs` | `10000` | A socket that hasn't completed `CONNECT` in time is closed |
+| `maxFramesPerSecond` | `0` (off) | More inbound frames per second closes the connection — the right value is app-specific, so it's opt-in |
+| `maxSubscriptions` | `100` | Subscriptions per connection |
+| `maxTransactions` | `16` | Open transactions per connection |
+| `maxTransactionFrames` | `1000` | Frames buffered per transaction |
+| `maxPendingAcks` | `1000` | Unacknowledged messages per connection — past it the connection is closed, since a client that never acks would otherwise grow this forever |
+| `maxDestinationLength` | `255` | Characters in a `SUBSCRIBE`/`SEND` destination |
+| `maxConnections` | `10000` | Connections per node that have completed `CONNECT`; further `CONNECT`s get an `ERROR` and are closed, before `authenticate()` runs. Not atomic, so a burst of simultaneous `CONNECT`s can overshoot slightly |
+| `maxSubscribersPerDestination` | `10000` | Subscriptions on one destination (per node); the `SUBSCRIBE` gets an `ERROR` and the connection stays open |
+
+A destination's registry entry is dropped once its last subscriber leaves.
+
+### Lifecycle hooks
+
+All optional observers — a hook that throws is logged and ignored, and can't affect the connection:
+
+```bxs
+stomp = boxExpressStomp( {
+    onConnect:     ( login, connection, connectionMetadata, connectionId ) => { /* ... */ },
+    onDisconnect:  ( login, connectionMetadata, connectionId ) => { /* ... */ },
+    onSubscribe:   ( login, destination, subscriptionId, connection, connectionMetadata ) => { /* ... */ },
+    onUnsubscribe: ( login, destination, subscriptionId, connectionMetadata ) => { /* ... */ }
+} )
+```
+
+`onDisconnect` fires for every connection that completed `CONNECT`, however it ended (client close, dropped socket, server close, a failed write); just before it, `onUnsubscribe` fires for each subscription the connection still held. `stomp.disconnect( connectionId, message )` closes a connection from the server side — with an `ERROR` frame carrying `message` first, if given — and returns `false` if that connection isn't on this node.
+
+### Targeted delivery
+
+`stomp.sendToUser( login, destination, data, headers )` publishes to `destination` (through the exchanges, like any publish) but only to subscriptions whose connection authenticated with that `login` — every connection the user has open, no one else's. `stomp.sendToConnection( connectionId, destination, data, headers )` does the same for one connection (a key of `getConnections()`). Both return how many subscriptions on this node received it, don't invoke server-side `listeners`, and, with `options.cluster`, are relayed so the recipient is reached on whichever node holds their connection.
+
+### Presence
+
+`stomp.getClusterPresence()` returns `{ logins, byNode }` — the distinct logins connected across the cluster and each node's own list. Nodes publish their list on the cluster heartbeat, so a peer's entry can lag by up to one heartbeat interval: fine for "who's online," not for anything that must be exact. Without clustering it's just this node. `getConnections()` remains local to the node.
+
+### Delivery
+
+A publish writes to its subscribers concurrently, so unresponsive subscribers cost one slow write in total rather than one each in sequence; a subscriber whose connection turns out to be closed is dropped from the registry immediately. Heartbeats run on virtual threads, not one platform thread per connection.
 
 ### Receipts
 
@@ -158,7 +225,7 @@ A listener's own exception is caught and logged, not allowed to break delivery t
 
 ### What's still not built
 
-This is a real, if intentionally smaller, first version — not the whole STOMP ecosystem some brokers support. Deliberately not built: **binary bodies** (the underlying WebSocket transport here only carries text frames, so this is a hard limit of the transport, not a broker choice — `content-length` is honored on read/write so a body containing an embedded NUL byte still round-trips correctly, but genuinely binary octets can't). Destination matching (both the subscriber registry and exchange bindings) is exact-string only — `/topic/a` and `/topic/a/` are different destinations.
+This is a real, if intentionally smaller, first version — not the whole STOMP ecosystem some brokers support. Deliberately not built: **binary bodies** — inbound frames may arrive as binary WebSocket messages (decoded as UTF-8), but outbound frames are always text, and `content-length` is honored on read/write so a body containing an embedded NUL byte round-trips correctly while genuinely non-UTF-8 octets can't. Also not built: message **redelivery** (`NACK` and unacknowledged messages just clear bookkeeping — there is no queue to redeliver into). Destination matching (both the subscriber registry and exchange bindings) is exact-string only — `/topic/a` and `/topic/a/` are different destinations.
 
 To relay a publish to every other process in a cluster instead of just this one's local subscribers, pass `boxExpressStomp({ cluster: app.getClusterManager() })` — see [Cluster Support](/projects/boxlang-express/docs/cluster).
 

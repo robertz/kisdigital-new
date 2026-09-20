@@ -132,6 +132,16 @@ app.use( "/login", boxExpressRateLimit( { windowMs: 15 * 60000, max: 5 } ) )  //
 
 Sets the draft-standard `RateLimit-Limit`/`RateLimit-Remaining`/`RateLimit-Reset` headers, and responds `429` with `Retry-After` once a key's count exceeds `max` within `windowMs`. Fixed window, not a sliding one or a token bucket — a client can get up to 2x `max` requests through right at a window boundary, the same trade-off most minimal in-memory rate limiters make in exchange for O(1) bookkeeping per request.
 
+By default the store is in-memory on each `RateLimit` instance (same trade-off as `Session`'s default `MemoryStore` — fine for a single-process app, not a cluster). To share the count across instances, name a registered BoxLang cache:
+
+```bxs
+app.use( "/login", boxExpressRateLimit( { max: 5, windowMs: 15 * 60000, cache: "shared" } ) )
+```
+
+`cache` takes the same `fallback`/`requireDurable` options and degrades the same way as durable sessions (see [Falling back without durable storage](/projects/boxlang-express/docs/sessions#falling-back-without-durable-storage)): with no durable cache it counts per process, with a warning, and never fails the request. `store: myStore` — any object with `hit( key, windowMs )` returning `{ count, resetAt }` — plugs in your own.
+
+The read-then-write against the cache isn't atomic, so under heavy concurrency a limit can run a few requests over, never far under. Every request also costs a cache round trip — a database call for a `JDBCStore` — so use it on routes that matter (login, signup) rather than as a blanket limit.
+
 Each call creates its own counters, so different routes can have independent limits:
 
 ```bxs

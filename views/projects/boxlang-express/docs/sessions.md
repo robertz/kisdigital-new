@@ -58,7 +58,9 @@ The default session store is an in-memory `ConcurrentHashMap` on the `Session` i
 app.use( boxExpressSession( { store: boxExpressCacheStore( "sessions" ) } ) )
 ```
 
-The named cache (`"sessions"` here) has to already be registered in `boxlang.json` — this doesn't create one, it just talks to it. Point that cache's `objectStore` at `"JDBCStore"` and session data lands in a real SQL table instead of memory, surviving a restart and shared across every process pointed at the same database:
+`boxExpressSession( { cache: "sessions" } )` is shorthand for the same thing.
+
+The named cache (`"sessions"` here) should already be registered in `boxlang.json` — this doesn't create one, it just talks to it (if it's missing, the app keeps serving — see [Falling back without durable storage](#falling-back-without-durable-storage)). Point that cache's `objectStore` at `"JDBCStore"` and session data lands in a real SQL table instead of memory, surviving a restart and shared across every process pointed at the same database:
 
 ```json
 "caches": {
@@ -79,6 +81,21 @@ See [Configuration](/projects/boxlang-express/docs/config) for the full datasour
 
 - Keep `"default"` in the `caches` block alongside your own entry — overriding `caches` replaces it wholesale, and BoxLang's own query engine depends on a `"default"` cache existing somewhere in it.
 - **`autoCreate: true` is currently unreliable, and declaring `"default"` does *not* fix it.** It can fail at BoxLang startup with `Cache [default] does not exist`, because `JDBCStore`'s own auto-create check runs a query internally, and cache creation order isn't guaranteed to reach `"default"` first — this reproduced the same way whether `"default"` was declared or not, and regardless of where it sat in the JSON. The two bullets above are unrelated fixes for unrelated problems. Safest path: create the table yourself once (a migration, or a one-time script) and leave `autoCreate: false`, as in the example above — that sidesteps the internal query entirely.
+
+## Falling back without durable storage
+
+`boxExpressCacheStore()` (and [rate limiting's](/projects/boxlang-express/docs/middleware) `cache` option) degrade instead of failing requests:
+
+- **The named cache isn't registered** — sessions live in this process's memory, with a warning logged at startup.
+- **The cache is registered but in-memory** (BoxLang's default `ConcurrentStore`, which `isDistributed()` reports as not shared) — it's used as-is, with a warning that entries aren't shared across instances or kept across restarts.
+- **A call to a durable cache fails at runtime** (the database goes away) — that call uses per-process memory, logged at most once every 30 seconds, and the next call tries the cache again, so it recovers by itself. Entries written during the outage stay local; reads check the cache first, then local memory.
+
+`getMode()` reports `"cache"` or `"local"`, and `isDurable()` whether the cache is backed by a durable, shared store. Two options fail fast in production instead of degrading:
+
+| Option | Effect |
+|---|---|
+| `fallback: false` | A missing cache throws at startup and runtime failures propagate — the behavior before 0.2.17, when `boxExpressCacheStore( "missing" )` threw on first use |
+| `requireDurable: true` | Refuses to start unless the cache is durable |
 
 ## The session cookie
 

@@ -102,6 +102,8 @@ Separate from the CLI/runtime config above, BoxLang Express has its own small se
 | `"trust proxy header"` | A header name, or an ordered array of candidates, checked before `X-Forwarded-For` and independent of the `"trust proxy"` boolean — see below. |
 | `"reloadOnChange"` | Dev-mode auto-restart on file change. See [Process Lifecycle](/projects/boxlang-express/docs/lifecycle). |
 | `"wsMaxMessageSize"` | Maximum size in bytes of one incoming WebSocket message (default `1048576`, 1 MB). A larger message is refused and the connection closed with code `1009`. Set it before `listen()` — see [WebSockets](/projects/boxlang-express/docs/websockets). |
+| `"wsIdleTimeoutMs"` | Drops a WebSocket connection that has sent nothing for this many milliseconds (default `0`, off). See [WebSockets](/projects/boxlang-express/docs/websockets). |
+| `"shutdownTimeoutMs"` | How long `SIGTERM`/Ctrl-C wait for in-flight requests to finish (default `5000`); `0` stops immediately. See [Process Lifecycle](/projects/boxlang-express/docs/lifecycle). |
 | `"log"` | When `false`, turns off the per-request stdout line (`[2026-08-10 10:45:41] GET /users/42 127.0.0.1`) every request otherwise gets — useful for a high-throughput deployment that doesn't want a synchronous stdout write on every request. On by default. |
 
 ```bxs
