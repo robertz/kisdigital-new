@@ -25,6 +25,20 @@ Path matching is exact only — no `:params`, no mount paths. An upgrade request
 
 There's no `onOpen`/`onError` callback — the connection is handed to the `app.ws()` callback at open time instead, which serves the same purpose, and errors surface as a connection close rather than a separate event.
 
+## Origin check
+
+A browser sends cookies with the WebSocket handshake whichever site the page is on, so without a check any website could open an authenticated socket as its visitor (cross-site WebSocket hijacking). `app.ws()` routes accept only same-origin pages by default: the page's `Origin` must match the `Host` it connected to (or `X-Forwarded-Host` from a trusted proxy), and anything else gets a `403` before the upgrade. Clients that send no `Origin` — servers, CLI tools, the cluster relay — aren't browsers and are let through.
+
+Change it per route, or for every route:
+
+```bxs
+app.ws( "/chat", handler, { origins: [ "https://app.example.com" ] } )
+app.set( "wsOrigins", "*" )   // the old allow-everything behavior
+```
+
+> [!NOTE] Behavior change in 0.2.20
+> `app.ws()` used to accept any origin. A page served from a different origin than the socket now needs to be listed in `origins` or `wsOrigins`.
+
 ## Message size limit
 
 Incoming messages are capped at 1 MB by default. A larger one is refused and the connection closed with a `1009` (message too big), so an unauthenticated client can't make the server buffer an unbounded message — Undertow's own default is unlimited (CVE-2026-81624, no upstream fix yet). This applies to every `app.ws()` route, including STOMP and the cluster relay. Change the limit with `app.set( "wsMaxMessageSize", bytes )` before `listen()`:

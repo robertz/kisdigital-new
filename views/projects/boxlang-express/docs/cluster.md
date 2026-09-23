@@ -34,8 +34,10 @@ Off by default — an app that never opts in pays nothing for any of this. Confi
 | `enabled` | — | Off by default. Every `ClusterManager` method is a no-op until this is `true` — a clustered job runs on every instance, same as an unclustered one, and `options.cluster` on `boxExpressStomp()` relays nothing. |
 | `name` | when enabled | This instance's own identity, written to the shared cache as its heartbeat key — typically a reachable `ws://` URL for the relay mesh to dial. |
 | `cacheProvider` | when enabled | The name of a `boxlang.json` cache backed by a genuinely durable/shared object store. |
-| `secretKey` | recommended | Gates the relay mesh's `/__cluster` endpoint — every instance must share the same value, sourced from an environment variable, never a literal in source. |
+| `secretKey` | for STOMP relay | Gates the relay mesh's `/__cluster` endpoint. Required (at least 16 characters) whenever a STOMP broker is given `{ cluster: ... }` — see below. Every instance must share the same value, sourced from an environment variable, never a literal in source. |
 | `peerIdleTimeoutSeconds` | — | Default `30`. How long a missed heartbeat is tolerated before a peer is considered gone. |
+
+The `/__cluster` endpoint is on the app's public port, and anything that connects to it can publish to every subscriber in the cluster — so a clustered STOMP broker won't start without a `secretKey` (before 0.2.20, leaving it unset left the endpoint open). It's compared in constant time. The secret travels in a handshake header over `ws://`, so keep peer traffic on a private network. Clustering used only for `app.schedule({ clustered: true })` doesn't open the endpoint and doesn't need a secret.
 
 `cacheProvider` is validated at startup via BoxLang's own `IObjectStore.isDistributed()` (`true` for `JDBCStore`, `false` for the in-memory `ConcurrentStore` default) — not just documented as a mistake waiting to happen. A store that reports `isDistributed() == false` can still be allowed explicitly via `allowedObjectStores`. See [Sessions](/projects/boxlang-express/docs/sessions) for the same `JDBCStore` cache setup, including its own `autoCreate` gotcha.
 

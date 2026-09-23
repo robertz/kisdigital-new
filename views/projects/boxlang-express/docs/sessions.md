@@ -32,6 +32,19 @@ app.get( "/logout", ( req, res ) => {
 
 `req.destroySession()` clears the stored session data and expires the session cookie on the client (`Max-Age=0`) — the next request starts a fresh session.
 
+## Regenerating on login
+
+```bxs
+app.post( "/login", ( req, res ) => {
+    // ...verify credentials...
+    req.regenerateSession()
+    req.session.user = user
+    res.redirect( "/" )
+} )
+```
+
+Call `req.regenerateSession()` when a user logs in (or gains privileges). It moves the session's data to a new id, deletes the old one, and sends the new cookie. Without it, a session id an attacker managed to plant in the victim's browser before login would become an authenticated session (session fixation).
+
 ## Skipping unnecessary store writes (resave, saveUninitialized)
 
 By default, every request through this middleware writes to the store — even one that never reads or touches `req.session` at all. Free against the default in-memory store, a real cost against anything out-of-process (a JDBCStore-backed `boxExpressCacheStore()`, Redis, etc). Two options, mirroring Express's own `express-session` options of the same names, turn that off:
@@ -52,7 +65,7 @@ Both default to `true` (the historical always-save behavior), so upgrading doesn
 
 ## Durable sessions (boxExpressCacheStore)
 
-The default session store is an in-memory `ConcurrentHashMap` on the `Session` instance — fine for one process, gone on restart, and not shared across a cluster. `boxExpressCacheStore()` is a ready-made `store` backed by BoxLang's own `cache()` service instead:
+The default session store is an in-memory `ConcurrentHashMap` on the `Session` instance — fine for one process, gone on restart, and not shared across a cluster. It holds at most `maxSessions` sessions (default `100000`); past that, new sessions aren't stored — existing ones keep working — and a warning is logged, so a flood of cookieless requests can't exhaust memory. With the default `saveUninitialized: true` every new visitor counts toward that cap, so set it to `false` if you can. Expired entries are swept at most every 30 seconds. `boxExpressCacheStore()` is a ready-made `store` backed by BoxLang's own `cache()` service instead:
 
 ```bxs
 app.use( boxExpressSession( { store: boxExpressCacheStore( "sessions" ) } ) )

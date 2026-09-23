@@ -18,6 +18,27 @@ app.use( boxExpressStatic( expandPath( "./public" ) ) )
 
 A request for a file that doesn't exist under the served directory falls through to `next()` rather than erroring — your other routes (or the default 404) still get a chance to handle it.
 
+## Dotfiles
+
+A path with any segment starting with `.` (`/.env`, `/.git/config`) is ignored by default — it falls through to the next handler as if the file weren't there, so a stray secret in the public directory isn't served. `/.well-known/` is always served.
+
+| `dotfiles` | Effect |
+|---|---|
+| `"ignore"` (default) | Fall through to `next()` |
+| `"deny"` | Answer `403` |
+| `"allow"` | Serve them |
+
+```bxs
+app.use( boxExpressStatic( expandPath( "./public" ), { dotfiles: "deny" } ) )
+```
+
+> [!NOTE] Behavior change in 0.2.20
+> Dotfiles used to be served. If you relied on that, pass `{ dotfiles: "allow" }`.
+
+## Streaming
+
+Files are streamed from disk rather than read into memory, so a large file costs the same memory as a small one, `HEAD` never reads the file, and files over 2 GB (including `Range` requests into them) work. The same applies to `res.sendFile()` and `res.download()`. Common modern types — `.mjs`, `.webp`, `.wasm`, `.map` — get their proper `Content-Type`.
+
 ## Directory requests without a trailing slash
 
 A request that resolves to a directory but is missing its trailing slash (e.g. `/public/docs` when `./public/docs/index.html` exists) gets a `301` redirect to the slash-suffixed URL instead of a 404 — the same behavior as `express.static()`. The slash-suffixed URL is the canonical one: relative asset links inside the served HTML resolve correctly against it and wouldn't against the bare path.
@@ -30,7 +51,7 @@ app.use( "/public", boxExpressStatic( expandPath( "./public" ) ) )
 
 ## Conditional GET (ETag / 304)
 
-Static file responses automatically set `ETag` and `Last-Modified`, and honor `If-None-Match` — a matching request gets a `304 Not Modified` with no body, instead of re-sending the file. The same conditional-GET support applies to `res.sendFile()`.
+Static file responses automatically set `ETag` and `Last-Modified`, and honor `If-None-Match` — a matching request gets a `304 Not Modified` with no body, instead of re-sending the file. `If-None-Match` handles a list of tags, `*`, and weak tags, and compares case-sensitively. The same conditional-GET support applies to `res.sendFile()`.
 
 ## Cache-Control (options.maxAge)
 
@@ -93,7 +114,10 @@ app.post(
 )
 ```
 
-`boxExpressUpload()` parses a `multipart/form-data` request: non-file fields land in `req.body` same as any other body parser. `req.files` is a struct keyed by field name, each value an _array_ of file structs — a field can carry more than one file — with shape `{ fieldName, filename, contentType, size, buffer, path }`. `path` is only present when `dest` was given; the client-supplied filename is never used to build it, sidestepping path-traversal/collision entirely.
+`boxExpressUpload()` parses a `multipart/form-data` request: non-file fields land in `req.body` same as any other body parser. `req.files` is a struct keyed by field name, each value an _array_ of file structs — a field can carry more than one file — with shape `{ fieldName, filename, contentType, size, buffer, path }`. `path` is only present when `dest` was given; the client-supplied filename is never used to build it, sidestepping path-traversal/collision entirely. The file's extension is kept only if it's 1–10 letters or digits (lower-cased); anything else is dropped.
+
+> [!WARNING] Keep uploads out of your static directory
+> Don't point `dest` inside a directory `boxExpressStatic()` serves. An uploaded `.html` or `.svg` would then be served back as a page on your own origin.
 
 ```bxs
 app.get( "/uploaded-avatar", ( req, res ) => {

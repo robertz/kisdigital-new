@@ -16,9 +16,10 @@ The full req.* and res.* API available inside every handler.
 | `req.headers` | Struct of request headers |
 | `req.get(name)` | Read a single header by name — returns null if absent |
 | `req.cookies` | Struct of parsed cookies |
-| `req.ip` | Direct TCP peer address by default; prefers an edge-set header named via `"trust proxy header"`, else `X-Forwarded-For` when `app.set("trust proxy", true)` — see [Configuration](/projects/boxlang-express/docs/config) |
-| `req.protocol` / `req.secure` | Always `"http"` / `false` — BoxExpress's own `HttpServer` never terminates TLS — unless `trust proxy` is on and the request carries `X-Forwarded-Proto: https` |
-| `req.hostname` | The `Host` header (or `X-Forwarded-Host` with `trust proxy` on) with any `:port` stripped |
+| `req.ip` | Direct TCP peer address by default; prefers an edge-set header named via `"trust proxy header"`, else the `X-Forwarded-For` entry `"trust proxy"` selects — see [Configuration](/projects/boxlang-express/docs/config) |
+| `req.protocol` / `req.secure` | Always `"http"` / `false` — BoxExpress's own `HttpServer` never terminates TLS — unless the directly connected peer is a trusted proxy and the request carries `X-Forwarded-Proto: https` |
+| `req.hostname` | The `Host` header (or `X-Forwarded-Host`, from a trusted proxy) with any `:port` stripped |
+| `req.id` | The request's id when `app.set("requestId", true)` is on — see [Process Lifecycle](/projects/boxlang-express/docs/lifecycle) |
 | `req.session` / `req.sessionID` | Populated by `boxExpressSession()` — see [Sessions](/projects/boxlang-express/docs/sessions) |
 | `req.rawExchange()` | Escape hatch to the underlying `io.undertow.server.HttpServerExchange` |
 

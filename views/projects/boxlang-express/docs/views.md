@@ -1,6 +1,6 @@
 # Views & Templates
 
-res.render(), the two supported template engines, and sharing layout across pages.
+res.render(), `.bxm` templates, and sharing layout across pages.
 
 ## Setting up a views directory
 
@@ -10,16 +10,7 @@ app.set( "views", expandPath( "./views" ) )
 
 Every view path passed to `res.render()` is resolved against this directory, with a containment check — a view path can't escape it, even if built from user input.
 
-## Two engines, picked by extension
-
-| Extension | Engine |
-|---|---|
-| `.bxm` | Native BoxLang template — `data` is available as a struct, interpolation needs a `<bx:output>` block, same as classic CFML `<cfoutput>` |
-| `.hbs` | Handlebars — `data` is the render context directly, so template variables are `{{whatever}}` |
-
-A view name with no extension gets one appended based on `app.set("view engine", ...)`, defaulting to `"bxm"`.
-
-### .bxm example
+## .bxm templates
 
 ```bxs
 app.get( "/greet/:name", ( req, res ) => {
@@ -29,22 +20,15 @@ app.get( "/greet/:name", ( req, res ) => {
 
 ```html
 <!-- views/greeting.bxm -->
-<bx:output><h1>Hello, #data.name#!</h1></bx:output>
+<bx:output><h1>Hello, #encodeForHTML( data.name )#!</h1></bx:output>
 ```
 
-### .hbs example
+`.bxm` is BoxLang's native server-page format (think `.cfm`). `data` is whatever struct you pass as `render()`'s second argument, and interpolation only happens inside a `<bx:output>` block, same as classic CFML `<cfoutput>`. A view name with no extension gets `.bxm` appended.
 
-```bxs
-app.get( "/greet-hbs/:name", ( req, res ) => {
-    res.render( "greeting.hbs", { data: { name: req.params.name, things: [ "a", "b", "c" ] } } )
-} )
-```
+Output isn't escaped for you: wrap anything that came from a user in `encodeForHTML()`.
 
-```handlebars
-<!-- views/greeting.hbs -->
-<h1>Hello, {{data.name}}!</h1>
-<p>Things: {{#each data.things}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}</p>
-```
+> [!NOTE] Handlebars was removed in 0.2.20
+> `.hbs` views, and the vendored `handlebars-4.3.1.jar` that carried an unrelated advisory, are gone. Rendering an `.hbs` view now throws `BoxExpress.UnsupportedViewEngine` — convert those views to `.bxm`.
 
 ## Sharing layout with partials
 

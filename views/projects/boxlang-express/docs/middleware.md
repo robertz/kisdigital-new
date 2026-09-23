@@ -53,7 +53,7 @@ Middleware and routes share one stack, run in the order they were registered. A 
 | `boxExpressCors(options)` | Cross-Origin Resource Sharing — sets `Access-Control-*` headers and answers preflight requests — see below |
 | `boxExpressRateLimit(options)` | Fixed-window rate limiting, keyed by `req.ip` by default — see below |
 | `boxExpressCsrf(options)` | CSRF protection via `req.session` — exposes `req.csrfToken()` — see below |
-| `boxExpressStomp(options)` | STOMP 1.2 pub/sub broker on top of `app.ws()` — see [WebSockets](/projects/boxlang-express/docs/websockets) |
+| `boxExpressStomp(options)` | STOMP 1.0/1.1/1.2 pub/sub broker on top of `app.ws()` — see [WebSockets](/projects/boxlang-express/docs/websockets) |
 | `boxExpressRouter()` | Returns a mountable `Router` — see [Routing](/projects/boxlang-express/docs/routing) |
 
 ```bxs
@@ -114,12 +114,14 @@ app.use( boxExpressCors( { origin: [ "https://a.com", "https://b.com" ], credent
 | `methods` | `GET,HEAD,PUT,PATCH,POST,DELETE` | `Access-Control-Allow-Methods` on a preflight response |
 | `allowedHeaders` | _reflects the preflight's own request_ | `Access-Control-Allow-Headers` on a preflight response |
 | `exposedHeaders` | _none_ | `Access-Control-Expose-Headers` on every response |
-| `credentials` | `false` | sets `Access-Control-Allow-Credentials: true` when `true` |
+| `credentials` | `false` | sets `Access-Control-Allow-Credentials: true` when `true`. Requires an explicit `origin` (a string or array) — combined with `origin: true` or `"*"` it throws, since reflecting any origin with credentials lets every website make authenticated requests as your visitors |
 | `maxAge` | _none_ | `Access-Control-Max-Age` (seconds) on a preflight response |
 | `preflightContinue` | `false` | call `next()` for a preflight instead of answering it directly |
 | `optionsSuccessStatus` | `204` | status code for a handled preflight |
 
 A CORS preflight — an `OPTIONS` request carrying `Access-Control-Request-Method` — is answered directly by this middleware (`204`, the relevant headers, no body) rather than falling through to the router, since nothing would otherwise be registered to handle `OPTIONS` on an arbitrary route. Pass `{ preflightContinue: true }` if a later handler needs to see the preflight request itself instead.
+
+`Vary: Origin` is sent whenever the response depends on the request's `Origin`, so a shared cache doesn't serve one origin's CORS headers to another.
 
 ## Rate limiting (boxExpressRateLimit)
 
@@ -174,7 +176,7 @@ app.get( "/form", ( req, res ) => {
 </form>
 ```
 
-"Safe" methods (`GET`/`HEAD`/`OPTIONS` by default) never validate — a token is only minted and exposed via `req.csrfToken()` for those, since that's how a token gets into a form before any state-changing request happens. Every other method must submit a matching token: `req.body._csrf` first, falling back to an `X-CSRF-Token` header for non-form (JSON/AJAX) clients. A missing/mismatched token gets a `403` before the route handler ever runs. Registering this before `req.session` exists throws immediately rather than silently doing nothing.
+"Safe" methods (`GET`/`HEAD`/`OPTIONS` by default) never validate — a token is only minted and exposed via `req.csrfToken()` for those, since that's how a token gets into a form before any state-changing request happens. Every other method must submit a matching token: `req.body._csrf` first, falling back to an `X-CSRF-Token` header for non-form (JSON/AJAX) clients. A missing/mismatched token gets a `403` before the route handler ever runs. The comparison is constant-time and case-sensitive. Registering this before `req.session` exists throws immediately rather than silently doing nothing.
 
 ## Writing your own middleware: a Google OAuth example
 

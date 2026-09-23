@@ -96,10 +96,12 @@ Separate from the CLI/runtime config above, BoxLang Express has its own small se
 | Setting | Effect |
 |---|---|
 | `"views"` | Directory `res.render()` resolves view files from. See [Views & Templates](/projects/boxlang-express/docs/views). |
-| `"view engine"` | Default extension appended to a view name with no extension (defaults to `"bxm"`). |
 | `"env"` | When set to `"development"`, the default 500 handler exposes the real error message instead of a generic one. Custom error middleware can read this the same way — see [Error Handling](/projects/boxlang-express/docs/errors). |
-| `"trust proxy"` | When `true`, `req.ip` prefers the first address in `X-Forwarded-For` over the direct TCP peer. Off by default — an untrusted client could otherwise forge that header to spoof its IP. |
-| `"trust proxy header"` | A header name, or an ordered array of candidates, checked before `X-Forwarded-For` and independent of the `"trust proxy"` boolean — see below. |
+| `"trust proxy"` | Which proxies' `X-Forwarded-*` headers to believe: `false` (default), a hop count, a list of proxy addresses/CIDRs, or `true`. See below. |
+| `"trust proxy header"` | A header name, or an ordered array of candidates, checked before `X-Forwarded-For` and independent of `"trust proxy"` — see below. |
+| `"requestId"` | When `true`, gives every request an id — `req.id`, an `X-Request-Id` response header, and the id in log lines. Off by default. See [Process Lifecycle](/projects/boxlang-express/docs/lifecycle). |
+| `"requestIdHeader"` | Renames the request-id header (default `"X-Request-Id"`). |
+| `"wsOrigins"` | Browser origins allowed to open any `app.ws()` route (default: same-origin only; `"*"` allows every origin). See [WebSockets](/projects/boxlang-express/docs/websockets). |
 | `"reloadOnChange"` | Dev-mode auto-restart on file change. See [Process Lifecycle](/projects/boxlang-express/docs/lifecycle). |
 | `"wsMaxMessageSize"` | Maximum size in bytes of one incoming WebSocket message (default `1048576`, 1 MB). A larger message is refused and the connection closed with code `1009`. Set it before `listen()` — see [WebSockets](/projects/boxlang-express/docs/websockets). |
 | `"wsIdleTimeoutMs"` | Drops a WebSocket connection that has sent nothing for this many milliseconds (default `0`, off). See [WebSockets](/projects/boxlang-express/docs/websockets). |
@@ -108,9 +110,27 @@ Separate from the CLI/runtime config above, BoxLang Express has its own small se
 
 ```bxs
 app.set( "env", "development" )
-app.set( "trust proxy", true )
+app.set( "trust proxy", 1 )
 app.set( "views", expandPath( "./views" ) )
 ```
+
+### "trust proxy" — which proxies to believe
+
+`req.ip` is the direct TCP peer by default — safe, since a client can't spoof it, but wrong behind a reverse proxy (it reports the proxy's IP). `"trust proxy"` takes the same values as Express:
+
+| Value | `req.ip` is |
+|---|---|
+| `false` (default) | The TCP peer |
+| A number, e.g. `1` | The address the nearest _n_ proxies saw — counted from the right of `X-Forwarded-For`, where each proxy appends. `1` fits a single load balancer |
+| Addresses: `[ "10.0.0.0/8", "loopback" ]` | Walks `X-Forwarded-For` from the right past each trusted address (IPs, CIDR ranges, `loopback`, `linklocal`, `uniquelocal`) and takes the first one that isn't |
+| `true` | The left-most `X-Forwarded-For` entry |
+
+Prefer a hop count or an address list. With `true`, the left-most entry is whatever the client put there whenever its proxy appends to the header rather than replacing it (most do), so a client can choose its own `req.ip` — and with it, a fresh rate-limit key per request. An invalid entry throws at `app.set()`, and hostnames in the header are never looked up in DNS.
+
+`X-Forwarded-Proto` and `X-Forwarded-Host` are believed only when the directly connected peer is a trusted proxy.
+
+> [!NOTE] Behavior change in 0.2.20
+> `app.set( "trust proxy", 1 )` (or any number) now means one hop, as in Express. It used to mean "trust everything," the same as `true`.
 
 ### "trust proxy header" — for platforms where X-Forwarded-For can be forged
 
