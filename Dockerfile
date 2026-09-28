@@ -84,7 +84,7 @@ ENV BOXLANG_MODULES=boxlang-express,bx-mysql,bx-markdown,bx-password-encrypt,bx-
 # that cache — change it any time a module needs a guaranteed fresh pull
 # (e.g. right after publishing a fix to ForgeBox), not just when chasing a
 # stale build.
-ARG MODULE_CACHE_BUST=2026-09-28-bx-activitypub-0.4.0
+ARG MODULE_CACHE_BUST=2026-09-28-bx-activitypub-0.5.0
 RUN install-bx-module "$BOXLANG_MODULES" --local
 
 COPY app.bxs boxlang.json ./
