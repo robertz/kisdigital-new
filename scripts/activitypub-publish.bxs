@@ -1,0 +1,34 @@
+/**
+ * Federates one published post to the author's ActivityPub followers (manual
+ * trigger until publishing is wired into the post editor). The running app's
+ * delivery worker sends it; this only queues. Publishing the same post twice
+ * is a no-op, and drafts/scheduled posts are refused (bx-activitypub's
+ * isPublic() gate).
+ *
+ *   boxlang --bx-config ./boxlang.json scripts/activitypub-publish.bxs --post=<Post.id>
+ */
+postId = cliGetArgs().options.post ?: ""
+if ( !len( postId ) ){
+	println( "usage: boxlang --bx-config ./boxlang.json scripts/activitypub-publish.bxs --post=<Post.id>" )
+	createObject( "java", "java.lang.System" ).exit( 1 )
+}
+
+host = new models.services.ActivityPubHost(
+	getSystemSetting( "SITEURL" ),
+	getSystemSetting( "ACTIVITYPUB_HANDLE" ),
+	getSystemSetting( "ACTIVITYPUB_AUTHOR_ID" ),
+	new models.services.PostService(),
+	new models.util.PostRenderer(),
+	new models.util.SiteDefaults( getSystemSetting( "SITEURL" ) )
+)
+activityPub = new bxModules.bxactivitypub.models.ActivityPub( host = host, settings = { datasource: "chron" } )
+
+try {
+	println( jsonSerialize( activityPub.publishPost( postId ) ) )
+} catch ( BxActivityPub.NotPublic e ){
+	println( "not published: #e.message#" )
+	createObject( "java", "java.lang.System" ).exit( 1 )
+} catch ( BxActivityPub.NotFound e ){
+	println( "not found: #e.message#" )
+	createObject( "java", "java.lang.System" ).exit( 1 )
+}

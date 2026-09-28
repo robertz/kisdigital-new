@@ -1,0 +1,123 @@
+/**
+ * This blog as seen by bx-activitypub (see bxModules.bxactivitypub.contracts.IHostApp).
+ *
+ * Author mode, with the blog itself as the author: one Person, @{ACTIVITYPUB_HANDLE}
+ * (e.g. @blog), presented as the site — KISDigital's name, description and logo, not a
+ * user's profile. It's a one-way feed (the fediverse can follow it, but replies go
+ * nowhere), so it deliberately doesn't look like a person to talk to.
+ *
+ * ACTIVITYPUB_AUTHOR_ID picks whose posts federate: that User's published posts are the
+ * Articles. It also keys the account's keypair and followers inside bx-activitypub.
+ * Nothing else exists as far as federation is concerned — other users' posts, drafts,
+ * archived posts and posts scheduled for the future are all reported as not public, so
+ * the module never serves, follows or delivers them. "Public" uses the same test as the
+ * RSS feed: status = 'published' AND publish_date <= NOW().
+ */
+class implements="bxModules.bxactivitypub.contracts.IHostApp" {
+
+	function init(
+		required string siteUrl,
+		required string authorHandle,
+		required string authorUserId,
+		required postService,
+		required postRenderer,
+		required siteDefaults
+	){
+		variables.siteUrl      = reReplace( arguments.siteUrl, "/+$", "" );
+		variables.authorHandle = lCase( arguments.authorHandle );
+		variables.authorUserId = arguments.authorUserId;
+		variables.postService  = arguments.postService;
+		variables.postRenderer = arguments.postRenderer;
+		variables.siteDefaults = arguments.siteDefaults;
+		return this;
+	}
+
+	string function baseUrl(){
+		return variables.siteUrl;
+	}
+
+	function findActor( required string type, required string name ){
+		if ( arguments.type != "Person" || lCase( arguments.name ) != variables.authorHandle ){
+			return javacast( "null", "" );
+		}
+		var meta = variables.siteDefaults.defaultMeta( "/" );
+		return {
+			"id"          : variables.authorUserId,
+			"name"        : variables.authorHandle,
+			"displayName" : meta[ "og:site_name" ],
+			"summary"     : "<p>" & encodeForHTML( meta.description ) & "</p>",
+			// Square PNG: Mastodon doesn't accept SVG avatars.
+			"avatar"      : variables.siteUrl & "/assets/images/google-oauth-logo-512.png",
+			"url"         : variables.siteUrl & "/"
+		};
+	}
+
+	boolean function isPublic( required string type, required string id ){
+		if ( arguments.type == "Person" ){
+			return queryExecute(
+				"SELECT 1 FROM User WHERE id = :id AND id = :authorId AND is_active = 1",
+				{
+					"id"       : { value: arguments.id,           sqltype: "varchar" },
+					"authorId" : { value: variables.authorUserId, sqltype: "varchar" }
+				}
+			).recordCount > 0;
+		}
+		if ( arguments.type == "post" ){
+			return queryExecute(
+				"SELECT 1
+				FROM Post P
+				INNER JOIN UserPost UP ON UP.post_id = P.id AND UP.author_role = 'author'
+				WHERE P.id = :id
+					AND UP.user_id = :authorId
+					AND P.status = 'published'
+					AND P.publish_date <= NOW()",
+				{
+					"id"       : { value: arguments.id,           sqltype: "varchar" },
+					"authorId" : { value: variables.authorUserId, sqltype: "varchar" }
+				}
+			).recordCount > 0;
+		}
+		return false;
+	}
+
+	/**
+	 * The post in the shape the module expects, whatever its status (isPublic() is the
+	 * gate). Posts by anyone other than the configured author don't exist here.
+	 */
+	function getObject( required string type, required string id ){
+		if ( arguments.type != "post" || !isAuthorsPost( arguments.id ) ){
+			return javacast( "null", "" );
+		}
+		var post = variables.postService.getPostById( arguments.id );
+		if ( !post.exists() ){
+			return javacast( "null", "" );
+		}
+		return {
+			"author"    : variables.authorHandle,
+			"title"     : post.getTitle(),
+			"summary"   : post.getDescription(),
+			"content"   : absolutizeLinks( variables.postRenderer.render( post.getBody() ) ),
+			"url"       : variables.siteUrl & post.getPostUrl(),
+			"published" : post.getPublishDate()
+		};
+	}
+
+	private boolean function isAuthorsPost( required string postId ){
+		return queryExecute(
+			"SELECT 1 FROM UserPost WHERE post_id = :id AND user_id = :authorId AND author_role = 'author'",
+			{
+				"id"       : { value: arguments.postId,       sqltype: "varchar" },
+				"authorId" : { value: variables.authorUserId, sqltype: "varchar" }
+			}
+		).recordCount > 0;
+	}
+
+	/**
+	 * Site-relative src/href ("/assets/...") only work on this site; remote servers
+	 * showing the content need them absolute. Protocol-relative ("//cdn") is left alone.
+	 */
+	private string function absolutizeLinks( required string html ){
+		return reReplaceNoCase( arguments.html, "(src|href)=""/(?!/)", "\1=""#variables.siteUrl#/", "all" );
+	}
+
+}

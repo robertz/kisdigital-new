@@ -169,6 +169,28 @@ if ( app.getSetting( "env" ) == "production" ){
 	} );
 }
 
+// ── ActivityPub (bx-activitypub) ─────────────────────────────────────────
+// Federates the configured author's published posts to the fediverse from
+// the blog's own account, @{ACTIVITYPUB_HANDLE}@{SITEURL host} (e.g. @blog). Off unless ACTIVITYPUB_ENABLED=true,
+// so an environment without the module installed never touches it. Mounted
+// ahead of the page routes: its /u/:name and /post/:id routes answer only
+// requests asking for ActivityPub JSON and redirect or next() everything
+// else. The module's Ap* tables live in chron (db/migrations/0017).
+if ( getSystemSetting( "ACTIVITYPUB_ENABLED", "false" ) == "true" ){
+	activityPub = new bxModules.bxactivitypub.models.ActivityPub(
+		host     = new models.services.ActivityPubHost(
+			getSystemSetting( "SITEURL", "https://kisdigital.com" ),
+			getSystemSetting( "ACTIVITYPUB_HANDLE" ),
+			getSystemSetting( "ACTIVITYPUB_AUTHOR_ID" ),
+			postService,
+			postRenderer,
+			siteDefaults
+		),
+		settings = { datasource: "chron" }
+	)
+	new bxModules.bxactivitypub.adapters.express().mount( app, activityPub )
+}
+
 // ── Routes ───────────────────────────────────────────────────────────────
 app.use( new routes.Auth( authService, googleOAuthClient ).router )
 app.use( new routes.Main( postService, authorService, siteDefaults ).router )
