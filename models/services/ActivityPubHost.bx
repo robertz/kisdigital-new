@@ -54,6 +54,8 @@ class implements="bxModules.bxactivitypub.contracts.IHostApp,bxModules.bxactivit
 			"summary"     : "<p>" & encodeForHTML( meta.description ) & "</p>",
 			// Square PNG: Mastodon doesn't accept SVG avatars.
 			"avatar"      : variables.siteUrl & "/assets/images/google-oauth-logo-512.png",
+			// Profile banner; Mastodon crops it to about 3:1 around the middle.
+			"header"      : variables.siteUrl & "/assets/images/hero.jpg",
 			"url"         : variables.siteUrl & "/"
 		};
 	}
