@@ -69,7 +69,10 @@ RUN rm -rf /app/* /app/.[!.]*
 # published as a real ForgeBox-hosted release (downloadURL: "forgeboxStorage",
 # confirmed via `curl https://forgebox.io/api/v1/entry/boxlang-express`),
 # it resolves the same as everything else — no special-casing needed.
-ENV BOXLANG_MODULES=boxlang-express,bx-mysql,bx-markdown,bx-password-encrypt,bx-esapi,bx-compat-cfml
+# bx-activitypub installs as boxlang_modules/bx-activitypub; the app references it as
+# bxModules.bxactivitypub (its declared moduleName), which is also what the local-dev
+# symlink boxlang_modules/bxactivitypub resolves to. Inert unless ACTIVITYPUB_ENABLED=true.
+ENV BOXLANG_MODULES=boxlang-express,bx-mysql,bx-markdown,bx-password-encrypt,bx-esapi,bx-compat-cfml,bx-activitypub
 
 # install-bx-module always resolves "latest" from ForgeBox, but this RUN
 # line's own content never changes — so both local Docker and DigitalOcean
@@ -81,7 +84,7 @@ ENV BOXLANG_MODULES=boxlang-express,bx-mysql,bx-markdown,bx-password-encrypt,bx-
 # that cache — change it any time a module needs a guaranteed fresh pull
 # (e.g. right after publishing a fix to ForgeBox), not just when chasing a
 # stale build.
-ARG MODULE_CACHE_BUST=2026-08-31-boxexpress-0.2.5
+ARG MODULE_CACHE_BUST=2026-09-28-bx-activitypub-0.1.0
 RUN install-bx-module "$BOXLANG_MODULES" --local
 
 COPY app.bxs boxlang.json ./
