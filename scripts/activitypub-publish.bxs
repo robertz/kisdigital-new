@@ -1,9 +1,9 @@
 /**
- * Federates one published post to the author's ActivityPub followers (manual
- * trigger until publishing is wired into the post editor). The running app's
- * delivery worker sends it; this only queues. Publishing the same post twice
- * is a no-op, and drafts/scheduled posts are refused (bx-activitypub's
- * isPublic() gate).
+ * Federates one post now, ignoring the ACTIVITYPUB_SINCE cutoff: for sharing an
+ * older post on purpose. Everything else happens through the scheduled sweep
+ * (ActivityPubSweep.bx). The running app's delivery worker sends it; this only
+ * queues. Publishing the same post twice is a no-op, and drafts/scheduled posts
+ * are refused (bx-activitypub's isPublic() gate).
  *
  *   boxlang --bx-config ./boxlang.json scripts/activitypub-publish.bxs --post=<Post.id>
  */

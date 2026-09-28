@@ -171,11 +171,14 @@ if ( app.getSetting( "env" ) == "production" ){
 
 // ── ActivityPub (bx-activitypub) ─────────────────────────────────────────
 // Federates the configured author's published posts to the fediverse from
-// the blog's own account, @{ACTIVITYPUB_HANDLE}@{SITEURL host} (e.g. @blog). Off unless ACTIVITYPUB_ENABLED=true,
-// so an environment without the module installed never touches it. Mounted
-// ahead of the page routes: its /u/:name and /post/:id routes answer only
-// requests asking for ActivityPub JSON and redirect or next() everything
-// else. The module's Ap* tables live in chron (db/migrations/0017).
+// the blog's own account, @{ACTIVITYPUB_HANDLE}@{SITEURL host} (e.g. @blog).
+// Off unless ACTIVITYPUB_ENABLED=true, so an environment without the module
+// installed never touches it. Mounted ahead of the page routes: its /u/:name
+// and /post/:id routes answer only requests asking for ActivityPub JSON and
+// redirect or next() everything else. The module's Ap* tables live in chron
+// (db/migrations/0017). The sweep (ActivityPubSweep.bx) is what sends posts,
+// edits and deletions; it stays off until ACTIVITYPUB_SINCE, its cutoff, is
+// set, so switching federation on never backfills old posts by accident.
 if ( getSystemSetting( "ACTIVITYPUB_ENABLED", "false" ) == "true" ){
 	activityPub = new bxModules.bxactivitypub.models.ActivityPub(
 		host     = new models.services.ActivityPubHost(
@@ -189,6 +192,19 @@ if ( getSystemSetting( "ACTIVITYPUB_ENABLED", "false" ) == "true" ){
 		settings = { datasource: "chron" }
 	)
 	new bxModules.bxactivitypub.adapters.express().mount( app, activityPub )
+
+	activityPubSince = getSystemSetting( "ACTIVITYPUB_SINCE", "" )
+	if ( isDate( activityPubSince ) ){
+		activityPubSweep = new models.services.ActivityPubSweep(
+			activityPub,
+			getSystemSetting( "ACTIVITYPUB_AUTHOR_ID" ),
+			getSystemSetting( "ACTIVITYPUB_HANDLE" ),
+			parseDateTime( activityPubSince )
+		)
+		app.schedule( 2 * 60 * 1000, () => activityPubSweep.run(), { name: "activitypub-sweep", immediate: true } )
+	} else {
+		println( "[activitypub] ACTIVITYPUB_SINCE is not set to a date; the sweep is off and nothing will federate" )
+	}
 }
 
 // ── Routes ───────────────────────────────────────────────────────────────

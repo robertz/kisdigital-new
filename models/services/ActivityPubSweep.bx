@@ -1,0 +1,76 @@
+/**
+ * Decides *when* posts federate (bx-activitypub decides *what* to send). Scheduled from
+ * app.bxs; each run asks the module to sync:
+ *
+ *   - every post by the configured author with publish_date >= ACTIVITYPUB_SINCE, whatever
+ *     its status. syncPost() creates it once it's public, which is also how scheduled
+ *     posts go out on their own when their publish_date arrives.
+ *   - every post already on the fediverse, so edits go out as Update, and unpublishing
+ *     or deleting goes out as Delete.
+ *   - the account's profile, which goes out as Update{Person} when it changes.
+ *
+ * ACTIVITYPUB_SINCE is the cutoff: older posts never federate on their own. They would
+ * arrive backdated (Mastodon files a post under its publish date) and a backfill would
+ * flood every new follower. syncPost() sends nothing for an unchanged post, so running
+ * often is cheap.
+ */
+class {
+
+	function init( required activityPub, required string authorUserId, required string handle, required date since ){
+		variables.activityPub  = arguments.activityPub;
+		variables.authorUserId = arguments.authorUserId;
+		variables.handle       = arguments.handle;
+		variables.since        = arguments.since;
+		return this;
+	}
+
+	/**
+	 * Returns a count per action taken (create/update/delete/none/error), for logging.
+	 */
+	struct function run(){
+		var counts = { "create": 0, "update": 0, "delete": 0, "none": 0, "error": 0 };
+		for ( var postId in candidatePostIds() ){
+			try {
+				counts[ variables.activityPub.syncPost( postId ).action ]++;
+			} catch ( any e ){
+				counts.error++;
+				writeLog( text = "sweep: post #postId# failed: #e.message#", type = "error", log = "activitypub" );
+			}
+		}
+		try {
+			variables.activityPub.syncActor( "Person", variables.handle );
+		} catch ( any e ){
+			writeLog( text = "sweep: profile sync failed: #e.message#", type = "error", log = "activitypub" );
+		}
+		if ( counts.create + counts.update + counts.delete + counts.error > 0 ){
+			writeLog( text = "sweep: #serializeCounts( counts )#", type = "information", log = "activitypub" );
+		}
+		return counts;
+	}
+
+	private array function candidatePostIds(){
+		var ids = queryExecute(
+			"SELECT P.id
+			FROM Post P
+			INNER JOIN UserPost UP ON UP.post_id = P.id AND UP.author_role = 'author'
+			WHERE UP.user_id = :authorId
+				AND P.publish_date >= :since",
+			{
+				"authorId" : { value: variables.authorUserId, sqltype: "varchar" },
+				"since"    : { value: variables.since,        sqltype: "timestamp" }
+			},
+			{ returnType: "array" }
+		).map( ( row ) => row.id );
+		for ( var federatedId in variables.activityPub.federatedPostIds() ){
+			if ( !ids.findNoCase( federatedId ) ){
+				ids.append( federatedId );
+			}
+		}
+		return ids;
+	}
+
+	private string function serializeCounts( required struct counts ){
+		return "created #arguments.counts.create#, updated #arguments.counts.update#, deleted #arguments.counts.delete#, errors #arguments.counts.error#";
+	}
+
+}
