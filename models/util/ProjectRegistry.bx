@@ -11,6 +11,12 @@ class {
 			tagline : "An Express.js-style API for building lightweight HTTP servers in BoxLang."
 		},
 		{
+			slug    : "bx-activitypub",
+			name    : "bx-activitypub",
+			icon    : "bi-broadcast",
+			tagline : "ActivityPub federation for BoxLang apps — publish posts to Mastodon and the fediverse, and accept public replies back."
+		},
+		{
 			slug    : "bx-zork",
 			name    : "bx-zork",
 			icon    : "bi-controller",

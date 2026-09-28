@@ -1,0 +1,45 @@
+<bx:include template="../../partials/_head.bxm">
+<bx:output>
+<div class="container py-5">
+	<div class="c-project-hero">
+		<p class="c-project-hero__eyebrow">Project</p>
+		<h1 class="c-project-hero__title">bx-activitypub</h1>
+		<p class="c-project-hero__tagline"><a href="https://www.w3.org/TR/activitypub/" target="_blank" rel="noopener" class="c-post-link">ActivityPub</a> federation for <a href="https://boxlang.io" target="_blank" rel="noopener" class="c-post-link">BoxLang</a> apps. People on Mastodon and the rest of the fediverse can follow your app's accounts and receive your posts, edits and deletions — and, if you want, reply back. Your app keeps its data; the module handles the protocol: WebFinger, actor documents, HTTP Signatures, the inbox, a delivery queue that survives restarts, and NodeInfo.</p>
+		<div class="c-project-hero__actions">
+			<a href="/projects/bx-activitypub/docs/getting-started" class="btn btn-primary-custom">Read the Docs</a>
+			<a href="https://github.com/robertz/bx-activitypub" target="_blank" rel="noopener" class="btn btn-outline-custom">View on GitHub</a>
+		</div>
+	</div>
+
+	<div class="c-project-features">
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-plug"></i> One contract</p>
+			<p class="c-project-feature__body">Implement <code>IHostApp</code> — four methods that describe your accounts and posts — and the module does the rest. It never reads or writes your tables.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-arrow-repeat"></i> Sync, not bookkeeping</p>
+			<p class="c-project-feature__body">Call <code>syncPost()</code> as often as you like. It compares the post with what was last sent and sends a <code>Create</code>, <code>Update</code> or <code>Delete</code> only when something changed.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-reply"></i> Replies, likes &amp; boosts</p>
+			<p class="c-project-feature__body">Accept public replies from the fediverse into your own comments, reply back as the account, and count likes and boosts on every post.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-shield-check"></i> Signed and durable</p>
+			<p class="c-project-feature__body">Every inbound activity is signature-verified; every outbound one is signed and queued in the database, with retries, per-inbox ordering and parallel delivery.</p>
+		</div>
+	</div>
+
+	<div class="c-post__body c-docs-body">
+		<div class="bx-callout"><strong>Running on this site</strong>This blog federates with bx-activitypub as <code>@blog@kisdigital.com</code>. Search for it from any Mastodon account to follow new posts.</div>
+	</div>
+
+	<p class="c-post-sidebar__label mb-3 mt-4">Quick start</p>
+	<div class="c-post__body c-docs-body">
+<pre class="bx-code"><span class="bx-code-label">bash</span><code>install-bx-module bx-activitypub,boxlang-express,bx-mysql --local
+mysql mydb &lt; boxlang_modules/bx-activitypub/sql/schema.sql</code></pre>
+	</div>
+	<p class="mt-3"><a href="/projects/bx-activitypub/docs/getting-started" class="c-post-link">Requirements and a complete minimal example &rarr;</a></p>
+</div>
+</bx:output>
+<bx:include template="../../partials/_foot.bxm">

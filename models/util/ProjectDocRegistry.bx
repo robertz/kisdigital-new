@@ -28,6 +28,14 @@ class {
 			{ page_slug: "scheduler",         title: "Scheduler" },
 			{ page_slug: "cluster",           title: "Cluster Support" }
 		],
+		"bx-activitypub": [
+			{ page_slug: "getting-started",   title: "Getting Started" },
+			{ page_slug: "host-contract",     title: "The Host Contract" },
+			{ page_slug: "publishing",        title: "Publishing" },
+			{ page_slug: "replies",           title: "Replies & Reactions" },
+			{ page_slug: "routes-settings",   title: "Routes & Settings" },
+			{ page_slug: "operations",        title: "Security & Delivery" }
+		],
 		"boxlang-ssg": [
 			{ page_slug: "getting-started",     title: "Getting Started" },
 			{ page_slug: "authoring-content",   title: "Authoring Content" },
