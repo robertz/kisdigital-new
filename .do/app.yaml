@@ -89,3 +89,15 @@ services:
         value: https://static.kisdigital.com
       - key: R2_UPLOAD_PREFIX
         value: posts
+      # ActivityPub (bx-activitypub): federates as @blog@kisdigital.com (the
+      # domain comes from SITEURL). Needs db/migrations/0017-0019 applied to
+      # production before deploying. ACTIVITYPUB_SINCE is the cutoff: only
+      # posts published at or after it federate. See .env.example for all four.
+      - key: ACTIVITYPUB_ENABLED
+        value: "true"
+      - key: ACTIVITYPUB_HANDLE
+        value: blog
+      - key: ACTIVITYPUB_AUTHOR_ID
+        value: cf509c38-63c0-11ef-b36c-9a6c4d3d4dca
+      - key: ACTIVITYPUB_SINCE
+        value: "2026-09-27T00:00:00Z"
