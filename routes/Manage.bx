@@ -95,6 +95,7 @@ class {
 
 		this.router.get( "/manage/comments", admin, ( req, res ) => commentsIndex( req, res ) );
 		this.router.post( "/manage/comments/:id/delete", admin, ( req, res ) => deleteManageComment( req, res ) );
+		this.router.post( "/manage/comments/:id/approve", admin, ( req, res ) => approveManageComment( req, res ) );
 
 		this.router.get( "/manage/insights", admin, ( req, res ) => insightsIndex( req, res ) );
 		this.router.get( "/manage/logs", admin, ( req, res ) => logsIndex( req, res ) );
@@ -818,10 +819,8 @@ class {
 	}
 
 	// ── Comments ─────────────────────────────────────────────────────────────
-	// Stopgap moderation view — CommentService has no approve/spam workflow
-	// (see db/migrations/0009_add_comment_table.sql's status enum), so this is
-	// just a paginated, all-posts listing with soft-delete until something
-	// more purpose-built replaces it.
+	// All-posts listing with soft-delete, plus approval for replies from the
+	// fediverse held as 'pending' (db/migrations/0019_add_remote_comments.sql).
 
 	// GET /manage/comments
 	function commentsIndex( req, res ){
@@ -854,6 +853,23 @@ class {
 
 		var page = req.body.page ?: 1;
 		flashSet( req, { success: "Comment deleted." } );
+		res.redirect( "/manage/comments?page=" & page );
+	}
+
+	// POST /manage/comments/:id/approve — publishes a pending remote reply;
+	// its author's later replies then skip the queue (see CommentService.
+	// isTrustedRemoteAuthor()).
+	function approveManageComment( req, res ){
+		var commentId = req.params.id ?: "";
+		var approved  = len( trim( commentId ) ) && variables.commentService.approveComment( commentId );
+
+		if ( isAjax( req ) ){
+			res.json( { success: approved } );
+			return;
+		}
+
+		var page = req.body.page ?: 1;
+		flashSet( req, { success: approved ? "Comment approved." : "That comment wasn't pending." } );
 		res.redirect( "/manage/comments?page=" & page );
 	}
 

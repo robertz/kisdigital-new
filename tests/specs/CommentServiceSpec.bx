@@ -1,0 +1,34 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "CommentService", function(){
+
+			describe( "sanitizeRemoteHtml()", function(){
+
+				beforeEach( function(){
+					variables.service = new models.services.CommentService()
+				} )
+
+				it( "keeps Mastodon's paragraphs, line breaks, formatting and links", function(){
+					var html = '<p>neat, see <a href="https://example.com/very/long/path" rel="nofollow noopener" translate="no" target="_blank"><span class="invisible">https://</span><span class="ellipsis">example.com/very/lo</span><span class="invisible">ng/path</span></a></p><p>line<br />two <strong>bold</strong> <em>it</em></p>'
+					expect( service.sanitizeRemoteHtml( html ) ).toBe( '<p>neat, see <a href="https://example.com/very/long/path" rel="nofollow">https://example.com/very/long/path</a></p><p>line<br />two <strong>bold</strong> <em>it</em></p>' )
+				} )
+
+				it( "removes scripts, event handlers, javascript: links and frames", function(){
+					var clean = service.sanitizeRemoteHtml( '<p onclick="x()">hi<script>alert(1)</script><a href="javascript:alert(3)">js</a><iframe src="https://evil.example"></iframe></p>' )
+					expect( clean ).toBe( "<p>hijs</p>" )
+				} )
+
+				it( "removes images and inline styles (no remote images, no restyling)", function(){
+					var clean = service.sanitizeRemoteHtml( '<p><img src="https://tracker.example/pixel.png" onerror="alert(2)">text <a href="https://ok.example" style="color:red">ok</a></p>' )
+					expect( clean ).notToInclude( "<img" )
+					expect( clean ).notToInclude( "style" )
+					expect( clean ).toBe( '<p>text <a href="https://ok.example" rel="nofollow">ok</a></p>' )
+				} )
+
+			} )
+
+		} )
+	}
+
+}

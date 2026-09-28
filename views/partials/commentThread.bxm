@@ -11,7 +11,12 @@
       Also used standalone by routes/Comments.bx to render a single new
       comment's fragment for the AJAX response (see public/assets/js/
       comments.js) — data-depth mirrors --comment-depth so that script can
-      find the right insertion point without parsing inline CSS. --->
+      find the right insertion point without parsing inline CSS.
+
+      Remote comments (comment.isRemote — replies from the fediverse) render
+      their body as HTML: it was sanitized at import by
+      CommentService.sanitizeRemoteHtml(), which is the only writer of it.
+      Local comments stay escaped plain text. --->
 <div class="c-comment" id="comment-#encodeForHTMLAttribute( comment.id )#" data-depth="#comment.depth#" style="--comment-depth: #min( comment.depth, 6 )#">
 	<div class="c-comment__row">
 		<bx:if len( comment.avatarUrl ) && !comment.isDeleted>
@@ -26,9 +31,36 @@
 			<bx:else>
 				<div class="c-comment__meta">
 					<span class="c-comment__author">#encodeForHTML( comment.displayName )#</span>
+					<bx:if comment.isRemote>
+						<bx:if len( comment.remoteProfileUrl )>
+							<a class="c-comment__handle" href="#encodeForHTMLAttribute( comment.remoteProfileUrl )#" rel="nofollow ugc noopener" target="_blank">#encodeForHTML( comment.remoteHandle )#</a>
+						<bx:else>
+							<span class="c-comment__handle">#encodeForHTML( comment.remoteHandle )#</span>
+						</bx:if>
+					</bx:if>
 					<time datetime="#encodeForHTMLAttribute( dateTimeFormat( comment.created, "yyyy-mm-dd'T'HH:nn:ss'Z'" ) )#" data-local-time data-local-format="relative">#dateFormat( comment.created, "mmm d, yyyy" )#</time>
+					<bx:if comment.isRemote && len( comment.remoteUrl )>
+						<a class="c-comment__via" href="#encodeForHTMLAttribute( comment.remoteUrl )#" rel="nofollow ugc noopener" target="_blank">via #encodeForHTML( comment.remoteHost )#</a>
+					</bx:if>
 				</div>
-				<p class="c-comment__text">#encodeForHTML( comment.body )#</p>
+				<bx:if comment.isRemote>
+					<bx:if len( comment.contentWarning )>
+						<details class="c-comment__cw">
+							<summary>#encodeForHTML( comment.contentWarning )#</summary>
+							<div class="c-comment__text c-comment__text--remote">#comment.body#</div>
+						</details>
+					<bx:else>
+						<div class="c-comment__text c-comment__text--remote">#comment.body#</div>
+					</bx:if>
+					<bx:if comment.attachmentCount gt 0 && len( comment.remoteUrl )>
+						<p class="c-comment__attachments">
+							#comment.attachmentCount# #comment.attachmentCount == 1 ? "attachment" : "attachments"# &middot;
+							<a href="#encodeForHTMLAttribute( comment.remoteUrl )#" rel="nofollow ugc noopener" target="_blank">view on #encodeForHTML( comment.remoteHost )#</a>
+						</p>
+					</bx:if>
+				<bx:else>
+					<p class="c-comment__text">#encodeForHTML( comment.body )#</p>
+				</bx:if>
 
 				<div class="c-comment__actions">
 					<bx:if !isNull( data.currentUser )>

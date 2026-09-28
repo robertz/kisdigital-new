@@ -187,7 +187,8 @@ if ( getSystemSetting( "ACTIVITYPUB_ENABLED", "false" ) == "true" ){
 			getSystemSetting( "ACTIVITYPUB_AUTHOR_ID" ),
 			postService,
 			postRenderer,
-			siteDefaults
+			siteDefaults,
+			commentService
 		),
 		settings = { datasource: "chron" }
 	)

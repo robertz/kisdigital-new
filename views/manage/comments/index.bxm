@@ -24,7 +24,10 @@
 						Comments
 						<span class="c-manage-header__count">#numberFormat( data.paging.total )#</span>
 					</h1>
-					<p class="c-manage-header__sub">All comments across every post, newest first — a stopgap listing until proper moderation tools exist.</p>
+					<p class="c-manage-header__sub">
+						All comments across every post, newest first. Replies from the fediverse wait here as pending until you approve one from that account; after that, the account's replies publish immediately.
+						<bx:if data.paging.pending gt 0><strong>#numberFormat( data.paging.pending )# pending.</strong></bx:if>
+					</p>
 				</div>
 			</div>
 
@@ -57,6 +60,12 @@
 											<bx:if comment.isDeleted>
 												<span class="c-status-badge c-status-badge--archived">Deleted</span>
 											<bx:else>
+												<bx:if comment.isPending>
+													<span class="c-status-badge c-status-badge--draft">Pending</span>
+												</bx:if>
+												<bx:if comment.isRemote>
+													<i class="bi bi-globe2 c-manage-table__cell-muted" title="Reply from the fediverse"></i>
+												</bx:if>
 												<bx:if comment.isReply>
 													<i class="bi bi-reply-fill c-manage-table__cell-muted" title="Reply"></i>
 												</bx:if>
@@ -70,12 +79,25 @@
 										</td>
 										<td class="c-manage-table__cell-muted">
 											#encodeForHTML( comment.authorName )#<br>
-											<small>#encodeForHTML( comment.authorEmail )#</small>
+											<bx:if comment.isRemote && len( comment.remoteUrl )>
+												<small><a href="#encodeForHTMLAttribute( comment.remoteUrl )#" target="_blank" rel="nofollow noopener">#encodeForHTML( comment.authorEmail )#</a></small>
+											<bx:else>
+												<small>#encodeForHTML( comment.authorEmail )#</small>
+											</bx:if>
 										</td>
 										<td class="c-manage-table__cell-muted">
 											#dateTimeFormat( comment.created, "d mmm yyyy, h:nn tt" )#
 										</td>
 										<td>
+											<bx:if comment.isPending>
+												<form method="post" action="/manage/comments/#encodeForURL( comment.id )#/approve">
+													<input type="hidden" name="_csrf" value="#encodeForHTMLAttribute( data.csrfToken )#">
+													<input type="hidden" name="page" value="#data.paging.page#">
+													<button type="submit" class="c-manage-table__icon-btn" title="Approve (and trust this account from now on)">
+														<i class="bi bi-check-lg"></i>
+													</button>
+												</form>
+											</bx:if>
 											<bx:if !comment.isDeleted>
 												<form method="post" action="/manage/comments/#encodeForURL( comment.id )#/delete" onsubmit="return confirm('Delete this comment? This can\'t be undone.');">
 													<input type="hidden" name="_csrf" value="#encodeForHTMLAttribute( data.csrfToken )#">

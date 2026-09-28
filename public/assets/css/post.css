@@ -529,6 +529,58 @@
 	margin-bottom: var(--space-2);
 }
 
+/* Replies from the fediverse: sanitized HTML rather than plain text. */
+.c-comment__text--remote {
+	white-space: normal;
+}
+
+.c-comment__text--remote p {
+	margin: 0 0 var(--space-2);
+}
+
+.c-comment__text--remote p:last-child {
+	margin-bottom: 0;
+}
+
+.c-comment__text--remote a,
+.c-comment__attachments a {
+	color: var(--post-link-text);
+	overflow-wrap: anywhere;
+}
+
+.c-comment__handle,
+.c-comment__via {
+	font-family: var(--font-mono);
+	font-size: 0.72rem;
+	color: var(--text-muted);
+	text-decoration: none;
+}
+
+a.c-comment__handle:hover,
+.c-comment__via:hover {
+	text-decoration: underline;
+}
+
+.c-comment__cw {
+	margin-bottom: var(--space-2);
+}
+
+.c-comment__cw > summary {
+	cursor: pointer;
+	font-size: 0.8rem;
+	color: var(--text-muted);
+}
+
+.c-comment__cw[open] > summary {
+	margin-bottom: var(--space-1);
+}
+
+.c-comment__attachments {
+	font-size: 0.78rem;
+	color: var(--text-muted);
+	margin-bottom: var(--space-2);
+}
+
 .c-comment__deleted {
 	font-size: 0.85rem;
 	font-style: italic;

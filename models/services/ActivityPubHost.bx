@@ -12,8 +12,12 @@
  * archived posts and posts scheduled for the future are all reported as not public, so
  * the module never serves, follows or delivers them. "Public" uses the same test as the
  * RSS feed: status = 'published' AND publish_date <= NOW().
+ *
+ * It also accepts public replies from the fediverse to those posts (IRemoteReplies),
+ * stored as comments by CommentService: held for approval until the replier has one
+ * approved comment, sanitized, and deleted when the author deletes them.
  */
-class implements="bxModules.bxactivitypub.contracts.IHostApp" {
+class implements="bxModules.bxactivitypub.contracts.IHostApp,bxModules.bxactivitypub.contracts.IRemoteReplies" {
 
 	function init(
 		required string siteUrl,
@@ -21,14 +25,16 @@ class implements="bxModules.bxactivitypub.contracts.IHostApp" {
 		required string authorUserId,
 		required postService,
 		required postRenderer,
-		required siteDefaults
+		required siteDefaults,
+		required commentService
 	){
 		variables.siteUrl      = reReplace( arguments.siteUrl, "/+$", "" );
 		variables.authorHandle = lCase( arguments.authorHandle );
 		variables.authorUserId = arguments.authorUserId;
 		variables.postService  = arguments.postService;
 		variables.postRenderer = arguments.postRenderer;
-		variables.siteDefaults = arguments.siteDefaults;
+		variables.siteDefaults   = arguments.siteDefaults;
+		variables.commentService = arguments.commentService;
 		return this;
 	}
 
@@ -100,6 +106,20 @@ class implements="bxModules.bxactivitypub.contracts.IHostApp" {
 			"url"       : variables.siteUrl & post.getPostUrl(),
 			"published" : post.getPublishDate()
 		};
+	}
+
+	// ── IRemoteReplies ─────────────────────────────────────────────────────
+
+	function acceptRemoteReply( required string postId, required string parentId, required struct reply ){
+		return variables.commentService.createRemoteComment( arguments.postId, arguments.parentId, arguments.reply );
+	}
+
+	void function updateRemoteReply( required string hostId, required struct reply ){
+		variables.commentService.updateRemoteComment( arguments.hostId, arguments.reply );
+	}
+
+	void function deleteRemoteReply( required string hostId ){
+		variables.commentService.deleteRemoteComment( arguments.hostId );
 	}
 
 	private boolean function isAuthorsPost( required string postId ){

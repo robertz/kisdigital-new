@@ -12,8 +12,21 @@
  * for long-form authored content; running public user input through it
  * would be a needless expansion of the security surface for a feature
  * where markdown was never asked for.
+ *
+ * The one exception is remote comments: replies from the fediverse
+ * (bx-activitypub, see ActivityPubHost.bx), which arrive as HTML and keep it.
+ * They have no User (user_id NULL, remote_* columns instead) and their body is
+ * sanitized once, at import, by sanitizeRemoteHtml(): paragraphs, line breaks,
+ * basic formatting and links (rel="nofollow") survive; scripts, event handlers,
+ * styles and images don't. See db/migrations/0019_add_remote_comments.sql.
  */
 class {
+
+	// Columns every thread node needs (see _toNode()); remote_* are NULL for local comments.
+	variables.NODE_COLUMNS = "C.id, C.parent_id, C.user_id, C.body, C.status, C.created,
+		C.remote_actor_url, C.remote_name, C.remote_handle, C.remote_profile_url, C.remote_url,
+		C.remote_summary, C.remote_sensitive, C.remote_attachment_count,
+		U.display_name, U.avatar_label, U.avatar_url";
 
 	/**
 	 * Fetches every comment for a post and flattens the thread into a
@@ -38,19 +51,11 @@ class {
 	 */
 	function getCommentThread( required string postId ){
 		var rows = queryExecute(
-			"SELECT
-				C.id,
-				C.parent_id,
-				C.user_id,
-				C.body,
-				C.status,
-				C.created,
-				U.display_name,
-				U.avatar_label,
-				U.avatar_url
+			"SELECT #variables.NODE_COLUMNS#
 			FROM Comment C
-			INNER JOIN User U ON U.id = C.user_id
+			LEFT JOIN User U ON U.id = C.user_id
 			WHERE C.post_id = :post_id
+				AND C.status <> 'pending'
 			ORDER BY C.created ASC",
 			{ "post_id": { value: arguments.postId, cfsqltype: "cf_sql_varchar" } },
 			{ returnType: "array" }
@@ -67,16 +72,7 @@ class {
 		var topLevelIds      = [];
 
 		for ( var row in rows ){
-			nodesById[ row.id ] = {
-				"id"          : row.id,
-				"displayName" : row.display_name,
-				"avatarUrl"   : row.avatar_url   ?: "",
-				"avatarLabel" : row.avatar_label ?: "",
-				"userId"      : row.user_id,
-				"body"        : row.status == "deleted" ? "" : row.body,
-				"isDeleted"   : row.status == "deleted",
-				"created"     : row.created
-			};
+			nodesById[ row.id ] = _toNode( row );
 		}
 
 		for ( var row in rows ){
@@ -126,19 +122,9 @@ class {
 	 */
 	function getComment( required string commentId ){
 		var rows = queryExecute(
-			"SELECT
-				C.id,
-				C.post_id,
-				C.parent_id,
-				C.user_id,
-				C.body,
-				C.status,
-				C.created,
-				U.display_name,
-				U.avatar_label,
-				U.avatar_url
+			"SELECT #variables.NODE_COLUMNS#, C.post_id
 			FROM Comment C
-			INNER JOIN User U ON U.id = C.user_id
+			LEFT JOIN User U ON U.id = C.user_id
 			WHERE C.id = :id
 			LIMIT 1",
 			{ "id": { value: arguments.commentId, cfsqltype: "cf_sql_varchar" } },
@@ -161,18 +147,10 @@ class {
 			parentId = parentRows[ 1 ].parent_id ?: "";
 		}
 
-		return {
-			"id"          : row.id,
-			"postId"      : row.post_id,
-			"displayName" : row.display_name,
-			"avatarUrl"   : row.avatar_url   ?: "",
-			"avatarLabel" : row.avatar_label ?: "",
-			"userId"      : row.user_id,
-			"body"        : row.status == "deleted" ? "" : row.body,
-			"isDeleted"   : row.status == "deleted",
-			"created"     : row.created,
-			"depth"       : depth
-		};
+		var node = _toNode( row );
+		node[ "postId" ] = row.post_id;
+		node[ "depth" ]  = depth;
+		return node;
 	}
 
 	/**
@@ -250,7 +228,7 @@ class {
 
 		if ( !rows.len() ) return false;
 
-		var isOwner = rows[ 1 ].user_id == arguments.userId;
+		var isOwner = ( rows[ 1 ].user_id ?: "" ) == arguments.userId;
 		if ( !isOwner && arguments.userRole != "admin" ) return false;
 
 		queryExecute(
@@ -262,11 +240,10 @@ class {
 	}
 
 	/**
-	 * Paginated, all-posts comment listing for /manage/comments — a stopgap
-	 * moderation view (no approve/spam workflow exists yet, see the migration's
-	 * status enum: 'visible'/'deleted' only) until something more purpose-built
-	 * replaces it. Newest first, joined out to the post title/slug and
-	 * commenter name so the admin table needs no further lookups per row.
+	 * Paginated, all-posts comment listing for /manage/comments. Remote replies
+	 * waiting for approval come first, then everything else newest first, joined
+	 * out to the post title/slug and commenter name so the admin table needs no
+	 * further lookups per row.
 	 *
 	 * @param {numeric} page     - 1-based page number.
 	 * @param {numeric} pageSize - Rows per page.
@@ -275,11 +252,12 @@ class {
 	function getManageComments( numeric page = 1, numeric pageSize = 20 ){
 		var offset = ( arguments.page - 1 ) * arguments.pageSize;
 
-		var total = queryExecute(
-			"SELECT COUNT(*) AS cnt FROM Comment",
+		var counts = queryExecute(
+			"SELECT COUNT(*) AS cnt, COALESCE(SUM(status = 'pending'), 0) AS pending FROM Comment",
 			{},
 			{ returnType: "array" }
-		)[ 1 ].cnt;
+		)[ 1 ];
+		var total = counts.cnt;
 
 		var rows = queryExecute(
 			"SELECT
@@ -290,15 +268,19 @@ class {
 				C.body,
 				C.status,
 				C.created,
+				C.remote_actor_url,
+				C.remote_name,
+				C.remote_handle,
+				C.remote_url,
 				U.display_name,
 				U.email,
 				P.title AS post_title,
 				P.slug AS post_slug,
 				P.publish_date AS post_publish_date
 			FROM Comment C
-			INNER JOIN User U ON U.id = C.user_id
+			LEFT JOIN User U ON U.id = C.user_id
 			INNER JOIN Post P ON P.id = C.post_id
-			ORDER BY C.created DESC
+			ORDER BY ( C.status = 'pending' ) DESC, C.created DESC
 			LIMIT :lim OFFSET :offset",
 			{
 				"lim"   : { value: arguments.pageSize, cfsqltype: "cf_sql_integer" },
@@ -319,18 +301,170 @@ class {
 						? "/posts/#year( row.post_publish_date )#/#numberFormat( month( row.post_publish_date ), '00' )#/#encodeForURL( row.post_slug )#"
 						: "/posts/#encodeForURL( row.post_slug )#",
 					"isReply"    : len( row.parent_id ?: "" ) > 0,
-					"authorName" : row.display_name,
-					"authorEmail": row.email,
-					"body"       : row.body,
+					"isRemote"   : len( row.remote_actor_url ?: "" ) > 0,
+					"authorName" : len( row.remote_actor_url ?: "" ) ? _remoteDisplayName( row ) : row.display_name,
+					// A remote author's handle stands where a local one's email does.
+					"authorEmail": len( row.remote_actor_url ?: "" ) ? ( row.remote_handle ?: "" ) : ( row.email ?: "" ),
+					"remoteUrl"  : row.remote_url ?: "",
+					// Remote bodies are HTML; the listing shows a plain-text preview.
+					"body"       : len( row.remote_actor_url ?: "" ) ? trim( reReplace( row.body, "<[^>]*>", " ", "all" ) ) : row.body,
 					"isDeleted"  : row.status == "deleted",
+					"isPending"  : row.status == "pending",
 					"created"    : row.created
 				};
 			} ),
 			"total"     : total,
+			"pending"   : counts.pending,
 			"page"      : arguments.page,
 			"pageSize"  : arguments.pageSize,
 			"totalPages": ceiling( max( total, 1 ) / arguments.pageSize )
 		};
+	}
+
+
+	// ── Remote comments (replies from the fediverse, via ActivityPubHost) ────
+
+	/**
+	 * Stores a reply from the fediverse. It publishes immediately if its author
+	 * already has an approved remote comment, otherwise it waits as 'pending'
+	 * for approval in /manage/comments.
+	 *
+	 * @param {string} postId   - The post replied to.
+	 * @param {string} parentId - The comment replied to, or "" for the post.
+	 * @param {struct} reply    - bx-activitypub's reply struct (see its
+	 *        contracts/IRemoteReplies.bx); contentHtml is untrusted.
+	 * @return {string} The new comment's id.
+	 */
+	function createRemoteComment( required string postId, required string parentId, required struct reply ){
+		var newId  = lCase( createGUID() );
+		var status = isTrustedRemoteAuthor( arguments.reply.author.actorUrl ) ? "visible" : "pending";
+		queryExecute(
+			"INSERT INTO Comment (id, post_id, parent_id, user_id, remote_actor_url, remote_name, remote_handle,
+				remote_profile_url, remote_object_url, remote_url, remote_summary, remote_sensitive,
+				remote_attachment_count, body, status, created)
+			VALUES (:id, :post_id, :parent_id, NULL, :actor, :name, :handle, :profile, :object, :url, :summary,
+				:sensitive, :attachments, :body, :status, :created)",
+			{
+				"id"          : { value: newId,                                       sqltype: "varchar" },
+				"post_id"     : { value: arguments.postId,                            sqltype: "varchar" },
+				"parent_id"   : { value: arguments.parentId,                          sqltype: "varchar", null: !len( arguments.parentId ) },
+				"actor"       : { value: arguments.reply.author.actorUrl,             sqltype: "varchar" },
+				"name"        : { value: left( arguments.reply.author.name, 255 ),    sqltype: "varchar" },
+				"handle"      : { value: left( arguments.reply.author.handle, 255 ),  sqltype: "varchar" },
+				"profile"     : { value: left( arguments.reply.author.profileUrl, 512 ), sqltype: "varchar" },
+				"object"      : { value: arguments.reply.objectUrl,                   sqltype: "varchar" },
+				"url"         : { value: left( arguments.reply.url, 512 ),            sqltype: "varchar" },
+				"summary"     : { value: left( arguments.reply.summary, 500 ),        sqltype: "varchar" },
+				"sensitive"   : { value: arguments.reply.sensitive ? 1 : 0,           sqltype: "bit" },
+				"attachments" : { value: arguments.reply.attachmentCount,             sqltype: "integer" },
+				"body"        : { value: sanitizeRemoteHtml( arguments.reply.contentHtml ), sqltype: "longvarchar" },
+				"status"      : { value: status,                                      sqltype: "varchar" },
+				"created"     : { value: arguments.reply.published,                   sqltype: "timestamp" }
+			}
+		);
+		return newId;
+	}
+
+	/**
+	 * Applies an author's edit to a remote comment; its status is unchanged.
+	 */
+	function updateRemoteComment( required string commentId, required struct reply ){
+		queryExecute(
+			"UPDATE Comment
+			SET body = :body, remote_summary = :summary, remote_sensitive = :sensitive,
+				remote_attachment_count = :attachments, remote_name = :name
+			WHERE id = :id AND remote_actor_url IS NOT NULL",
+			{
+				"id"          : { value: arguments.commentId,                  sqltype: "varchar" },
+				"body"        : { value: sanitizeRemoteHtml( arguments.reply.contentHtml ), sqltype: "longvarchar" },
+				"summary"     : { value: left( arguments.reply.summary, 500 ), sqltype: "varchar" },
+				"sensitive"   : { value: arguments.reply.sensitive ? 1 : 0,    sqltype: "bit" },
+				"attachments" : { value: arguments.reply.attachmentCount,      sqltype: "integer" },
+				"name"        : { value: left( arguments.reply.author.name, 255 ), sqltype: "varchar" }
+			}
+		);
+	}
+
+	/**
+	 * The author deleted a remote comment (or their account): soft delete, same
+	 * as a local comment, so replies to it keep their place in the thread.
+	 */
+	function deleteRemoteComment( required string commentId ){
+		queryExecute(
+			"UPDATE Comment SET status = 'deleted' WHERE id = :id AND remote_actor_url IS NOT NULL",
+			{ "id": { value: arguments.commentId, sqltype: "varchar" } }
+		);
+	}
+
+	/**
+	 * Publishes a pending comment. Approving one remote comment also makes its
+	 * author trusted: their later replies skip the queue.
+	 *
+	 * @return {boolean} True if a pending comment was approved.
+	 */
+	function approveComment( required string commentId ){
+		var result = {};
+		queryExecute(
+			"UPDATE Comment SET status = 'visible' WHERE id = :id AND status = 'pending'",
+			{ "id": { value: arguments.commentId, sqltype: "varchar" } },
+			{ result: "result" }
+		);
+		return ( result.recordCount ?: 0 ) > 0;
+	}
+
+	/**
+	 * Trust is derived, not stored: an author is trusted while they have at
+	 * least one approved (visible) remote comment. Deleting all of them removes it.
+	 */
+	boolean function isTrustedRemoteAuthor( required string actorUrl ){
+		return queryExecute(
+			"SELECT 1 FROM Comment WHERE remote_actor_url = :actor AND status = 'visible' LIMIT 1",
+			{ "actor": { value: arguments.actorUrl, sqltype: "varchar" } }
+		).recordCount > 0;
+	}
+
+	/**
+	 * Remote reply HTML as it may be stored and rendered: the OWASP Java HTML
+	 * Sanitizer (bx-esapi) with only BLOCKS + FORMATTING + LINKS. Not
+	 * sanitizeHTML()'s default policy: that one also allows <img> and style
+	 * attributes, and remote comments load no remote images.
+	 */
+	string function sanitizeRemoteHtml( required string html ){
+		if ( isNull( variables.remotePolicy ) ){
+			var sanitizers = createObject( "java", "org.owasp.html.Sanitizers", "bx-esapi" );
+			variables.remotePolicy = sanitizers.BLOCKS.and( sanitizers.FORMATTING ).and( sanitizers.LINKS );
+		}
+		return trim( sanitizeHTML( arguments.html, variables.remotePolicy ) );
+	}
+
+	// One thread node from a NODE_COLUMNS row, local or remote.
+	private struct function _toNode( required struct row ){
+		var isRemote = len( arguments.row.remote_actor_url ?: "" ) > 0;
+		var name     = isRemote ? _remoteDisplayName( arguments.row ) : arguments.row.display_name;
+		return {
+			"id"               : arguments.row.id,
+			"displayName"      : name,
+			// Remote authors get initials only: no remote images are loaded.
+			"avatarUrl"        : isRemote ? "" : ( arguments.row.avatar_url ?: "" ),
+			"avatarLabel"      : isRemote ? left( name, 1 ).uCase() : ( arguments.row.avatar_label ?: "" ),
+			"userId"           : arguments.row.user_id ?: "",
+			"body"             : arguments.row.status == "deleted" ? "" : arguments.row.body,
+			"isDeleted"        : arguments.row.status == "deleted",
+			"created"          : arguments.row.created,
+			"isRemote"         : isRemote,
+			"remoteHandle"     : arguments.row.remote_handle ?: "",
+			"remoteProfileUrl" : arguments.row.remote_profile_url ?: "",
+			"remoteUrl"        : arguments.row.remote_url ?: "",
+			"remoteHost"       : len( arguments.row.remote_url ?: "" ) ? lCase( createObject( "java", "java.net.URI" ).create( arguments.row.remote_url ).getHost() ?: "" ) : "",
+			"contentWarning"   : arguments.row.remote_sensitive || len( arguments.row.remote_summary ?: "" )
+				? ( len( arguments.row.remote_summary ?: "" ) ? arguments.row.remote_summary : "Sensitive content" )
+				: "",
+			"attachmentCount"  : arguments.row.remote_attachment_count ?: 0
+		};
+	}
+
+	private string function _remoteDisplayName( required struct row ){
+		return len( arguments.row.remote_name ?: "" ) ? arguments.row.remote_name : ( arguments.row.remote_handle ?: "" );
 	}
 
 }
