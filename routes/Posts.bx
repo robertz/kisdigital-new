@@ -9,12 +9,15 @@ class {
 	variables.botDetector    = "";
 	variables.commentService = "";
 
-	function init( required postService, required postRenderer, required siteDefaults, required commentService ){
+	// activityPub is bx-activitypub's facade, or null when federation is off (app.bxs);
+	// it only supplies like/boost counts for the post page.
+	function init( required postService, required postRenderer, required siteDefaults, required commentService, any activityPub ){
 		variables.postService    = arguments.postService;
 		variables.postRenderer   = arguments.postRenderer;
 		variables.siteDefaults   = arguments.siteDefaults;
 		variables.botDetector    = new models.util.BotDetector();
 		variables.commentService = arguments.commentService;
+		variables.activityPub    = arguments.activityPub ?: javacast( "null", "" );
 
 		this.router = boxExpressRouter();
 		// Needed so show() can render a comment form's CSRF field — the
@@ -134,6 +137,7 @@ class {
 			relatedPosts  : variables.postService.getRelatedPosts( post.getId(), post.getTags() ),
 			commentThread : variables.commentService.getCommentThread( post.getId() ),
 			commentCount  : variables.commentService.getCommentCount( post.getId() ),
+			reactions     : _reactionCounts( post.getId() ),
 			commentError  : flash.commentError ?: "",
 			currentUser   : _currentUser( req ),
 			csrfToken     : req.csrfToken()
@@ -199,6 +203,19 @@ class {
 			trendingPosts : variables.postService.getTrendingPosts(),
 			allTags       : variables.postService.getAllTags()
 		} );
+	}
+
+	// Likes and boosts from the fediverse. Never lets a federation problem break the page.
+	private struct function _reactionCounts( required string postId ){
+		if ( isNull( variables.activityPub ) ){
+			return { "likes": 0, "boosts": 0 };
+		}
+		try {
+			return variables.activityPub.reactionCounts( "post", arguments.postId );
+		} catch ( any e ){
+			println( "[activitypub] reaction counts failed for #arguments.postId#: #e.message#" );
+			return { "likes": 0, "boosts": 0 };
+		}
 	}
 
 }

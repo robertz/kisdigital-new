@@ -77,6 +77,15 @@
 							<span>
 								#( data.post.getViews() gte 1000 ? numberFormat( data.post.getViews() / 1000, "0.0" ) & "k" : data.post.getViews() )# views
 							</span>
+							<!--- Likes and boosts from the fediverse (bx-activitypub); shown only when there are some. --->
+							<bx:if data.reactions.likes gt 0>
+								<span class="c-post__meta-sep">&middot;</span>
+								<span title="Likes from the fediverse">#data.reactions.likes# #data.reactions.likes == 1 ? "like" : "likes"#</span>
+							</bx:if>
+							<bx:if data.reactions.boosts gt 0>
+								<span class="c-post__meta-sep">&middot;</span>
+								<span title="Boosts from the fediverse">#data.reactions.boosts# #data.reactions.boosts == 1 ? "boost" : "boosts"#</span>
+							</bx:if>
 						</div>
 
 					</header>
