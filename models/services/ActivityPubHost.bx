@@ -106,7 +106,11 @@ class implements="bxModules.bxactivitypub.contracts.IHostApp,bxModules.bxactivit
 			"summary"   : post.getDescription(),
 			"content"   : absolutizeLinks( variables.postRenderer.render( post.getBody() ) ),
 			"url"       : variables.siteUrl & post.getPostUrl(),
-			"published" : post.getPublishDate()
+			"published" : post.getPublishDate(),
+			// Sent as hashtags, so posts show up in Mastodon's hashtag timelines.
+			"tags"      : post.getTags().map( ( tag ) => {
+				return { "name": tag, "url": variables.siteUrl & "/tag/" & encodeForURL( tag ) };
+			} )
 		};
 	}
 
