@@ -139,6 +139,7 @@ class {
 			commentCount  : variables.commentService.getCommentCount( post.getId() ),
 			reactions     : _reactionCounts( post.getId() ),
 			commentError  : flash.commentError ?: "",
+			commentNotice : flash.commentNotice ?: "",
 			currentUser   : _currentUser( req ),
 			csrfToken     : req.csrfToken()
 		} );

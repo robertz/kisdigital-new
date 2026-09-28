@@ -16,6 +16,12 @@
  * It also accepts public replies from the fediverse to those posts (IRemoteReplies),
  * stored as comments by CommentService: held for approval until the replier has one
  * approved comment, sanitized, and deleted when the author deletes them.
+ *
+ * And it replies back: local comments are "comment" objects, all sent from the same
+ * account. The module only sends those that answer something on the fediverse; this
+ * class decides which are public (visible, local, on a public post) and attributes
+ * everyone but the blog's author by name ("<strong>Jane:</strong> ..."), since they all
+ * speak through @blog.
  */
 class implements="bxModules.bxactivitypub.contracts.IHostApp,bxModules.bxactivitypub.contracts.IRemoteReplies" {
 
@@ -70,6 +76,10 @@ class implements="bxModules.bxactivitypub.contracts.IHostApp,bxModules.bxactivit
 				}
 			).recordCount > 0;
 		}
+		if ( arguments.type == "comment" ){
+			var comment = variables.commentService.getFederationComment( arguments.id );
+			return !isNull( comment ) && comment.status == "visible" && isPublic( "post", comment.post_id );
+		}
 		if ( arguments.type == "post" ){
 			return queryExecute(
 				"SELECT 1
@@ -93,6 +103,9 @@ class implements="bxModules.bxactivitypub.contracts.IHostApp,bxModules.bxactivit
 	 * gate). Posts by anyone other than the configured author don't exist here.
 	 */
 	function getObject( required string type, required string id ){
+		if ( arguments.type == "comment" ){
+			return getComment( arguments.id );
+		}
 		if ( arguments.type != "post" || !isAuthorsPost( arguments.id ) ){
 			return javacast( "null", "" );
 		}
@@ -126,6 +139,42 @@ class implements="bxModules.bxactivitypub.contracts.IHostApp,bxModules.bxactivit
 
 	void function deleteRemoteReply( required string hostId ){
 		variables.commentService.deleteRemoteComment( arguments.hostId );
+	}
+
+	private function getComment( required string commentId ){
+		var comment = variables.commentService.getFederationComment( arguments.commentId );
+		if ( isNull( comment ) || !isAuthorsPost( comment.post_id ) ){
+			return javacast( "null", "" );
+		}
+		var post = variables.postService.getPostById( comment.post_id );
+		if ( !post.exists() ){
+			return javacast( "null", "" );
+		}
+		var byline = comment.user_id == variables.authorUserId ? "" : "<strong>#escapeHtml( comment.display_name )#:</strong> ";
+		return {
+			"author"    : variables.authorHandle,
+			"postId"    : comment.post_id,
+			"parentId"  : comment.parent_id ?: "",
+			"content"   : plainTextToHtml( comment.body, byline ),
+			"url"       : variables.siteUrl & post.getPostUrl() & "##comment-" & comment.id,
+			"published" : comment.created
+		};
+	}
+
+	/**
+	 * Comments are plain text: blank lines separate paragraphs, single newlines are
+	 * line breaks. prefix (HTML) starts the first paragraph.
+	 */
+	private string function plainTextToHtml( required string text, string prefix = "" ){
+		var paragraphs = reMatch( "[^\n]+(\n[^\n]+)*", reReplace( trim( arguments.text ), "\r\n?", char( 10 ), "all" ) )
+			.map( ( paragraph ) => "<p>" & escapeHtml( trim( paragraph ) ).replace( char( 10 ), "<br>", "all" ) & "</p>" );
+		var html = paragraphs.toList( "" );
+		return len( arguments.prefix ) ? "<p>" & arguments.prefix & mid( html, 4, len( html ) ) : html;
+	}
+
+	// encodeForHTML() also escapes "/" and ":", which garbles URLs people paste.
+	private string function escapeHtml( required string value ){
+		return arguments.value.replace( "&", "&amp;", "all" ).replace( "<", "&lt;", "all" ).replace( ">", "&gt;", "all" ).replace( '"', "&quot;", "all" );
 	}
 
 	private boolean function isAuthorsPost( required string postId ){

@@ -446,6 +446,15 @@
 	font-size: 0.875rem;
 }
 
+.c-comment-form__notice {
+	margin-bottom: var(--space-5);
+	padding: 10px var(--space-4);
+	border: 1px solid var(--ui-border-subtle);
+	border-radius: var(--ui-radius-sm);
+	color: var(--text-muted);
+	font-size: 0.875rem;
+}
+
 /* ── Comment thread ── */
 
 .c-comment-list {
@@ -549,7 +558,8 @@
 }
 
 .c-comment__handle,
-.c-comment__via {
+.c-comment__via,
+.c-comment__pending {
 	font-family: var(--font-mono);
 	font-size: 0.72rem;
 	color: var(--text-muted);

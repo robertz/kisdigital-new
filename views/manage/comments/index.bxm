@@ -25,7 +25,7 @@
 						<span class="c-manage-header__count">#numberFormat( data.paging.total )#</span>
 					</h1>
 					<p class="c-manage-header__sub">
-						All comments across every post, newest first. Replies from the fediverse wait here as pending until you approve one from that account; after that, the account's replies publish immediately.
+						All comments across every post, newest first. Replies from the fediverse wait here as pending until you approve one from that account; after that, the account's replies publish immediately. Replies by anyone else in a fediverse thread also wait here: once approved, they go out to the fediverse as the blog's account.
 						<bx:if data.paging.pending gt 0><strong>#numberFormat( data.paging.pending )# pending.</strong></bx:if>
 					</p>
 				</div>
@@ -93,7 +93,7 @@
 												<form method="post" action="/manage/comments/#encodeForURL( comment.id )#/approve">
 													<input type="hidden" name="_csrf" value="#encodeForHTMLAttribute( data.csrfToken )#">
 													<input type="hidden" name="page" value="#data.paging.page#">
-													<button type="submit" class="c-manage-table__icon-btn" title="Approve (and trust this account from now on)">
+													<button type="submit" class="c-manage-table__icon-btn" title="#comment.isRemote ? 'Approve (and trust this account from now on)' : 'Approve (and send it to the fediverse as the blog)'#">
 														<i class="bi bi-check-lg"></i>
 													</button>
 												</form>

@@ -19,8 +19,19 @@
  * sanitized once, at import, by sanitizeRemoteHtml(): paragraphs, line breaks,
  * basic formatting and links (rel="nofollow") survive; scripts, event handlers,
  * styles and images don't. See db/migrations/0019_add_remote_comments.sql.
+ *
+ * Local replies in a thread with a fediverse commenter go back out to the
+ * fediverse as the blog's account (bx-activitypub's syncComment(), wired up
+ * with holdFediverseReplies() and onChange() in app.bxs). Because they go out
+ * under @blog's name, anyone but the blog's author is held as 'pending' there
+ * until approved in /manage/comments; the author's own replies go straight out.
  */
 class {
+
+	// Set by holdFediverseReplies(): replies in fediverse threads by anyone
+	// else wait for approval. "" = federation off, nothing is held.
+	variables.fediverseAuthorId = "";
+	variables.changeListeners   = [];
 
 	// Columns every thread node needs (see _toNode()); remote_* are NULL for local comments.
 	variables.NODE_COLUMNS = "C.id, C.parent_id, C.user_id, C.body, C.status, C.created,
@@ -176,7 +187,8 @@ class {
 	 *        commenter, author, or admin can all comment).
 	 * @param {string} body     - Comment text, trimmed. Rejected if empty
 	 *        or over 5000 characters after trimming.
-	 * @return {string} The new comment's id.
+	 * @return {string} The new comment's id. It may be stored 'pending' (see
+	 *         holdFediverseReplies()); getComment() says so with isPending.
 	 * @throws {CommentValidationError} if body is empty or too long.
 	 */
 	function createComment( required string postId, string parentId = "", required string userId, required string body ){
@@ -188,20 +200,26 @@ class {
 			throw( type: "CommentValidationError", message: "Comment is too long (5000 characters max)." );
 		}
 
-		var newId = createGUID();
+		var newId  = createGUID();
+		var status = len( variables.fediverseAuthorId )
+			&& arguments.userId != variables.fediverseAuthorId
+			&& hasRemoteAncestor( arguments.parentId )
+			? "pending" : "visible";
 
 		queryExecute(
-			"INSERT INTO Comment (id, post_id, parent_id, user_id, body)
-			VALUES (:id, :post_id, :parent_id, :user_id, :body)",
+			"INSERT INTO Comment (id, post_id, parent_id, user_id, body, status)
+			VALUES (:id, :post_id, :parent_id, :user_id, :body, :status)",
 			{
 				"id"       : { value: newId,                    cfsqltype: "cf_sql_varchar" },
 				"post_id"  : { value: arguments.postId,          cfsqltype: "cf_sql_varchar" },
 				"parent_id": { value: arguments.parentId,        cfsqltype: "cf_sql_varchar", null: !len( trim( arguments.parentId ) ) },
 				"user_id"  : { value: arguments.userId,          cfsqltype: "cf_sql_varchar" },
-				"body"     : { value: trimmedBody,               cfsqltype: "cf_sql_longvarchar" }
+				"body"     : { value: trimmedBody,               cfsqltype: "cf_sql_longvarchar" },
+				"status"   : { value: status,                    cfsqltype: "cf_sql_varchar" }
 			}
 		);
 
+		_changed( newId );
 		return newId;
 	}
 
@@ -236,6 +254,7 @@ class {
 			{ "id": { value: arguments.commentId, cfsqltype: "cf_sql_varchar" } }
 		);
 
+		_changed( arguments.commentId );
 		return true;
 	}
 
@@ -409,7 +428,87 @@ class {
 			{ "id": { value: arguments.commentId, sqltype: "varchar" } },
 			{ result: "result" }
 		);
-		return ( result.recordCount ?: 0 ) > 0;
+		var approved = ( result.recordCount ?: 0 ) > 0;
+		if ( approved ) _changed( arguments.commentId );
+		return approved;
+	}
+
+	// ── Replying back to the fediverse ───────────────────────────────────────
+
+	/**
+	 * Turns on the approval hold: from now on a reply in a thread with a
+	 * fediverse commenter, by anyone but authorUserId, is stored 'pending'.
+	 */
+	function holdFediverseReplies( required string authorUserId ){
+		variables.fediverseAuthorId = arguments.authorUserId;
+	}
+
+	/**
+	 * callback( commentId ) runs after a comment is created, deleted or
+	 * approved. A failing listener never fails the comment action itself.
+	 */
+	function onChange( required any callback ){
+		variables.changeListeners.append( arguments.callback );
+	}
+
+	/**
+	 * Whether commentId, or any comment above it, came from the fediverse.
+	 */
+	boolean function hasRemoteAncestor( required string commentId ){
+		var currentId = arguments.commentId;
+		while ( len( currentId ) ){
+			var rows = queryExecute(
+				"SELECT parent_id, remote_actor_url FROM Comment WHERE id = :id LIMIT 1",
+				{ "id": { value: currentId, sqltype: "varchar" } },
+				{ returnType: "array" }
+			);
+			if ( !rows.len() ) return false;
+			if ( len( rows[ 1 ].remote_actor_url ?: "" ) ) return true;
+			currentId = rows[ 1 ].parent_id ?: "";
+		}
+		return false;
+	}
+
+	/**
+	 * A local comment as it goes out to the fediverse, whatever its status
+	 * (ActivityPubHost.isPublic() is the gate), or null for a remote or
+	 * unknown one. body is plain text; the author's display name comes along
+	 * for attribution.
+	 */
+	function getFederationComment( required string commentId ){
+		var rows = queryExecute(
+			"SELECT C.id, C.post_id, C.parent_id, C.user_id, C.body, C.status, C.created, U.display_name
+			FROM Comment C
+			INNER JOIN User U ON U.id = C.user_id
+			WHERE C.id = :id AND C.remote_actor_url IS NULL
+			LIMIT 1",
+			{ "id": { value: arguments.commentId, sqltype: "varchar" } },
+			{ returnType: "array" }
+		);
+		return rows.len() ? rows[ 1 ] : javacast( "null", "" );
+	}
+
+	/**
+	 * Local replies created since `since`, for the federation sweep to catch
+	 * anything a change listener missed.
+	 */
+	array function recentLocalReplyIds( required date since ){
+		return queryExecute(
+			"SELECT id FROM Comment
+			WHERE remote_actor_url IS NULL AND parent_id IS NOT NULL AND created >= :since",
+			{ "since": { value: arguments.since, sqltype: "timestamp" } },
+			{ returnType: "array" }
+		).map( ( row ) => row.id );
+	}
+
+	private void function _changed( required string commentId ){
+		for ( var listener in variables.changeListeners ){
+			try {
+				listener( arguments.commentId );
+			} catch ( any e ){
+				writeLog( text = "comment #arguments.commentId# change listener failed: #e.message#", type = "error", log = "activitypub" );
+			}
+		}
 	}
 
 	/**
@@ -450,6 +549,7 @@ class {
 			"userId"           : arguments.row.user_id ?: "",
 			"body"             : arguments.row.status == "deleted" ? "" : arguments.row.body,
 			"isDeleted"        : arguments.row.status == "deleted",
+			"isPending"        : arguments.row.status == "pending",
 			"created"          : arguments.row.created,
 			"isRemote"         : isRemote,
 			"remoteHandle"     : arguments.row.remote_handle ?: "",

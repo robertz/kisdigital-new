@@ -8,6 +8,10 @@
  *   - every post already on the fediverse, so edits go out as Update, and unpublishing
  *     or deleting goes out as Delete.
  *   - the account's profile, which goes out as Update{Person} when it changes.
+ *   - local replies since ACTIVITYPUB_SINCE and every comment already on the fediverse.
+ *     CommentService's change listener sends them as they happen; this catches any
+ *     it missed (a failed send, a restart). syncComment() only sends replies in
+ *     fediverse threads.
  *
  * ACTIVITYPUB_SINCE is the cutoff: older posts never federate on their own. They would
  * arrive backdated (Mastodon files a post under its publish date) and a backfill would
@@ -16,11 +20,12 @@
  */
 class {
 
-	function init( required activityPub, required string authorUserId, required string handle, required date since ){
+	function init( required activityPub, required string authorUserId, required string handle, required date since, required commentService ){
 		variables.activityPub  = arguments.activityPub;
 		variables.authorUserId = arguments.authorUserId;
 		variables.handle       = arguments.handle;
-		variables.since        = arguments.since;
+		variables.since          = arguments.since;
+		variables.commentService = arguments.commentService;
 		return this;
 	}
 
@@ -35,6 +40,14 @@ class {
 			} catch ( any e ){
 				counts.error++;
 				writeLog( text = "sweep: post #postId# failed: #e.message#", type = "error", log = "activitypub" );
+			}
+		}
+		for ( var commentId in candidateCommentIds() ){
+			try {
+				counts[ variables.activityPub.syncComment( commentId ).action ]++;
+			} catch ( any e ){
+				counts.error++;
+				writeLog( text = "sweep: comment #commentId# failed: #e.message#", type = "error", log = "activitypub" );
 			}
 		}
 		try {
@@ -62,6 +75,16 @@ class {
 			{ returnType: "array" }
 		).map( ( row ) => row.id );
 		for ( var federatedId in variables.activityPub.federatedPostIds() ){
+			if ( !ids.findNoCase( federatedId ) ){
+				ids.append( federatedId );
+			}
+		}
+		return ids;
+	}
+
+	private array function candidateCommentIds(){
+		var ids = variables.commentService.recentLocalReplyIds( variables.since );
+		for ( var federatedId in variables.activityPub.federatedCommentIds() ){
 			if ( !ids.findNoCase( federatedId ) ){
 				ids.append( federatedId );
 			}

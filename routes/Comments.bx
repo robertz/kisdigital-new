@@ -81,6 +81,13 @@ class {
 				return;
 			}
 
+			// Held for approval (a reply in a fediverse thread, see CommentService.
+			// holdFediverseReplies()): it isn't in the thread yet, so say where it went.
+			if ( variables.commentService.getComment( newId ).isPending ){
+				flashSet( req, { commentNotice: "Thanks! Your reply goes out to the fediverse, so it will appear once it's approved." } );
+				res.redirect( redirectTo & "##comments" );
+				return;
+			}
 			res.redirect( redirectTo & "##comment-" & newId );
 		} catch ( CommentValidationError e ){
 			if ( ajax ){

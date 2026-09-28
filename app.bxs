@@ -194,13 +194,19 @@ if ( getSystemSetting( "ACTIVITYPUB_ENABLED", "false" ) == "true" ){
 	)
 	new bxModules.bxactivitypub.adapters.express().mount( app, activityPub )
 
+	// Replying back: local replies in fediverse threads go out as @blog as soon as
+	// they're posted, approved or deleted; anyone but the author waits for approval.
+	commentService.holdFediverseReplies( getSystemSetting( "ACTIVITYPUB_AUTHOR_ID" ) )
+	commentService.onChange( ( commentId ) => activityPub.syncComment( commentId ) )
+
 	activityPubSince = getSystemSetting( "ACTIVITYPUB_SINCE", "" )
 	if ( isDate( activityPubSince ) ){
 		activityPubSweep = new models.services.ActivityPubSweep(
 			activityPub,
 			getSystemSetting( "ACTIVITYPUB_AUTHOR_ID" ),
 			getSystemSetting( "ACTIVITYPUB_HANDLE" ),
-			parseDateTime( activityPubSince )
+			parseDateTime( activityPubSince ),
+			commentService
 		)
 		app.schedule( 2 * 60 * 1000, () => activityPubSweep.run(), { name: "activitypub-sweep", immediate: true } )
 	} else {

@@ -39,6 +39,9 @@
 						</bx:if>
 					</bx:if>
 					<time datetime="#encodeForHTMLAttribute( dateTimeFormat( comment.created, "yyyy-mm-dd'T'HH:nn:ss'Z'" ) )#" data-local-time data-local-format="relative">#dateFormat( comment.created, "mmm d, yyyy" )#</time>
+					<bx:if comment.isPending ?: false>
+						<span class="c-comment__pending">awaiting approval</span>
+					</bx:if>
 					<bx:if comment.isRemote && len( comment.remoteUrl )>
 						<a class="c-comment__via" href="#encodeForHTMLAttribute( comment.remoteUrl )#" rel="nofollow ugc noopener" target="_blank">via #encodeForHTML( comment.remoteHost )#</a>
 					</bx:if>

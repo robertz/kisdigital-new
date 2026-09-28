@@ -130,11 +130,14 @@
 
 				</article>
 
-				<section class="c-comments">
+				<section class="c-comments" id="comments">
 					<p class="section-label mb-4" data-comment-count-label>Comments#( data.commentCount ? " (" & data.commentCount & ")" : "" )#</p>
 
 					<bx:if len( data.commentError ?: "" )>
 						<div class="c-comment-form__error" role="alert">#encodeForHTML( data.commentError )#</div>
+					</bx:if>
+					<bx:if len( data.commentNotice ?: "" )>
+						<div class="c-comment-form__notice" role="status">#encodeForHTML( data.commentNotice )#</div>
 					</bx:if>
 
 					<bx:if !isNull( data.currentUser )>

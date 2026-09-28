@@ -1,0 +1,30 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "ActivityPubHost", function(){
+
+			describe( "plainTextToHtml()", function(){
+
+				beforeEach( function(){
+					variables.host = new models.services.ActivityPubHost( "https://example.com", "blog", "author-id", {}, {}, {}, {} )
+					makePublic( host, "plainTextToHtml" )
+				} )
+
+				it( "makes paragraphs from blank lines and line breaks from single newlines", function(){
+					expect( host.plainTextToHtml( "one#char( 13 )##char( 10 )#two#char( 10 )##char( 10 )##char( 10 )#three" ) ).toBe( "<p>one<br>two</p><p>three</p>" )
+				} )
+
+				it( "escapes markup but leaves URLs readable", function(){
+					expect( host.plainTextToHtml( '<b>hi</b> & "see" https://example.com/a?b=1' ) ).toBe( "<p>&lt;b&gt;hi&lt;/b&gt; &amp; &quot;see&quot; https://example.com/a?b=1</p>" )
+				} )
+
+				it( "starts the first paragraph with the attribution", function(){
+					expect( host.plainTextToHtml( "hello#char( 10 )##char( 10 )#there", "<strong>Jane:</strong> " ) ).toBe( "<p><strong>Jane:</strong> hello</p><p>there</p>" )
+				} )
+
+			} )
+
+		} )
+	}
+
+}
