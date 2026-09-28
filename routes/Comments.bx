@@ -130,7 +130,9 @@ class {
 		var data    = { "currentUser": _currentUser( req ), "csrfToken": req.csrfToken(), "post": { "getId": () => postId, "getPostUrl": () => postUrl } };
 		var comment = arguments.comment;
 		var output  = "";
-		var templatePath = expandPath( "../views/partials/commentThread.bxm" );
+		// expandPath() resolves from the app root, not this file's directory (same as
+		// routes/Projects.bx) — "../views" pointed one level above the app.
+		var templatePath = expandPath( "./views/partials/commentThread.bxm" );
 		bx:savecontent variable="output" {
 			include "#templatePath#";
 		}
