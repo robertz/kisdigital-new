@@ -22,7 +22,7 @@ host = new models.services.ActivityPubHost(
 	new models.util.SiteDefaults( getSystemSetting( "SITEURL" ) ),
 	new models.services.CommentService()
 )
-activityPub = new bxModules.bxactivitypub.models.ActivityPub( host = host, settings = { datasource: "chron" } )
+activityPub = new bxModules.bxactivitypub.models.ActivityPub( host = host )
 
 try {
 	println( jsonSerialize( activityPub.publishPost( postId ) ) )

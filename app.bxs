@@ -176,12 +176,14 @@ if ( app.getSetting( "env" ) == "production" ){
 // installed never touches it. Mounted ahead of the page routes: its /u/:name
 // and /post/:id routes answer only requests asking for ActivityPub JSON and
 // redirect or next() everything else. The module's Ap* tables live in chron
-// (db/migrations/0017). The sweep (ActivityPubSweep.bx) is what sends posts,
-// edits and deletions; it stays off until ACTIVITYPUB_SINCE, its cutoff, is
-// set, so switching federation on never backfills old posts by accident.
+// (db/migrations/0017), set as its datasource in boxlang.json (modules.
+// bxactivitypub.settings). The sweep (ActivityPubSweep.bx) is what sends
+// posts, edits and deletions; it stays off until ACTIVITYPUB_SINCE, its
+// cutoff, is set, so switching federation on never backfills old posts by
+// accident.
 if ( getSystemSetting( "ACTIVITYPUB_ENABLED", "false" ) == "true" ){
 	activityPub = new bxModules.bxactivitypub.models.ActivityPub(
-		host     = new models.services.ActivityPubHost(
+		host = new models.services.ActivityPubHost(
 			getSystemSetting( "SITEURL", "https://kisdigital.com" ),
 			getSystemSetting( "ACTIVITYPUB_HANDLE" ),
 			getSystemSetting( "ACTIVITYPUB_AUTHOR_ID" ),
@@ -189,8 +191,7 @@ if ( getSystemSetting( "ACTIVITYPUB_ENABLED", "false" ) == "true" ){
 			postRenderer,
 			siteDefaults,
 			commentService
-		),
-		settings = { datasource: "chron" }
+		)
 	)
 	new bxModules.bxactivitypub.adapters.express().mount( app, activityPub )
 

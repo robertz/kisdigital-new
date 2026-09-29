@@ -48,5 +48,12 @@
 				"reapFrequency": 300
 			}
 		}
+	},
+	"modules": {
+		"bxactivitypub": {
+			"settings": {
+				"datasource": "chron"
+			}
+		}
 	}
 }

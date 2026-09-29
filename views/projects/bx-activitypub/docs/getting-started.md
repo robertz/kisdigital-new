@@ -105,7 +105,7 @@ class implements="bxModules.bxactivitypub.contracts.IHostApp" {
 ```bxs
 app  = boxExpress()
 host = new MyHost()
-ap   = new bxModules.bxactivitypub.models.ActivityPub( host = host, settings = { datasource : "mydb" } )
+ap   = new bxModules.bxactivitypub.models.ActivityPub( host = host )
 
 // Routes (WebFinger, actors, inboxes, posts, NodeInfo) and the delivery worker.
 new bxModules.bxactivitypub.adapters.express().mount( app, ap )
@@ -134,6 +134,11 @@ app.listen( 3000 )
             "port": "3306",
             "database": "mydb",
             "username": "root"
+        }
+    },
+    "modules": {
+        "bxactivitypub": {
+            "settings": { "datasource": "mydb" }
         }
     },
     "logging": {
