@@ -13,6 +13,7 @@ Mount it before your own routes. Account and post routes answer ActivityPub requ
 | Option | Default | |
 |---|---|---|
 | `maxInboxBytes` | `262144` | Largest inbox POST body accepted |
+| `inboxRateLimit` | `120` | Inbox POSTs allowed per client IP per minute; `0` for no limit. Keys on `req.ip`, so behind a proxy set `trust proxy` or `trust proxy header` first |
 | `deliveryIntervalMs` | `5000` | How often the delivery worker runs. `0` to schedule it yourself with `ap.processDeliveries()` |
 | `threadIntervalMs` | `1800000` | How often [whole threads](/projects/bx-activitypub/docs/replies#whole-threads) are fetched (30 minutes). `0` to schedule it yourself with `ap.fetchThreads()` |
 
