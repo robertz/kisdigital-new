@@ -15,7 +15,9 @@
  *
  * It also accepts public replies from the fediverse to those posts (IRemoteReplies),
  * stored as comments by CommentService: held for approval until the replier has one
- * approved comment, sanitized, and deleted when the author deletes them.
+ * approved comment, sanitized, and deleted when the author deletes them. Since 0.6.0 the
+ * module also fetches replies further down those threads that never mention @blog; they
+ * arrive through the same acceptRemoteReply() and are moderated the same way.
  *
  * And it replies back: local comments are "comment" objects, all sent from the same
  * account. The module only sends those that answer something on the fediverse; this
