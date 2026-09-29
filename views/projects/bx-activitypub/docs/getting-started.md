@@ -32,6 +32,7 @@ Run each upgrade script once, in order, for every version you're moving past:
 | 0.1.x | `sql/upgrade-0.2.0.sql` |
 | anything before 0.4.0 | `sql/upgrade-0.4.0.sql` |
 | anything before 0.5.0 | `sql/upgrade-0.5.0.sql` |
+| anything before 0.6.0 | `sql/upgrade-0.6.0.sql` |
 
 ## How it fits together
 

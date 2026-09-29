@@ -14,6 +14,7 @@ Mount it before your own routes. Account and post routes answer ActivityPub requ
 |---|---|---|
 | `maxInboxBytes` | `262144` | Largest inbox POST body accepted |
 | `deliveryIntervalMs` | `5000` | How often the delivery worker runs. `0` to schedule it yourself with `ap.processDeliveries()` |
+| `threadIntervalMs` | `1800000` | How often [whole threads](/projects/bx-activitypub/docs/replies#whole-threads) are fetched (30 minutes). `0` to schedule it yourself with `ap.fetchThreads()` |
 
 ## Routes
 
@@ -44,3 +45,7 @@ Passed to `new ActivityPub( host, settings )`:
 | `httpTimeoutSeconds` | `10` | Outgoing connect and request timeout |
 | `userAgent` | `bx-activitypub/{version} (+{baseUrl})` | Outgoing `User-Agent` |
 | `softwareName`, `softwareVersion` | `bx-activitypub`, module version | Reported in NodeInfo |
+| `threadMaxPostAgeDays` | `30` | Posts older than this aren't followed by `fetchThreads()` |
+| `threadMaxDepth` | `3` | Levels below a delivered reply that `fetchThreads()` follows |
+| `threadMaxNewPerRun` | `50` | New replies fetched per `fetchThreads()` run |
+| `threadWalkMinutes` | `30` | How often each reply's replies are re-read |

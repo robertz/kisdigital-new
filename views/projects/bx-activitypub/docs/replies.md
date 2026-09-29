@@ -8,6 +8,14 @@ Implement [`IRemoteReplies`](/projects/bx-activitypub/docs/host-contract#iremote
 
 Where a reply lands, and whether it shows straight away, is up to your app.
 
+## Whole threads
+
+A reply to someone else's reply only reaches you if it mentions your account. To fill in the rest of the conversation, `ap.fetchThreads()` (the express adapter runs it every 30 minutes) reads the `replies` collection of each reply you accepted and fetches the ones you don't have yet, each from its own server. They arrive through `acceptRemoteReply()` under the same rules as delivered replies: public only, and your moderation.
+
+It follows threads for posts up to 30 days old, up to 3 levels below a delivered reply, and fetches at most 50 new replies per run. A server that fails is skipped and retried later.
+
+Deletions of fetched replies aren't delivered to you. When a fetched reply disappears from its parent's collection and its server answers 404 or 410, it's removed through `deleteRemoteReply()`. Edits to fetched replies aren't picked up.
+
 ## Replying back
 
 `ap.syncComment( id )` does for a comment what `syncPost` does for a post: `Create`, `Update` (content changed) or `Delete`, sent as a `Note` from its author's account. It needs `getObject( "comment", id )` in your host.
