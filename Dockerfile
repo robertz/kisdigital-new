@@ -44,8 +44,9 @@ WORKDIR $APP_DIR
 # install-bx-module looks for its helper scripts relative to BOXLANG_INSTALL_HOME
 # (or BVM_HOME) — the image ships them at /usr/local/boxlang/scripts/helpers/
 # but doesn't set either variable itself, so install-bx-module fails with
-# "Helper scripts not found" until this is set.
-ENV BOXLANG_INSTALL_HOME=/usr/local/boxlang
+# "Helper scripts not found" until this is set. ARG, not ENV, like
+# BOXLANG_MODULES below: see the note there.
+ARG BOXLANG_INSTALL_HOME=/usr/local/boxlang
 
 # The base image bakes a sample site into /app (403.html, index.bxm, a logo)
 # — clear it so nothing shadows this app's own files or confuses BoxLang's
@@ -72,7 +73,15 @@ RUN rm -rf /app/* /app/.[!.]*
 # bx-activitypub installs as boxlang_modules/bx-activitypub; the app references it as
 # bxModules.bxactivitypub (its declared moduleName), which is also what the local-dev
 # symlink boxlang_modules/bxactivitypub resolves to. Inert unless ACTIVITYPUB_ENABLED=true.
-ENV BOXLANG_MODULES=boxlang-express,bx-mysql,bx-markdown,bx-password-encrypt,bx-esapi,bx-compat-cfml,bx-activitypub
+#
+# ARG, not ENV: with any BOXLANG_* environment variable set at runtime,
+# BoxLang (1.17.3 and 1.17.6, at least) drops the "modules" block from
+# --bx-config's boxlang.json, so every module loses its settings there —
+# bx-activitypub then has no datasource and the app fails at startup.
+# BOXLANG_MODULES also maps onto the "modules" key directly ("not a JSON
+# Object, ignoring it"). Both are only needed by install-bx-module below, and
+# ARGs are visible to RUN without reaching the running container.
+ARG BOXLANG_MODULES=boxlang-express,bx-mysql,bx-markdown,bx-password-encrypt,bx-esapi,bx-compat-cfml,bx-activitypub
 
 # install-bx-module always resolves "latest" from ForgeBox, but this RUN
 # line's own content never changes — so both local Docker and DigitalOcean
