@@ -7,9 +7,9 @@
 
 .c-projects-hero__title {
 	font-size: clamp(1.9rem, 4vw, 2.75rem);
-	font-weight: 800;
+	font-weight: 600;
 	line-height: 1.15;
-	letter-spacing: -0.025em;
+	letter-spacing: -0.02em;
 	color: var(--post-anchor);
 	margin-bottom: var(--space-4);
 }
@@ -94,9 +94,9 @@
 
 .c-project-hero__title {
 	font-size: clamp(1.9rem, 4vw, 2.75rem);
-	font-weight: 800;
+	font-weight: 600;
 	line-height: 1.15;
-	letter-spacing: -0.025em;
+	letter-spacing: -0.02em;
 	color: var(--post-anchor);
 	margin-bottom: var(--space-4);
 }

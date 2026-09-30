@@ -123,6 +123,48 @@ class accessors="true" {
 	}
 
 	/**
+	 * The single tag cards and list rows label this post with. A `preferred`
+	 * tag the post carries wins (the home page passes its section's tag so
+	 * labels match the section); otherwise the highest-ranked topic tag;
+	 * otherwise the first tag.
+	 *
+	 * @param {string} preferred - Tag to use when the post has it.
+	 * @return {string} Empty when the post has no tags.
+	 */
+	function getPrimaryTag( string preferred = "" ){
+		var postTags = getTags();
+		if ( !postTags.len() ) return "";
+
+		var ranked = len( arguments.preferred ) ? [ arguments.preferred ] : [];
+		ranked.append( [ "boxlang", "cfml", "commandbox", "coldbox", "cbwire" ], true );
+
+		for ( var topic in ranked ){
+			var i = postTags.findNoCase( topic );
+			if ( i ) return postTags[ i ];
+		}
+		return postTags[ 1 ];
+	}
+
+	/**
+	 * Tags for the labels above an article's title: the primary tag first,
+	 * then others up to `limit` in total. The full list stays in the sidebar.
+	 *
+	 * @param {numeric} limit - Maximum number of tags to return.
+	 * @return {array}
+	 */
+	function getHeadlineTags( numeric limit = 3 ){
+		var primary = getPrimaryTag();
+		if ( !len( primary ) ) return [];
+
+		var headline = [ primary ];
+		for ( var tag in getTags() ){
+			if ( headline.len() >= arguments.limit ) break;
+			if ( tag != primary ) headline.append( tag );
+		}
+		return headline;
+	}
+
+	/**
 	 * Returns true when this post is marked published but its publish_date is
 	 * still in the future — i.e. scheduled rather than actually live yet.
 	 * Public-facing queries already exclude these; this is for the admin UI

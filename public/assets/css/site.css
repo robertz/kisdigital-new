@@ -90,7 +90,7 @@ pre {
 	position: fixed;
 	top: 0;
 	width: 100%;
-	min-height: 48px;
+	min-height: 64px;
 	background: var(--site-header-background-color);
 	backdrop-filter: blur(12px);
 	-webkit-backdrop-filter: blur(12px);
@@ -101,55 +101,75 @@ pre {
 .header__inner {
 	display: flex;
 	align-items: center;
-	height: 48px;
-	gap: 12px;
+	height: 64px;
+	gap: 28px;
 }
 
-/* ── Logo ── */
+/* ── Logo: heavy wordmark, accent rule, two-line tagline ── */
 
 .header__logo {
 	display: inline-flex;
 	align-items: center;
-	gap: 0.25em;
+	gap: 12px;
 	text-decoration: none;
 	color: var(--post-anchor);
-	font-size: 1.25rem;
-	font-weight: 800;
-	letter-spacing: -0.01em;
+	white-space: nowrap;
+	flex-shrink: 0;
+}
+
+.header__logo:hover {
+	color: var(--post-anchor);
+}
+
+.header__wordmark {
+	font-size: 1.6rem;
+	font-weight: 900;
+	letter-spacing: -0.045em;
+	line-height: 1;
+}
+
+.header__logo-accent {
+	color: var(--post-link-text);
+}
+
+.header__tagline {
+	padding-left: 10px;
+	border-left: 2px solid var(--post-link-text);
+	font-size: 0.72rem;
+	font-weight: 600;
+	line-height: 1.2;
+	color: var(--post-anchor);
+}
+
+@media (max-width: 1199.98px) {
+	.header__tagline {
+		display: none;
+	}
+}
+
+.header__cta {
+	display: inline-flex;
+	align-items: center;
+	padding: 8px 16px;
+	border-radius: var(--ui-radius-md);
+	background: var(--post-link-text);
+	color: var(--on-accent);
+	font-size: 0.85rem;
+	font-weight: 600;
+	text-decoration: none;
 	white-space: nowrap;
 	transition: opacity 120ms ease;
 }
 
-.header__logo:hover {
-	opacity: 0.85;
+.header__cta:hover {
+	color: var(--on-accent);
+	opacity: 0.88;
 }
 
-.header__bracket {
-	color: var(--post-link-text);
-	font-weight: 400;
-}
-
-.header__logo-img {
-	height: 36px;
-	width: auto;
-	display: block;
-}
-
-/* KIS wordmark adapts to theme — dark = white, light = dark text */
-.header__logo-kis {
-	color: #1a1a1a;
-}
-
-@media (prefers-color-scheme: dark) {
-	html:not([data-theme="light"]) .header__logo-kis { color: #ffffff; }
-}
-
-[data-theme="dark"] .header__logo-kis { color: #ffffff; }
-[data-theme="light"] .header__logo-kis { color: #1a1a1a; }
-
-/* Digital accent uses site link color so it stays in harmony */
-.header__logo-accent {
-	color: var(--post-link-text);
+@media (max-width: 767.98px) {
+	.header__cta {
+		display: none;
+	}
 }
 
 /* ── Spacer (pushes actions right) ── */
@@ -158,70 +178,23 @@ pre {
 	flex: 1;
 }
 
-/* ── Header search ── */
-
-.header-search {
-	position: relative;
-	display: flex;
-	align-items: center;
-	margin-right: 16px;
-}
-
-.header-search__icon {
-	position: absolute;
-	left: 10px;
-	font-size: 0.8rem;
-	color: var(--text-muted);
-	pointer-events: none;
-}
-
-.header-search__input {
-	width: 150px;
-	padding: 6px 10px 6px 30px;
-	border: 1px solid var(--ui-border-subtle);
-	border-radius: 999px;
-	background: var(--ui-surface-2);
-	color: var(--post-anchor);
-	font-family: var(--font-sans);
-	font-size: 0.8125rem;
-	transition: width 160ms ease, border-color 120ms ease;
-}
-
-.header-search__input:focus {
-	outline: none;
-	width: 220px;
-	border-color: var(--post-link-text);
-	background: var(--ui-surface-1);
-}
-
-.header-search__input::placeholder {
-	color: var(--text-placeholder);
-}
-
-@media (max-width: 767.98px) {
-	.header-search {
-		display: none;
-	}
-}
-
 /* ── Action buttons row ── */
 
 .header-actions {
 	display: flex;
 	align-items: center;
-	gap: 8px;
+	gap: 20px;
 }
 
-@media (max-width: 767.98px) {
+@media (max-width: 991.98px) {
 	.header-actions {
 		display: none;
 	}
 }
 
 /* ── Mobile menu toggle (hamburger) ── */
-/* Hidden on desktop — .header-search/.header-actions have room to show inline
-   there; below 768px neither fits (see the collapses above), so this opens
-   .mobile-menu instead, which carries the same search + links stacked.
+/* Hidden on desktop. Below 992px the section links don't fit inline, so this
+   opens .mobile-menu instead, which carries the same links stacked.
    Selector is doubled up (not just .header-menu-toggle) to out-specificity
    the later .header-icon-button rule, which also sets display and would
    otherwise win the cascade by source order and show this on desktop too. */
@@ -230,7 +203,7 @@ pre {
 	display: none;
 }
 
-@media (max-width: 767.98px) {
+@media (max-width: 991.98px) {
 	.header-icon-button.header-menu-toggle {
 		display: inline-flex;
 	}
@@ -249,7 +222,7 @@ pre {
 	border-bottom: 1px solid var(--ui-border-subtle);
 }
 
-@media (max-width: 767.98px) {
+@media (max-width: 991.98px) {
 	.mobile-menu:not([hidden]) {
 		display: flex;
 	}
@@ -302,7 +275,6 @@ pre {
 	gap: 10px;
 	padding: 12px 8px;
 	border-radius: 10px;
-	font-family: var(--font-mono);
 	font-size: 0.9375rem;
 	font-weight: 500;
 	color: var(--text-secondary);
@@ -353,14 +325,12 @@ pre {
 .header__link {
 	display: inline-flex;
 	align-items: center;
-	font-family: var(--font-mono);
-	font-size: 0.8125rem;
+	font-size: 0.875rem;
 	font-weight: 500;
-	letter-spacing: 0.01em;
 	color: var(--text-secondary);
 	text-decoration: none;
-	padding: 4px 2px;
-	border-bottom: 1px solid transparent;
+	padding: 4px 0;
+	border-bottom: 2px solid transparent;
 	white-space: nowrap;
 	transition: color 120ms ease, border-color 120ms ease;
 }
@@ -391,13 +361,6 @@ pre {
 		padding-right: 12px;
 	}
 
-	.header__logo {
-		font-size: 1.1rem;
-	}
-
-	.header__link {
-		font-size: 0.75rem;
-	}
 
 }
 

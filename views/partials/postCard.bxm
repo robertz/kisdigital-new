@@ -1,35 +1,30 @@
+<bx:set primaryTag = post.getPrimaryTag()>
 <bx:output>
 <article class="post-row">
-	<div class="post-row__head">
+	<a href="#post.getPostUrl()#" class="post-row__media" tabindex="-1" aria-hidden="true">
+		<bx:if len( post.getCoverImage() )>
+			<img src="#encodeForHTMLAttribute( post.getCoverImage() )#" alt="" loading="lazy">
+		<bx:else>
+			<span class="post-tile__fallback">#encodeForHTML( len( primaryTag ) ? primaryTag : "kisdigital" )#</span>
+		</bx:if>
+	</a>
+	<div class="post-row__body">
+		<bx:if len( primaryTag )>
+		<a href="/tag/#encodeForURL( primaryTag )#" class="post-kicker">#encodeForHTML( primaryTag )#</a>
+		</bx:if>
 		<h3 class="post-row__title">
 			<a href="#post.getPostUrl()#">#encodeForHTML( post.getTitle() )#</a>
 			<bx:if post.getFeatured()>
 				<i class="bi bi-star-fill post-row__featured" title="Featured"></i>
 			</bx:if>
 		</h3>
-		<time class="post-row__date">#dateFormat( post.getPublishDate(), "MMM D, YYYY" )#</time>
-	</div>
-	<bx:if len( post.getDescription() )>
-	<p class="post-row__excerpt">#encodeForHTML( post.getDescription() )#</p>
-	</bx:if>
-	<div class="post-row__meta">
-		<bx:if len( post.getAuthorName() )>
-			<span class="d-inline-flex align-items-center gap-2">
-				<bx:if len( post.getAuthorAvatarUrl() )>
-					<img src="#encodeForHTMLAttribute( post.getAuthorAvatarUrl() )#" alt="" class="author-avatar author-avatar--sm">
-				<bx:else>
-					<span class="author-avatar author-avatar--sm">#encodeForHTML( post.getAuthorInitials() )#</span>
-				</bx:if>
-				<span class="read-time">#encodeForHTML( post.getAuthorName() )#</span>
-			</span>
+		<bx:if len( post.getDescription() )>
+		<p class="post-row__excerpt">#encodeForHTML( post.getDescription() )#</p>
 		</bx:if>
-		<bx:if post.getTags().len()>
-		<span class="post-row__tags">
-			<bx:loop array="#post.getTags()#" item="tag">
-				<a href="/tag/#encodeForURL( tag )#" class="tag-badge">#encodeForHTML( tag )#</a>
-			</bx:loop>
-		</span>
-		</bx:if>
+		<p class="post-byline">
+			<bx:if len( post.getAuthorName() )><span class="post-byline__name">#encodeForHTML( post.getAuthorName() )#</span></bx:if>
+			<time>#dateFormat( post.getPublishDate(), "MMMM D, YYYY" )#</time>
+		</p>
 	</div>
 </article>
 </bx:output>

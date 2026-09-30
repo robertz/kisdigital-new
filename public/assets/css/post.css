@@ -21,19 +21,16 @@
 .c-post__share {
 	display: flex;
 	align-items: center;
-	gap: var(--space-4);
-	padding: var(--space-5) 0;
-	margin-bottom: var(--space-2);
-	border-top: 1px solid var(--ui-border-subtle);
-	border-bottom: 1px solid var(--ui-border-subtle);
+	justify-content: flex-end;
+	gap: var(--space-3);
+	font-size: 1.0625rem;
+	max-width: var(--measure);
+	margin-bottom: var(--space-6);
 }
 
 .c-post__share-label {
-	font-family: var(--font-mono);
-	font-size: 0.75rem;
+	font-size: 0.8rem;
 	font-weight: 500;
-	text-transform: uppercase;
-	letter-spacing: 0.06em;
 	color: var(--text-muted);
 	white-space: nowrap;
 }
@@ -47,9 +44,9 @@
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	width: 34px;
-	height: 34px;
-	border-radius: 50%;
+	width: 32px;
+	height: 32px;
+	border-radius: var(--ui-radius-sm);
 	border: 1px solid var(--ui-border-subtle);
 	color: var(--text-secondary);
 	transition: border-color 120ms ease, color 120ms ease;
@@ -73,33 +70,45 @@
 
 /* ── Cover image ── */
 
+/* Cover and share row share .c-post__body's font size so their ch-based
+   max-width lines up with the text column beneath them. */
 .c-post__cover {
+	display: block;
 	width: 100%;
-	max-height: 420px;
+	font-size: 1.0625rem;
+	max-width: var(--measure);
+	aspect-ratio: 16 / 9;
 	object-fit: cover;
 	border-radius: var(--ui-radius-sm);
-	border: 1px solid var(--ui-border-subtle);
-	margin-bottom: var(--space-6);
+	margin-bottom: var(--space-3);
 }
 
 /* ── Header (title, meta, tags) ── */
 
 .c-post__header {
 	max-width: var(--measure);
+	margin-bottom: var(--space-6);
+}
+
+.c-post__kickers {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0 var(--space-4);
+	margin-bottom: var(--space-2);
 }
 
 .c-post__title {
-	font-size: clamp(1.9rem, 4vw, 2.75rem);
-	font-weight: 800;
+	font-size: clamp(1.9rem, 4vw, 2.6rem);
+	font-weight: 600;
 	line-height: 1.15;
-	letter-spacing: -0.025em;
+	letter-spacing: -0.02em;
 	color: var(--post-anchor);
 	margin-bottom: var(--space-4);
 }
 
 .c-post__description {
-	font-size: 0.95rem;
-	font-style: italic;
+	font-size: 1.15rem;
+	font-style: normal;
 	line-height: 1.55;
 	color: var(--text-secondary);
 	border: none;
@@ -111,11 +120,10 @@
 	display: flex;
 	align-items: center;
 	flex-wrap: wrap;
-	gap: var(--space-3);
-	font-family: var(--font-mono);
-	font-size: 0.8125rem;
+	gap: var(--space-2);
+	font-size: 0.85rem;
 	color: var(--text-muted);
-	margin-bottom: var(--space-5);
+	margin-bottom: 0;
 }
 
 .c-post__meta-sep {
@@ -132,7 +140,6 @@
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	font-family: var(--font-mono);
 	font-size: 0.65rem;
 	font-weight: 600;
 	color: var(--post-anchor);
@@ -159,9 +166,49 @@
 .c-post__body h4 {
 	margin-top: var(--space-8);
 	margin-bottom: var(--space-4);
-	font-weight: 700;
-	letter-spacing: -0.01em;
+	font-weight: 600;
+	letter-spacing: -0.015em;
+	line-height: 1.25;
 	color: var(--post-anchor);
+}
+
+.c-post__body h2 {
+	font-size: 1.6rem;
+}
+
+.c-post__body h3 {
+	font-size: 1.3rem;
+}
+
+.c-post__body a {
+	color: var(--post-link-text);
+}
+
+.c-post__body blockquote {
+	margin: var(--space-6) 0;
+	padding: var(--space-4) var(--space-5);
+	border-left: 3px solid var(--post-link-text);
+	border-radius: 0 var(--ui-radius-sm) var(--ui-radius-sm) 0;
+	background: var(--ui-surface-2);
+	color: var(--text-secondary);
+}
+
+.c-post__body blockquote > :last-child {
+	margin-bottom: 0;
+}
+
+.c-post__body :not(pre) > code {
+	font-size: 0.86em;
+	padding: 0.1em 0.35em;
+	border: 1px solid var(--ui-border-subtle);
+	border-radius: var(--ui-radius-sm);
+	background: var(--ui-surface-2);
+	color: var(--post-anchor);
+}
+
+.c-post__body pre {
+	border-radius: var(--ui-radius-md);
+	font-size: 0.875rem;
 }
 
 .c-post__body p {
@@ -201,7 +248,6 @@
 }
 
 .c-post__body figcaption {
-	font-family: var(--font-mono);
 	font-size: 0.78rem;
 	color: var(--text-muted);
 	text-align: center;
@@ -292,7 +338,6 @@
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	font-family: var(--font-mono);
 	font-size: 0.85rem;
 	font-weight: 600;
 	color: var(--post-anchor);
@@ -500,7 +545,6 @@
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	font-family: var(--font-mono);
 	font-size: 0.65rem;
 	font-weight: 600;
 	color: var(--post-anchor);
@@ -525,7 +569,6 @@
 }
 
 .c-comment__meta time {
-	font-family: var(--font-mono);
 	font-size: 0.72rem;
 	color: var(--text-muted);
 }
@@ -560,7 +603,6 @@
 .c-comment__handle,
 .c-comment__via,
 .c-comment__pending {
-	font-family: var(--font-mono);
 	font-size: 0.72rem;
 	color: var(--text-muted);
 	text-decoration: none;
@@ -713,7 +755,6 @@ a.c-comment__handle:hover,
 	display: inline-flex;
 	align-items: center;
 	gap: var(--space-2);
-	font-family: var(--font-mono);
 	font-size: 0.8125rem;
 	color: var(--text-secondary);
 	text-decoration: none;
@@ -733,24 +774,23 @@ a.c-comment__handle:hover,
 }
 
 .c-posts-header__title {
-	font-size: clamp(1.8rem, 4vw, 2.6rem);
-	font-weight: 800;
-	letter-spacing: -0.025em;
+	font-size: clamp(1.9rem, 4vw, 2.6rem);
+	font-weight: 600;
+	letter-spacing: -0.02em;
 	color: var(--post-anchor);
 }
 
 .c-posts-header__eyebrow {
-	font-family: var(--font-mono);
-	font-size: 0.78rem;
-	font-weight: 500;
-	letter-spacing: 0.04em;
+	font-size: 0.72rem;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
 	color: var(--post-link-text);
 	margin-bottom: var(--space-2);
 }
 
 .c-posts-header__count {
-	font-family: var(--font-mono);
-	font-size: 0.85rem;
+	font-size: 0.9rem;
 	color: var(--text-muted);
 }
 
@@ -821,7 +861,6 @@ a.c-comment__handle:hover,
 	border: 1px solid var(--ui-border-subtle);
 	background: none;
 	color: var(--text-secondary);
-	font-family: var(--font-mono);
 	font-size: 0.8125rem;
 	text-decoration: none;
 	transition: border-color 120ms ease, color 120ms ease, background-color 120ms ease;
