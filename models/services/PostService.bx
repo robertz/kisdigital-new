@@ -70,13 +70,81 @@ class {
 	/**
 	 * Returns the most recently published non-featured posts for the home page feed.
 	 *
-	 * Tags are fetched via GROUP_CONCAT and split into an array before the bean
-	 * is populated. The primary author is resolved with a correlated subquery.
-	 *
 	 * @param {numeric} limit - Maximum number of posts to return. Defaults to 6.
 	 * @return {array} Array of PostBeans.
 	 */
 	function getLatestPosts( numeric limit = 6 ){
+		return _queryPostCards(
+			where   = "P.featured != 1",
+			orderBy = "P.publish_date DESC",
+			limit   = arguments.limit
+		);
+	}
+
+	/**
+	 * The home page's "Most read" row: published posts by all-time views.
+	 *
+	 * @param {numeric} limit      - Maximum number of posts to return.
+	 * @param {array}   excludeIds - Post ids already shown elsewhere on the page.
+	 * @return {array} Array of PostBeans.
+	 */
+	function getMostReadPosts( numeric limit = 4, array excludeIds = [] ){
+		return _queryPostCards(
+			join       = "INNER JOIN Views V ON V.post_id = P.id",
+			where      = "V.views > 0",
+			orderBy    = "ANY_VALUE(V.views) DESC, P.publish_date DESC",
+			limit      = arguments.limit,
+			excludeIds = arguments.excludeIds
+		);
+	}
+
+	/**
+	 * The home page's "From the archive" row: a random pick of posts older
+	 * than `olderThanDays`. Seeded by the date, so the pick changes once a
+	 * day rather than on every refresh.
+	 *
+	 * @param {numeric} limit         - Maximum number of posts to return.
+	 * @param {array}   excludeIds    - Post ids already shown elsewhere on the page.
+	 * @param {numeric} olderThanDays - Minimum age of a post, in days.
+	 * @return {array} Array of PostBeans.
+	 */
+	function getArchivePosts( numeric limit = 4, array excludeIds = [], numeric olderThanDays = 365 ){
+		return _queryPostCards(
+			where      = "P.publish_date < DATE_SUB(NOW(), INTERVAL :olderThanDays DAY)",
+			orderBy    = "RAND(:daySeed)",
+			limit      = arguments.limit,
+			excludeIds = arguments.excludeIds,
+			params     = {
+				"olderThanDays": { value: arguments.olderThanDays, cfsqltype: "cf_sql_integer" },
+				"daySeed"      : { value: dateDiff( "d", createDate( 2000, 1, 1 ), now() ), cfsqltype: "cf_sql_integer" }
+			}
+		);
+	}
+
+	/**
+	 * Shared query behind the home page's card rows: published posts with
+	 * their tags (GROUP_CONCAT, split into an array before the bean is
+	 * populated) and primary author.
+	 *
+	 * @param {string}  join       - Extra JOIN clause, e.g. for ordering by views.
+	 * @param {string}  where      - Extra condition ANDed onto "is published".
+	 * @param {string}  orderBy    - ORDER BY expression.
+	 * @param {numeric} limit      - Maximum number of posts to return.
+	 * @param {array}   excludeIds - Post ids to leave out.
+	 * @param {struct}  params     - Extra query params the clauses above use.
+	 * @return {array} Array of PostBeans.
+	 */
+	private function _queryPostCards( string join = "", string where = "", required string orderBy, required numeric limit, array excludeIds = [], struct params = {} ){
+		var clauses = [ "P.status = 'published'", "P.publish_date <= NOW()" ];
+		if ( len( arguments.where ) ) clauses.append( arguments.where );
+
+		var queryParams = duplicate( arguments.params );
+		queryParams[ "lim" ] = { value: arguments.limit, cfsqltype: "cf_sql_integer" };
+		if ( arguments.excludeIds.len() ){
+			clauses.append( "P.id NOT IN (:excludeIds)" );
+			queryParams[ "excludeIds" ] = { value: arguments.excludeIds.toList(), cfsqltype: "cf_sql_varchar", list: true };
+		}
+
 		var rows = queryExecute(
 			"SELECT
 				P.id,
@@ -86,45 +154,30 @@ class {
 				P.cover_image,
 				P.publish_date,
 				GROUP_CONCAT(T.tag ORDER BY T.tag ASC SEPARATOR ',') AS tags,
-				(
-					SELECT U.display_name
-					FROM User U
-					INNER JOIN UserPost UP ON UP.user_id = U.id
-					WHERE UP.post_id = P.id
-						AND UP.author_role = 'author'
-					LIMIT 1
-				) AS author_name,
-				(
-					SELECT U.avatar_label
-					FROM User U
-					INNER JOIN UserPost UP ON UP.user_id = U.id
-					WHERE UP.post_id = P.id
-						AND UP.author_role = 'author'
-					LIMIT 1
-				) AS author_avatar_label,
-				(
-					SELECT U.avatar_url
-					FROM User U
-					INNER JOIN UserPost UP ON UP.user_id = U.id
-					WHERE UP.post_id = P.id
-						AND UP.author_role = 'author'
-					LIMIT 1
-				) AS author_avatar_url
+				ANY_VALUE(A.display_name) AS author_name,
+				ANY_VALUE(A.avatar_label) AS author_avatar_label,
+				ANY_VALUE(A.avatar_url) AS author_avatar_url
 			FROM Post P
 			LEFT JOIN TagPost TP ON TP.post_id = P.id
 			LEFT JOIN Tag T ON T.id = TP.tag_id
-			WHERE P.status = 'published'
-			AND P.publish_date <= NOW()
-				AND P.featured != 1
+			LEFT JOIN (
+				SELECT UP.post_id, MIN(UP.user_id) AS user_id
+				FROM UserPost UP
+				WHERE UP.author_role = 'author'
+				GROUP BY UP.post_id
+			) PA ON PA.post_id = P.id
+			LEFT JOIN User A ON A.id = PA.user_id
+			" & arguments.join & "
+			WHERE " & clauses.toList( " AND " ) & "
 			GROUP BY P.id
-			ORDER BY P.publish_date DESC
+			ORDER BY " & arguments.orderBy & "
 			LIMIT :lim",
-			{ "lim": { value: arguments.limit, cfsqltype: "cf_sql_integer" } },
+			queryParams,
 			{ returnType: "array" }
 		);
 
 		return rows.map( ( row ) => {
-			row[ "tags" ] = len( row.tags ) ? row.tags.listToArray( "," ) : [];
+			row[ "tags" ] = len( row.tags ?: "" ) ? row.tags.listToArray( "," ) : [];
 			return new models.PostBean().populate( row );
 		} );
 	}

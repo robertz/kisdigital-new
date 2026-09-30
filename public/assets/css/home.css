@@ -89,6 +89,7 @@
 .post-tile__media {
 	position: relative;
 	display: block;
+	text-decoration: none;
 	aspect-ratio: 16 / 9;
 	overflow: hidden;
 	margin-bottom: var(--space-3);
@@ -158,6 +159,28 @@
 
 .post-tile__title a:hover {
 	color: var(--post-link-text);
+}
+
+/* Project cards (views/partials/projectTile.bxm) reuse the post card; the
+   icon and name stand in for a cover image. */
+.project-tile__art {
+	flex-direction: column;
+	gap: var(--space-2);
+}
+
+.project-tile__art i {
+	font-size: 2rem;
+}
+
+.project-tile__tagline {
+	margin: 0;
+	font-size: 0.85rem;
+	line-height: 1.5;
+	color: var(--text-secondary);
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 3;
+	overflow: hidden;
 }
 
 /* ── Shared post metadata ── */
