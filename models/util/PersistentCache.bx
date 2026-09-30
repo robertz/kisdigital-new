@@ -1,0 +1,80 @@
+/**
+ * Race-safe access to cache( "persistentCache" ).
+ *
+ * The cache's JDBCStore implements set() as "does the key exist? then UPDATE,
+ * otherwise INSERT" in two separate statements. Two requests that miss the
+ * same key at the same moment (a cold cache right after a deploy or restart)
+ * both see "missing", both INSERT, and the second fails on the Cache table's
+ * primary key ("Duplicate entry 'posts:trending:4' for key 'cache.PRIMARY'"),
+ * which surfaced as a server error on whichever page lost the race.
+ */
+class {
+
+	variables.cacheName = "persistentCache";
+
+	/**
+	 * Read-through cache: returns the cached value, or computes it with `fn`,
+	 * stores it and returns it. Concurrent misses on the same key inside this
+	 * server wait on a named lock, so one request computes the value (often an
+	 * expensive query) and the rest read it instead of all recomputing.
+	 *
+	 * @param {string}   key        - Cache key.
+	 * @param {numeric}  ttlSeconds - How long to keep a computed value.
+	 * @param {function} fn         - Computes the value on a miss.
+	 * @return {any}
+	 */
+	function getOrSet( required string key, required numeric ttlSeconds, required fn ){
+		var cached = cache( variables.cacheName ).get( arguments.key );
+		if ( cached.isPresent() ){
+			return cached.get();
+		}
+
+		var result = "";
+		lock name="persistentCache:#arguments.key#" type="exclusive" timeout="30" {
+			var again = cache( variables.cacheName ).get( arguments.key );
+			if ( again.isPresent() ){
+				result = again.get();
+			} else {
+				result = arguments.fn();
+				this.set( arguments.key, result, arguments.ttlSeconds );
+			}
+		}
+		return result;
+	}
+
+	/**
+	 * Stores a value. If another server instance inserted the same key between
+	 * the store's existence check and its INSERT, the write is retried once —
+	 * the key now exists, so the retry takes the UPDATE path.
+	 *
+	 * @param {string}  key        - Cache key.
+	 * @param {any}     value      - Value to store.
+	 * @param {numeric} ttlSeconds - How long to keep it.
+	 */
+	function set( required string key, required value, required numeric ttlSeconds ){
+		try {
+			cache( variables.cacheName ).set( arguments.key, arguments.value, arguments.ttlSeconds );
+		} catch ( any e ) {
+			if ( !findNoCase( "Duplicate entry", e.message & " " & ( e.detail ?: "" ) ) ){
+				rethrow;
+			}
+			cache( variables.cacheName ).set( arguments.key, arguments.value, arguments.ttlSeconds );
+		}
+	}
+
+	/**
+	 * @param {string} key - Cache key.
+	 * @return {Optional} The stored value, if any (same as the cache's own get()).
+	 */
+	function get( required string key ){
+		return cache( variables.cacheName ).get( arguments.key );
+	}
+
+	/**
+	 * @param {string} key - Cache key to remove.
+	 */
+	function clear( required string key ){
+		cache( variables.cacheName ).clear( arguments.key );
+	}
+
+}

@@ -15,8 +15,9 @@
  */
 class {
 
-	variables.siteHost    = "";
-	variables.botDetector = "";
+	variables.siteHost        = "";
+	variables.botDetector     = "";
+	variables.persistentCache = new models.util.PersistentCache();
 
 	function init( required string siteHost ){
 		variables.siteHost    = arguments.siteHost;
@@ -119,7 +120,7 @@ class {
 		for ( var i = days; i >= 1; i-- ){
 			var dayMidnight = dateAdd( "d", -i, todayMidnight );
 			var dayKey      = dateFormat( dayMidnight, "yyyy-mm-dd" );
-			var cached      = cache( "persistentCache" ).get( "insights:dailyTotal:" & dayKey );
+			var cached      = variables.persistentCache.get( "insights:dailyTotal:" & dayKey );
 			if ( cached.isPresent() ){
 				totalsByDate[ dayKey ] = cached.get();
 			} else {
@@ -146,7 +147,7 @@ class {
 				var dayKey = dateFormat( dayMidnight, "yyyy-mm-dd" );
 				var total  = countsByDate.keyExists( dayKey ) ? countsByDate[ dayKey ] : 0;
 				totalsByDate[ dayKey ] = total;
-				cache( "persistentCache" ).set( "insights:dailyTotal:" & dayKey, total, 604800 );
+				variables.persistentCache.set( "insights:dailyTotal:" & dayKey, total, 604800 );
 			}
 		}
 
@@ -267,20 +268,12 @@ class {
 	// Shared read-through cache for the /manage/insights queries above — all
 	// of them scan the full RequestLog table for the window, so re-running
 	// on every page load (an admin re-checking Insights) is wasted work.
-	// 5 minutes matches
-	// getDailyTotals()'s own reasoning: the underlying data only moves at
-	// RequestLogger.bx's flush granularity (every 5s) anyway, so anything
-	// tighter than a few minutes buys nothing. Not used by getDailyTotals()
+	// 5 minutes matches getDailyTotals()'s own reasoning: the underlying
+	// data only moves at RequestLogger.bx's flush granularity (every 5s)
+	// anyway, so anything tighter than a few minutes buys nothing. Not used by getDailyTotals()
 	// itself, which already caches per calendar day rather than per query.
 	private function _cached( required string key, required numeric ttlSeconds, required fn ){
-		var cached = cache( "persistentCache" ).get( arguments.key );
-		if ( cached.isPresent() ){
-			return cached.get();
-		}
-
-		var result = arguments.fn();
-		cache( "persistentCache" ).set( arguments.key, result, arguments.ttlSeconds );
-		return result;
+		return variables.persistentCache.getOrSet( arguments.key, arguments.ttlSeconds, arguments.fn );
 	}
 
 	private function _where(){
