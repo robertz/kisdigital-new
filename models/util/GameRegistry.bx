@@ -15,13 +15,6 @@ class {
 			href    : "/games/void-harvest/"
 		},
 		{
-			slug    : "pixel-canvas",
-			name    : "Pixel Canvas",
-			icon    : "bi-grid-3x3-gap",
-			tagline : "A live, shared pixel canvas — place a pixel, watch everyone else's show up in real time over Server-Sent Events.",
-			href    : "/games/pixel-canvas/"
-		},
-		{
 			slug    : "chat",
 			name    : "Chat",
 			icon    : "bi-chat-dots",
