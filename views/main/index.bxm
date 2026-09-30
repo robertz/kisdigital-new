@@ -1,12 +1,6 @@
 <bx:include template="../partials/_head.bxm">
-<bx:script>
-	// The featured post leads when there is one; otherwise the newest post moves
-	// up into the lead and the grid starts from the next one.
-	leadIsFeatured = data.featuredPost.exists();
-	gridPosts      = duplicate( data.latestPosts );
-	leadPost       = leadIsFeatured ? data.featuredPost : ( gridPosts.len() ? gridPosts.shift() : "" );
-	gridPosts      = gridPosts.len() > 4 ? gridPosts.slice( 1, 4 ) : gridPosts;
-</bx:script>
+<bx:set leadPost  = data.leadPost>
+<bx:set gridPosts = data.gridPosts>
 <bx:output>
 <h1 class="sr-only">KISDigital — ColdFusion, Lucee &amp; BoxLang</h1>
 
@@ -24,7 +18,7 @@
 				</bx:if>
 			</a>
 			<div class="home-lead__body">
-				<span class="home-lead__badge">#leadIsFeatured ? "Featured" : "Latest"#</span>
+				<span class="home-lead__badge">#data.leadIsFeatured ? "Featured" : "Latest"#</span>
 				<h2 class="home-lead__title"><a href="#leadPost.getPostUrl()#">#encodeForHTML( leadPost.getTitle() )#</a></h2>
 				<bx:if len( leadPost.getDescription() )>
 				<p class="home-lead__dek">#encodeForHTML( leadPost.getDescription() )#</p>
@@ -73,32 +67,71 @@
 	</div>
 </section>
 
-<bx:loop array="#data.topicSections#" item="section">
+<bx:if data.mostReadPosts.len()>
 <section class="home-section">
 	<div class="container">
 		<div class="section-head">
 			<div>
-				<h2 class="section-head__title">#encodeForHTML( section.title )#</h2>
-				<p class="section-head__text">#encodeForHTML( section.description )#</p>
+				<h2 class="section-head__title">Most read</h2>
+				<p class="section-head__text">What readers keep coming back to.</p>
 			</div>
-			<a href="/tag/#encodeForURL( section.tag )#" class="section-head__more">View all <i class="bi bi-chevron-right" aria-hidden="true"></i></a>
+			<a href="/posts" class="section-head__more">All articles <i class="bi bi-chevron-right" aria-hidden="true"></i></a>
 		</div>
 		<div class="tile-grid">
-			<bx:set tileTag = section.tag>
-			<bx:loop array="#section.posts#" item="post">
+			<bx:set tileTag = "">
+			<bx:loop array="#data.mostReadPosts#" item="post">
 				<bx:include template="../partials/postTile.bxm">
 			</bx:loop>
 		</div>
 	</div>
 </section>
-</bx:loop>
+</bx:if>
+
+<bx:if data.projects.len()>
+<section class="home-section">
+	<div class="container">
+		<div class="section-head">
+			<div>
+				<h2 class="section-head__title">Projects</h2>
+				<p class="section-head__text">Open-source modules and tools, documented here.</p>
+			</div>
+			<a href="/projects" class="section-head__more">All projects <i class="bi bi-chevron-right" aria-hidden="true"></i></a>
+		</div>
+		<div class="tile-grid">
+			<bx:loop array="#data.projects#" item="project">
+				<bx:include template="../partials/projectTile.bxm">
+			</bx:loop>
+		</div>
+	</div>
+</section>
+</bx:if>
+
+<bx:if data.archivePosts.len()>
+<section class="home-section">
+	<div class="container">
+		<div class="section-head">
+			<div>
+				<h2 class="section-head__title">From the archive</h2>
+				<p class="section-head__text">Older posts worth another look. A new pick each day.</p>
+			</div>
+			<a href="/posts" class="section-head__more">All articles <i class="bi bi-chevron-right" aria-hidden="true"></i></a>
+		</div>
+		<div class="tile-grid">
+			<bx:set tileTag = "">
+			<bx:loop array="#data.archivePosts#" item="post">
+				<bx:include template="../partials/postTile.bxm">
+			</bx:loop>
+		</div>
+	</div>
+</section>
+</bx:if>
 
 <section class="home-section">
 	<div class="container">
 		<div class="section-head">
 			<div>
-				<h2 class="section-head__title">Everything else</h2>
-				<p class="section-head__text">Browse the archive by topic.</p>
+				<h2 class="section-head__title">Topics</h2>
+				<p class="section-head__text">Browse everything by tag.</p>
 			</div>
 			<a href="/posts" class="section-head__more">All articles <i class="bi bi-chevron-right" aria-hidden="true"></i></a>
 		</div>

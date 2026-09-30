@@ -1,0 +1,16 @@
+<!--- A /projects entry drawn in the same card shape as postTile.bxm, with the
+      project's icon standing in for a cover image. Expects `project` (a
+      ProjectRegistry entry: slug, name, icon, tagline). --->
+<bx:output>
+<article class="post-tile">
+	<a href="/projects/#encodeForURL( project.slug )#" class="post-tile__media" tabindex="-1" aria-hidden="true">
+		<span class="post-tile__fallback project-tile__art">
+			<i class="bi #project.icon#"></i>
+			<span>#encodeForHTML( project.name )#</span>
+		</span>
+	</a>
+	<span class="post-kicker">Project</span>
+	<h3 class="post-tile__title"><a href="/projects/#encodeForURL( project.slug )#">#encodeForHTML( project.name )#</a></h3>
+	<p class="project-tile__tagline">#encodeForHTML( project.tagline )#</p>
+</article>
+</bx:output>
