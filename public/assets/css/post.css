@@ -71,14 +71,14 @@
 /* ── Cover image ── */
 
 /* Cover and share row share .c-post__body's font size so their ch-based
-   max-width lines up with the text column beneath them. */
+   max-width lines up with the text column beneath them. Shown at its own
+   shape — there's no grid to line up with here, so nothing needs cropping. */
 .c-post__cover {
 	display: block;
 	width: 100%;
+	height: auto;
 	font-size: 1.0625rem;
 	max-width: var(--measure);
-	aspect-ratio: 16 / 9;
-	object-fit: cover;
 	border-radius: var(--ui-radius-sm);
 	margin-bottom: var(--space-3);
 }

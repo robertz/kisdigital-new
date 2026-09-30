@@ -16,7 +16,9 @@
 		<div class="home-lead__grid">
 			<a href="#leadPost.getPostUrl()#" class="home-lead__media" tabindex="-1" aria-hidden="true">
 				<bx:if len( leadPost.getCoverImage() )>
-					<img src="#encodeForHTMLAttribute( leadPost.getCoverImage() )#" alt="" fetchpriority="high">
+					<bx:set coverSrc = leadPost.getCoverImage()>
+					<bx:set coverIsLead = true>
+					<bx:include template="../partials/coverImage.bxm">
 				<bx:else>
 					<span class="post-tile__fallback">#encodeForHTML( len( leadPost.getPrimaryTag() ) ? leadPost.getPrimaryTag() : "kisdigital" )#</span>
 				</bx:if>

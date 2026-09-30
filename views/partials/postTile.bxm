@@ -7,7 +7,9 @@
 <article class="post-tile">
 	<a href="#post.getPostUrl()#" class="post-tile__media" tabindex="-1" aria-hidden="true">
 		<bx:if len( post.getCoverImage() )>
-			<img src="#encodeForHTMLAttribute( post.getCoverImage() )#" alt="" loading="lazy">
+			<bx:set coverSrc = post.getCoverImage()>
+			<bx:set coverIsLead = false>
+			<bx:include template="coverImage.bxm">
 		<bx:else>
 			<span class="post-tile__fallback">#encodeForHTML( len( primaryTag ) ? primaryTag : "kisdigital" )#</span>
 		</bx:if>
