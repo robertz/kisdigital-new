@@ -1,0 +1,9 @@
+<!--- A cover image shown whole inside a fixed-ratio frame. Covers range from
+      about 1.3:1 to 2:1, so cropping them into one shape clips titles and
+      logos; instead the image is contained, and a blurred copy of itself
+      fills whatever space is left. Expects `coverSrc`, and optionally
+      `coverIsLead` (true for the above-the-fold image, loaded eagerly). --->
+<bx:output>
+<img src="#encodeForHTMLAttribute( coverSrc )#" alt="" class="cover-fit__backdrop" aria-hidden="true" #( ( coverIsLead ?: false ) ? 'fetchpriority="high"' : 'loading="lazy"' )#>
+<img src="#encodeForHTMLAttribute( coverSrc )#" alt="" class="cover-fit__image" #( ( coverIsLead ?: false ) ? 'fetchpriority="high"' : 'loading="lazy"' )#>
+</bx:output>
