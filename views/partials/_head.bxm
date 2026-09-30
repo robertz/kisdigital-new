@@ -91,20 +91,15 @@
 <header class="header">
 	<div class="container">
 		<div class="header__inner">
-			<a href="/" class="header__logo">
-				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 52" class="header__logo-img" aria-label="KISDigital" role="img">
-					<text x="0" y="40" font-family="'Inter', 'Noto Sans', Arial, sans-serif" font-size="42" font-weight="800" letter-spacing="-1">
-						<tspan class="header__logo-kis" fill="currentColor">KIS</tspan><tspan class="header__logo-accent" fill="currentColor">Digital</tspan>
-					</text>
-				</svg>
+			<a href="/" class="header__logo" aria-label="KISDigital home">
+				<span class="header__wordmark">KIS<span class="header__logo-accent">Digital</span></span>
+				<span class="header__tagline">ColdFusion, Lucee<br>&amp; BoxLang</span>
 			</a>
-			<div class="header__spacer"></div>
-			<form method="get" action="/search" class="header-search" role="search">
-				<i class="bi bi-search header-search__icon" aria-hidden="true"></i>
-				<input type="search" name="q" class="header-search__input" placeholder="Search…" aria-label="Search articles">
-			</form>
-			<nav class="header-actions">
+			<nav class="header-actions" aria-label="Sections">
 				<a href="/posts" class="header__link">Articles</a>
+				<a href="/tag/boxlang" class="header__link">BoxLang</a>
+				<a href="/tag/cfml" class="header__link">CFML</a>
+				<a href="/tag/commandbox" class="header__link">CommandBox</a>
 				<a href="/projects" class="header__link">Projects</a>
 				<a href="/games" class="header__link">Games</a>
 				<a href="/about" class="header__link">About</a>
@@ -112,9 +107,14 @@
 					<a href="/manage" class="header__link">Dashboard</a>
 				</bx:if>
 			</nav>
+			<div class="header__spacer"></div>
+			<a href="/search" class="header-icon-button" aria-label="Search articles">
+				<i class="bi bi-search"></i>
+			</a>
 			<button class="header-icon-button" id="theme-toggle" aria-label="Toggle colour theme">
 				<i class="bi bi-moon-fill" id="theme-icon"></i>
 			</button>
+			<a href="/##follow" class="header__cta">Follow</a>
 			<button class="header-icon-button header-menu-toggle" id="mobile-menu-toggle" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-menu">
 				<i class="bi bi-list" id="mobile-menu-icon"></i>
 			</button>
@@ -133,6 +133,15 @@
 			<a href="/posts" class="mobile-menu__link">
 				<i class="bi bi-file-text"></i> Articles
 			</a>
+			<a href="/tag/boxlang" class="mobile-menu__link">
+				<i class="bi bi-box"></i> BoxLang
+			</a>
+			<a href="/tag/cfml" class="mobile-menu__link">
+				<i class="bi bi-code-slash"></i> CFML
+			</a>
+			<a href="/tag/commandbox" class="mobile-menu__link">
+				<i class="bi bi-terminal"></i> CommandBox
+			</a>
 			<a href="/projects" class="mobile-menu__link">
 				<i class="bi bi-boxes"></i> Projects
 			</a>
@@ -141,6 +150,9 @@
 			</a>
 			<a href="/about" class="mobile-menu__link">
 				<i class="bi bi-person"></i> About
+			</a>
+			<a href="/##follow" class="mobile-menu__link">
+				<i class="bi bi-rss"></i> Follow
 			</a>
 			<bx:if len( data.manageUser ?: "" )>
 				<a href="/manage" class="mobile-menu__link">

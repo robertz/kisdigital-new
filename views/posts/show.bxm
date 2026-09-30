@@ -34,18 +34,12 @@
 			<div class="col-lg-8">
 				<article class="c-post">
 
-					<bx:if len( data.post.getCoverImage() )>
-						<img src="#encodeForHTML( data.post.getCoverImage() )#"
-							alt=""
-							class="c-post__cover">
-					</bx:if>
-
 					<header class="c-post__header">
 
 						<bx:if data.post.getTags().len()>
-						<div class="c-post__tags mb-4">
-							<bx:loop array="#data.post.getTags()#" item="tag">
-								<a href="/tag/#encodeForURL( tag )#" class="tag-badge">#encodeForHTML( tag )#</a>
+						<div class="c-post__kickers">
+							<bx:loop array="#data.post.getHeadlineTags()#" item="tag">
+								<a href="/tag/#encodeForURL( tag )#" class="post-kicker">#encodeForHTML( tag )#</a>
 							</bx:loop>
 						</div>
 						</bx:if>
@@ -89,6 +83,12 @@
 						</div>
 
 					</header>
+
+					<bx:if len( data.post.getCoverImage() )>
+						<img src="#encodeForHTML( data.post.getCoverImage() )#"
+							alt=""
+							class="c-post__cover">
+					</bx:if>
 
 					<div class="c-post__share">
 						<span class="c-post__share-label">Share</span>

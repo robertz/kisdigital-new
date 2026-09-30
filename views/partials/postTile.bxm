@@ -1,0 +1,24 @@
+<!--- Image-led card for the home page grids. Posts without a cover image get
+      a quiet tile carrying their primary tag so older posts don't leave holes
+      in the grid. Expects `post` (a PostBean) in the including template, and
+      optionally `tileTag` — a tag to prefer for the label (the section's). --->
+<bx:set primaryTag = post.getPrimaryTag( tileTag ?: "" )>
+<bx:output>
+<article class="post-tile">
+	<a href="#post.getPostUrl()#" class="post-tile__media" tabindex="-1" aria-hidden="true">
+		<bx:if len( post.getCoverImage() )>
+			<img src="#encodeForHTMLAttribute( post.getCoverImage() )#" alt="" loading="lazy">
+		<bx:else>
+			<span class="post-tile__fallback">#encodeForHTML( len( primaryTag ) ? primaryTag : "kisdigital" )#</span>
+		</bx:if>
+	</a>
+	<bx:if len( primaryTag )>
+	<a href="/tag/#encodeForURL( primaryTag )#" class="post-kicker">#encodeForHTML( primaryTag )#</a>
+	</bx:if>
+	<h3 class="post-tile__title"><a href="#post.getPostUrl()#">#encodeForHTML( post.getTitle() )#</a></h3>
+	<p class="post-byline">
+		<bx:if len( post.getAuthorName() )><span class="post-byline__name">#encodeForHTML( post.getAuthorName() )#</span></bx:if>
+		<time>#dateFormat( post.getPublishDate(), "MMMM D, YYYY" )#</time>
+	</p>
+</article>
+</bx:output>
