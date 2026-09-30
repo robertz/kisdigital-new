@@ -1,0 +1,12 @@
+<!--- Server and Request log share one "System" entry in the manage sidebar;
+      these tabs switch between them. --->
+<bx:output>
+<nav class="c-manage-tabs" aria-label="System">
+	<a href="/manage/server" class="c-manage-tabs__tab #( ( data.manageSection ?: '' ) == 'server' ? 'c-manage-tabs__tab--active' : '' )#">
+		<i class="bi bi-hdd-stack"></i> Server
+	</a>
+	<a href="/manage/logs" class="c-manage-tabs__tab #( ( data.manageSection ?: '' ) == 'logs' ? 'c-manage-tabs__tab--active' : '' )#">
+		<i class="bi bi-list-ul"></i> Requests
+	</a>
+</nav>
+</bx:output>

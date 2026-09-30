@@ -259,6 +259,20 @@ class {
 	}
 
 	/**
+	 * Number of comments waiting for approval — the /manage sidebar badge and
+	 * the home page's "needs attention" count.
+	 *
+	 * @return {numeric}
+	 */
+	function getPendingCount(){
+		return queryExecute(
+			"SELECT COUNT(*) AS cnt FROM Comment WHERE status = 'pending'",
+			{},
+			{ returnType: "array" }
+		)[ 1 ].cnt;
+	}
+
+	/**
 	 * Paginated, all-posts comment listing for /manage/comments. Remote replies
 	 * waiting for approval come first, then everything else newest first, joined
 	 * out to the post title/slug and commenter name so the admin table needs no

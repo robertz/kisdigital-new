@@ -1,5 +1,5 @@
 /**
- * Reads /manage/insights and the dashboard's insights summary card from the
+ * Reads /manage/insights from the
  * RequestLog table (see db/migrations/0004_add_request_log.sql) — replaces
  * GoatCounterClient, whose synchronous, rate-limited API calls could lock up
  * request handling. Everything here is a plain read against a table our own
@@ -12,10 +12,6 @@
  * BotDetector.bx) — the same shape of filtering GoatCounter's client-side
  * pageview beacon gave for free by construction (it only ever fired from a
  * real browser rendering a real public page).
- *
- * "Total visitors" counts distinct IP addresses, not deduplicated visitor
- * fingerprints the way GoatCounter's own number worked — the closest
- * equivalent available from a plain access log, not a precise match.
  */
 class {
 
@@ -26,23 +22,6 @@ class {
 		variables.siteHost    = arguments.siteHost;
 		variables.botDetector = new models.util.BotDetector();
 		return this;
-	}
-
-	/**
-	 * @return {struct} { total } — distinct visitor IPs in the window.
-	 */
-	function getTotal( numeric daysBack = 30 ){
-		var days = arguments.daysBack;
-		return _cached( "insights:total:" & days, 300, () => {
-			var row = queryExecute(
-				"SELECT COUNT(DISTINCT ip_address) AS total
-				FROM RequestLog
-				WHERE " & _where(),
-				_params( days ),
-				{ returnType: "array" }
-			)[ 1 ];
-			return { "total": row.total };
-		} );
 	}
 
 	/**
@@ -113,7 +92,7 @@ class {
 
 	/**
 	 * Site-wide daily request totals (same visitor-traffic filter as every
-	 * other method here) for the admin dashboard's traffic chart — the
+	 * other method here) for the Insights page-views chart — the
 	 * full-site equivalent of PostService.getDailyViewTotals(), which only
 	 * ever counted individual post-page views.
 	 *
@@ -208,55 +187,87 @@ class {
 	 * _where(), these are unconditional (no path-search override), since
 	 * there's no scenario where seeing this noise here is useful.
 	 *
-	 * @param {string} pathFilter - Optional substring match against path,
-	 *        case-insensitive per this table's collation. Empty = no filter.
-	 * @return {struct} { rows, total, page, pageSize, totalPages }
+	 * Pages by id (keyset) rather than OFFSET, and never counts the table:
+	 * with 90 days of rows, a COUNT(*) per page view and deep OFFSETs both
+	 * meant reading most of RequestLog just to render 50 rows.
+	 *
+	 * @param {struct} filters - Optional keys:
+	 *        path   — prefix match against path (can use its index, unlike
+	 *                 a substring match);
+	 *        method — exact HTTP method;
+	 *        status — "2xx".."5xx", or "unknown" for rows logged before
+	 *                 status codes were captured.
+	 * @param {numeric} beforeId - Rows older than this id (the "Older" link).
+	 * @param {numeric} afterId  - Rows newer than this id (the "Newer" link).
+	 * @return {struct} { rows, hasNewer, hasOlder, newerCursor, olderCursor }
 	 */
-	function getRecentRequests( numeric page = 1, numeric pageSize = 50, string pathFilter = "" ){
-		var safePageSize = arguments.pageSize;
-		var offset        = ( arguments.page - 1 ) * safePageSize;
-		var hasFilter      = len( trim( arguments.pathFilter ) ) > 0;
-		var likeParam      = { value: "%" & trim( arguments.pathFilter ) & "%", cfsqltype: "cf_sql_varchar" };
-		var whereClause    = "WHERE path NOT IN ('/health', '/manage/server/data')" & ( hasFilter ? " AND path LIKE :path" : "" );
+	function getRecentRequests( struct filters = {}, numeric beforeId = 0, numeric afterId = 0, numeric pageSize = 50 ){
+		var clauses = [ "path NOT IN ('/health', '/manage/server/data')" ];
+		var params  = { "lim": { value: arguments.pageSize + 1, cfsqltype: "cf_sql_integer" } };
 
-		var total = queryExecute(
-			"SELECT COUNT(*) AS cnt FROM RequestLog " & whereClause,
-			hasFilter ? { "path": likeParam } : {},
-			{ returnType: "array" }
-		)[ 1 ].cnt;
+		var pathPrefix = trim( arguments.filters.path ?: "" );
+		if ( len( pathPrefix ) ){
+			clauses.append( "path LIKE :path" );
+			params[ "path" ] = { value: _escapeLike( pathPrefix ) & "%", cfsqltype: "cf_sql_varchar" };
+		}
 
-		var params = {
-			"lim"   : { value: safePageSize, cfsqltype: "cf_sql_integer" },
-			"offset": { value: offset,       cfsqltype: "cf_sql_integer" }
-		};
-		if ( hasFilter ) {
-			params[ "path" ] = likeParam;
+		var method = arguments.filters.method ?: "";
+		if ( len( method ) ){
+			clauses.append( "method = :method" );
+			params[ "method" ] = { value: method, cfsqltype: "cf_sql_varchar" };
+		}
+
+		var statusFilter = arguments.filters.status ?: "";
+		if ( statusFilter == "unknown" ){
+			clauses.append( "status_code IS NULL" );
+		} else if ( reFind( "^[2-5]xx$", statusFilter ) ){
+			var statusFloor = val( left( statusFilter, 1 ) ) * 100;
+			clauses.append( "status_code >= :statusMin AND status_code < :statusMax" );
+			params[ "statusMin" ] = { value: statusFloor,       cfsqltype: "cf_sql_integer" };
+			params[ "statusMax" ] = { value: statusFloor + 100, cfsqltype: "cf_sql_integer" };
+		}
+
+		var goingNewer = arguments.afterId > 0;
+		if ( goingNewer || arguments.beforeId > 0 ){
+			clauses.append( goingNewer ? "id > :cursor" : "id < :cursor" );
+			params[ "cursor" ] = { value: goingNewer ? arguments.afterId : arguments.beforeId, cfsqltype: "cf_sql_bigint" };
 		}
 
 		var rows = queryExecute(
 			"SELECT id, requested_at, method, path, query_string, status_code, duration_ms, ip_address, referrer, user_agent
-			FROM RequestLog " & whereClause & "
-			ORDER BY requested_at DESC, id DESC
-			LIMIT :lim OFFSET :offset",
+			FROM RequestLog
+			WHERE " & clauses.toList( " AND " ) & "
+			ORDER BY id " & ( goingNewer ? "ASC" : "DESC" ) & "
+			LIMIT :lim",
 			params,
 			{ returnType: "array" }
 		);
 
+		// One extra row was fetched only to learn whether another page exists
+		// in the direction of travel.
+		var hasMore = rows.len() > arguments.pageSize;
+		if ( hasMore ) rows.deleteAt( rows.len() );
+		if ( goingNewer ) rows = rows.reverse();
+
 		return {
-			"rows"      : rows,
-			"total"     : total,
-			"page"      : arguments.page,
-			"pageSize"  : safePageSize,
-			"totalPages": ceiling( max( total, 1 ) / safePageSize ),
-			"pathFilter": arguments.pathFilter
+			"rows"       : rows,
+			"hasNewer"   : goingNewer ? hasMore : arguments.beforeId > 0,
+			"hasOlder"   : goingNewer ? true : hasMore,
+			"newerCursor": rows.len() ? rows[ 1 ].id : 0,
+			"olderCursor": rows.len() ? rows[ rows.len() ].id : 0
 		};
+	}
+
+	// Treats a user's search text literally inside LIKE: MySQL's default
+	// escape character is the backslash.
+	private function _escapeLike( required string text ){
+		return arguments.text.replace( "\", "\\", "all" ).replace( "%", "\%", "all" ).replace( "_", "\_", "all" );
 	}
 
 	// Shared read-through cache for the /manage/insights queries above — all
 	// of them scan the full RequestLog table for the window, so re-running
-	// on every page load (an admin re-checking the dashboard, or the same
-	// query firing again from a different page — getTotal() also backs the
-	// /manage dashboard's own summary card) is wasted work. 5 minutes matches
+	// on every page load (an admin re-checking Insights) is wasted work.
+	// 5 minutes matches
 	// getDailyTotals()'s own reasoning: the underlying data only moves at
 	// RequestLogger.bx's flush granularity (every 5s) anyway, so anything
 	// tighter than a few minutes buys nothing. Not used by getDailyTotals()

@@ -566,34 +566,21 @@ class {
 				P.last_updated,
 				GROUP_CONCAT(T.tag ORDER BY T.tag ASC SEPARATOR ',') AS tags,
 				COALESCE(V.views, 0) AS views,
-				(
-					SELECT U.display_name
-					FROM User U
-					INNER JOIN UserPost UP ON UP.user_id = U.id
-					WHERE UP.post_id = P.id
-						AND UP.author_role = 'author'
-					LIMIT 1
-				) AS author_name,
-				(
-					SELECT U.avatar_label
-					FROM User U
-					INNER JOIN UserPost UP ON UP.user_id = U.id
-					WHERE UP.post_id = P.id
-						AND UP.author_role = 'author'
-					LIMIT 1
-				) AS author_avatar_label,
-				(
-					SELECT U.avatar_url
-					FROM User U
-					INNER JOIN UserPost UP ON UP.user_id = U.id
-					WHERE UP.post_id = P.id
-						AND UP.author_role = 'author'
-					LIMIT 1
-				) AS author_avatar_url
+				ANY_VALUE(A.display_name) AS author_name,
+				ANY_VALUE(A.avatar_label) AS author_avatar_label,
+				ANY_VALUE(A.avatar_url) AS author_avatar_url
 			FROM Post P
 			LEFT JOIN TagPost TP ON TP.post_id = P.id
 			LEFT JOIN Tag T ON T.id = TP.tag_id
 			LEFT JOIN Views V ON V.post_id = P.id
+			LEFT JOIN (
+				SELECT UP.post_id, MIN(U.id) AS user_id
+				FROM UserPost UP
+				INNER JOIN User U ON U.id = UP.user_id
+				WHERE UP.author_role = 'author'
+				GROUP BY UP.post_id
+			) PA ON PA.post_id = P.id
+			LEFT JOIN User A ON A.id = PA.user_id
 			GROUP BY P.id
 			ORDER BY CASE WHEN P.status = 'draft' THEN 0 ELSE 1 END ASC, P.publish_date DESC
 			LIMIT :lim OFFSET :offset",
@@ -1002,30 +989,35 @@ class {
 	 * Returns the most-searched queries that came back empty, most recent
 	 * first-seen last. Groups repeat searches for the same term together so
 	 * one visitor retrying a typo five times doesn't crowd out everything
-	 * else. Backs the dashboard's "readers are looking for" card.
+	 * else. Backs the "searches that found nothing" card on /manage/insights,
+	 * cached for 5 minutes like getTopSearches().
 	 *
 	 * @param {numeric} days - How far back to look. Defaults to 30.
 	 * @param {numeric} limit - Maximum distinct queries to return. Defaults to 8.
 	 * @return {array} Array of structs: query, search_count, last_searched.
 	 */
 	function getZeroResultSearches( numeric days = 30, numeric limit = 8 ){
-		return queryExecute(
-			"SELECT
-				query,
-				COUNT(*) AS search_count,
-				MAX(searched_at) AS last_searched
-			FROM SearchLog
-			WHERE result_count = 0
-				AND searched_at >= DATE_SUB(NOW(), INTERVAL :days DAY)
-			GROUP BY query
-			ORDER BY search_count DESC, last_searched DESC
-			LIMIT :lim",
-			{
-				"days": { value: arguments.days,  cfsqltype: "cf_sql_integer" },
-				"lim" : { value: arguments.limit, cfsqltype: "cf_sql_integer" }
-			},
-			{ returnType: "array" }
-		);
+		var days  = arguments.days;
+		var limit = arguments.limit;
+		return _cached( "posts:zeroResultSearches:" & days & ":" & limit, 300, () => {
+			return queryExecute(
+				"SELECT
+					query,
+					COUNT(*) AS search_count,
+					MAX(searched_at) AS last_searched
+				FROM SearchLog
+				WHERE result_count = 0
+					AND searched_at >= DATE_SUB(NOW(), INTERVAL :days DAY)
+				GROUP BY query
+				ORDER BY search_count DESC, last_searched DESC
+				LIMIT :lim",
+				{
+					"days": { value: days,  cfsqltype: "cf_sql_integer" },
+					"lim" : { value: limit, cfsqltype: "cf_sql_integer" }
+				},
+				{ returnType: "array" }
+			);
+		} );
 	}
 
 	/**

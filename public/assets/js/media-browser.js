@@ -176,7 +176,7 @@ window.MediaBrowser = (function(){
 			return result.path;
 		})
 		.catch(function(err){
-			gridEl.innerHTML = '<p class="text-danger">' + (typeof err === "string" ? err : "Couldn't load this directory — check your connection and try again.") + "</p>";
+			gridEl.innerHTML = '<p class="text-danger">' + (typeof err === "string" ? err : "Couldn't load this directory. Check your connection, and that the storage bucket's CORS rules allow this site's address.") + "</p>";
 			return Promise.reject(err);
 		});
 	}
