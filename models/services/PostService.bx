@@ -835,6 +835,7 @@ class {
 	// rather than a Settings row: it's a rare-to-change editorial choice, not
 	// something that needs runtime tuning.
 	variables.trendingWindowDays = 30;
+	variables.persistentCache    = new models.util.PersistentCache();
 
 	/**
 	 * Returns the most-viewed published posts over the trailing
@@ -1186,14 +1187,7 @@ class {
 	// freshly-published post or a new search shows up quickly, long enough
 	// that repeated hits within a browsing session are free.
 	private function _cached( required string key, required numeric ttlSeconds, required fn ){
-		var cached = cache( "persistentCache" ).get( arguments.key );
-		if ( cached.isPresent() ){
-			return cached.get();
-		}
-
-		var result = arguments.fn();
-		cache( "persistentCache" ).set( arguments.key, result, arguments.ttlSeconds );
-		return result;
+		return variables.persistentCache.getOrSet( arguments.key, arguments.ttlSeconds, arguments.fn );
 	}
 
 }
