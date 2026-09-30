@@ -10,105 +10,28 @@
 
 		<div class="c-manage-header">
 			<div>
-				<h1 class="c-manage-header__title">Dashboard</h1>
+				<h1 class="c-manage-header__title">Home</h1>
 				<p class="c-manage-header__sub">
 					Welcome back, #encodeForHTML( data.manageUser.display_name )#.
 				</p>
 			</div>
+			<a href="/manage/posts/new" class="c-manage-posts__new">
+				<i class="bi bi-plus-lg"></i> New post
+			</a>
 		</div>
 
 		<bx:set isAdmin = ( data.manageUser.role ?: "" ) == "admin">
 
+		<!--- Only cheap queries against Post and Comment belong here; traffic
+		      and server metrics live on Insights and System, which only run
+		      when someone opens them. --->
 		<div class="c-manage-dashboard__grid">
-
-			<!--- Traffic card --->
-			<section class="c-manage-dashboard__card c-manage-dashboard__card--traffic">
-				<div class="c-manage-dashboard__card-head">
-					<span class="c-manage-dashboard__icon"><i class="bi bi-graph-up"></i></span>
-					<span class="c-manage-dashboard__eyebrow">Traffic &mdash; last 30 days</span>
-				</div>
-				<div class="c-dashboard-sparkline is-loading" id="traffic-widget">
-					<div class="c-dashboard-sparkline__chart">
-						<canvas id="traffic-chart" aria-label="Site traffic over the last 30 days" role="img"></canvas>
-						<div class="c-dashboard-sparkline__chart-skeleton" aria-hidden="true"></div>
-					</div>
-					<div class="c-dashboard-sparkline__stats">
-						<div class="c-dashboard-sparkline__stats-row">
-							<div class="c-dashboard-sparkline__stat">
-								<span class="c-dashboard-sparkline__stat-value" id="traffic-total-views"><span class="c-dashboard-skeleton-text" aria-hidden="true"></span></span>
-								<span class="c-dashboard-sparkline__stat-label">total views</span>
-							</div>
-							<div class="c-dashboard-sparkline__stat">
-								<span class="c-dashboard-sparkline__stat-value" id="traffic-peak-day"><span class="c-dashboard-skeleton-text" aria-hidden="true"></span></span>
-								<span class="c-dashboard-sparkline__stat-label">peak day</span>
-							</div>
-						</div>
-						<div class="c-dashboard-sparkline__stat">
-							<span class="c-dashboard-sparkline__stat-value" id="traffic-today-views"><span class="c-dashboard-skeleton-text" aria-hidden="true"></span></span>
-							<span class="c-dashboard-sparkline__stat-label">today</span>
-						</div>
-					</div>
-				</div>
-				<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.0/chart.umd.min.js" integrity="sha512-Y51n9mtKTVBh3Jbx5pZSJNDDMyY+yGe77DGtBPzRlgsf/YLCh13kSZ3JmfHGzYFCmOndraf0sQgfM654b7dJ3w==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-				<script>
-				(function(){
-					var widget  = document.getElementById('traffic-widget');
-					var totalEl = document.getElementById('traffic-total-views');
-					var todayEl = document.getElementById('traffic-today-views');
-					var peakEl  = document.getElementById('traffic-peak-day');
-
-					fetch('/manage/dashboard/traffic-data', { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-						.then(function(res){ return res.json(); })
-						.then(function(data){
-							if (!data.success) return Promise.reject();
-							var traffic = data.traffic;
-
-							var styles = getComputedStyle(document.documentElement);
-							var lineColor = styles.getPropertyValue('--post-link-text').trim() || '##7c83fd';
-
-							new Chart(document.getElementById('traffic-chart'), {
-								type: 'line',
-								data: {
-									labels: traffic.labels,
-									datasets: [{
-										data: traffic.values,
-										borderColor: lineColor,
-										backgroundColor: lineColor + '33',
-										fill: true,
-										tension: 0.3,
-										pointRadius: 0,
-										borderWidth: 2
-									}]
-								},
-								options: {
-									responsive: true,
-									maintainAspectRatio: false,
-									plugins: { legend: { display: false } },
-									scales: {
-										x: { ticks: { maxTicksLimit: 8 }, grid: { display: false } },
-										y: { beginAtZero: true, ticks: { precision: 0 } }
-									}
-								}
-							});
-
-							totalEl.textContent = traffic.total.toLocaleString();
-							todayEl.textContent = traffic.todayViews.toLocaleString();
-							peakEl.textContent = traffic.maxViews.toLocaleString();
-							widget.classList.remove('is-loading');
-						})
-						.catch(function(){
-							widget.classList.remove('is-loading');
-							widget.innerHTML = '<p class="c-manage-dashboard__meta">Couldn\'t load traffic &mdash; see server logs.</p>';
-						});
-				})();
-				</script>
-			</section>
 
 			<!--- Content health card --->
 			<section class="c-manage-dashboard__card c-manage-dashboard__card--health">
 				<div class="c-manage-dashboard__card-head">
 					<span class="c-manage-dashboard__icon"><i class="bi bi-heart-pulse"></i></span>
-					<span class="c-manage-dashboard__eyebrow">Content health</span>
+					<span class="c-manage-dashboard__eyebrow">Needs attention</span>
 				</div>
 				<ul class="c-dashboard-health__list">
 					<li class="c-dashboard-health__item">
@@ -135,27 +58,15 @@
 							<span class="c-dashboard-health__label">published #( data.contentHealth.missingTagsCount == 1 ? "post" : "posts" )# missing tags</span>
 						</a>
 					</li>
+					<bx:if isAdmin>
+					<li class="c-dashboard-health__item">
+						<a href="/manage/comments" class="c-dashboard-health__link">
+							<span class="c-dashboard-health__value">#data.navPendingComments ?: 0#</span>
+							<span class="c-dashboard-health__label">#( ( data.navPendingComments ?: 0 ) == 1 ? "comment" : "comments" )# waiting for approval</span>
+						</a>
+					</li>
+					</bx:if>
 				</ul>
-			</section>
-
-			<!--- Zero-result searches card --->
-			<section class="c-manage-dashboard__card c-manage-dashboard__card--searches">
-				<div class="c-manage-dashboard__card-head">
-					<span class="c-manage-dashboard__icon"><i class="bi bi-search"></i></span>
-					<span class="c-manage-dashboard__eyebrow">Readers searched, found nothing &mdash; last 30 days</span>
-				</div>
-				<bx:if data.zeroResultSearches.len()>
-					<ul class="c-dashboard-list">
-						<bx:loop array="#data.zeroResultSearches#" item="row">
-							<li class="c-dashboard-list__item">
-								<span class="c-dashboard-list__label">&ldquo;#encodeForHTML( row.query )#&rdquo;</span>
-								<span class="c-dashboard-list__meta">#row.search_count# #( row.search_count == 1 ? "search" : "searches" )#</span>
-							</li>
-						</bx:loop>
-					</ul>
-				<bx:else>
-					<p class="c-manage-dashboard__meta">No searches have come up empty recently.</p>
-				</bx:if>
 			</section>
 
 			<!--- Recent activity card --->
@@ -185,148 +96,7 @@
 
 		</div>
 
-		<p class="section-label mt-5 mb-4">Quick links</p>
-
-		<div class="c-manage-dashboard__grid">
-
-			<!--- Account card --->
-			<section class="c-manage-dashboard__card c-manage-dashboard__card--account">
-				<div class="c-manage-dashboard__card-head">
-					<span class="c-manage-dashboard__icon"><i class="bi bi-person-circle"></i></span>
-					<span class="c-manage-dashboard__eyebrow">Account</span>
-				</div>
-				<h2 class="c-manage-dashboard__title">#encodeForHTML( data.manageUser.display_name )#</h2>
-				<p class="c-manage-dashboard__meta">#encodeForHTML( data.manageUser.email )#</p>
-				<div class="c-manage-dashboard__card-foot">
-					<span class="c-manage-dashboard__badge #( isAdmin ? 'c-manage-dashboard__badge--admin' : '' )#">
-						#encodeForHTML( data.manageUser.role ?: "author" )#
-					</span>
-					<a href="/manage/logout" class="c-manage-dashboard__link">
-						Sign out <i class="bi bi-box-arrow-right"></i>
-					</a>
-				</div>
-			</section>
-
-			<!--- Posts card --->
-			<a href="/manage/posts" class="c-manage-dashboard__card c-manage-dashboard__card--link">
-				<div class="c-manage-dashboard__card-head">
-					<span class="c-manage-dashboard__icon"><i class="bi bi-file-text"></i></span>
-					<span class="c-manage-dashboard__eyebrow">Content</span>
-				</div>
-				<h2 class="c-manage-dashboard__title">Posts</h2>
-				<p class="c-manage-dashboard__meta">Draft, edit, and publish blog posts.</p>
-				<div class="c-manage-dashboard__card-foot">
-					<span class="c-manage-dashboard__cta">
-						Manage posts <i class="bi bi-arrow-right"></i>
-					</span>
-				</div>
-			</a>
-
-			<bx:if isAdmin>
-				<!--- Insights card (admin) — total is fetched over AJAX after
-				      this shell renders (see insightsData() in Manage.bx),
-				      same "don't block the page on a slow RequestLog scan"
-				      reasoning as the traffic card above. --->
-				<a href="/manage/insights" class="c-manage-dashboard__card c-manage-dashboard__card--link">
-					<div class="c-manage-dashboard__card-head">
-						<span class="c-manage-dashboard__icon"><i class="bi bi-bar-chart"></i></span>
-						<span class="c-manage-dashboard__eyebrow">Analytics</span>
-					</div>
-					<h2 class="c-manage-dashboard__title" id="analytics-total"><span class="c-dashboard-skeleton-text" aria-hidden="true"></span></h2>
-					<p class="c-manage-dashboard__meta" id="analytics-meta">visitors in the last 30 days</p>
-					<div class="c-manage-dashboard__card-foot">
-						<span class="c-manage-dashboard__cta">
-							View insights <i class="bi bi-arrow-right"></i>
-						</span>
-					</div>
-				</a>
-				<script>
-				(function(){
-					var totalEl = document.getElementById('analytics-total');
-					var metaEl  = document.getElementById('analytics-meta');
-					fetch('/manage/dashboard/insights-data', { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-						.then(function(res){ return res.json(); })
-						.then(function(data){
-							if (!data.success) return Promise.reject();
-							totalEl.textContent = data.total.toLocaleString();
-						})
-						.catch(function(){
-							totalEl.textContent = 'Insights';
-							metaEl.textContent = "Couldn't load this — see server logs.";
-						});
-				})();
-				</script>
-
-				<!--- Server card (admin) — same AJAX-after-shell pattern,
-				      reusing the existing /manage/server/data endpoint the
-				      server-monitor page's own polling loop already uses. --->
-				<a href="/manage/server" class="c-manage-dashboard__card c-manage-dashboard__card--link">
-					<div class="c-manage-dashboard__card-head">
-						<span class="c-manage-dashboard__icon"><i class="bi bi-hdd-stack"></i></span>
-						<span class="c-manage-dashboard__eyebrow">System</span>
-					</div>
-					<h2 class="c-manage-dashboard__title" id="server-heap"><span class="c-dashboard-skeleton-text" aria-hidden="true"></span></h2>
-					<p class="c-manage-dashboard__meta" id="server-meta"><span class="c-dashboard-skeleton-text" aria-hidden="true"></span></p>
-					<div class="c-manage-dashboard__card-foot">
-						<span class="c-manage-dashboard__cta">
-							View server <i class="bi bi-arrow-right"></i>
-						</span>
-					</div>
-				</a>
-				<script>
-				(function(){
-					var heapEl = document.getElementById('server-heap');
-					var metaEl = document.getElementById('server-meta');
-					fetch('/manage/server/data', { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-						.then(function(res){ return res.json(); })
-						.then(function(data){
-							if (!data.success) return Promise.reject();
-							heapEl.textContent = data.server.memory.heapPercent + '% heap';
-							metaEl.textContent = data.server.memory.heapUsed + ' of ' + data.server.memory.heapMax + ' · up ' + data.server.jvm.uptime;
-						})
-						.catch(function(){
-							heapEl.textContent = 'Server';
-							metaEl.textContent = "Couldn't load this — see server logs.";
-						});
-				})();
-				</script>
-
-				<!--- Authors card (admin) --->
-				<a href="/manage/authors" class="c-manage-dashboard__card c-manage-dashboard__card--link">
-					<div class="c-manage-dashboard__card-head">
-						<span class="c-manage-dashboard__icon"><i class="bi bi-people"></i></span>
-						<span class="c-manage-dashboard__eyebrow">Team</span>
-					</div>
-					<h2 class="c-manage-dashboard__title">Authors</h2>
-					<p class="c-manage-dashboard__meta">Invite and manage contributor accounts.</p>
-					<div class="c-manage-dashboard__card-foot">
-						<span class="c-manage-dashboard__cta">
-							Manage authors <i class="bi bi-arrow-right"></i>
-						</span>
-					</div>
-				</a>
-
-				<!--- Settings card (admin) --->
-				<a href="/manage/settings" class="c-manage-dashboard__card c-manage-dashboard__card--link">
-					<div class="c-manage-dashboard__card-head">
-						<span class="c-manage-dashboard__icon"><i class="bi bi-sliders2"></i></span>
-						<span class="c-manage-dashboard__eyebrow">Configuration</span>
-					</div>
-					<h2 class="c-manage-dashboard__title">Settings</h2>
-					<p class="c-manage-dashboard__meta">Tune site and integration values.</p>
-					<div class="c-manage-dashboard__card-foot">
-						<span class="c-manage-dashboard__cta">
-							Edit settings <i class="bi bi-arrow-right"></i>
-						</span>
-					</div>
-				</a>
-			</bx:if>
-
-		</div>
-
 	</main>
 </div>
-
-<script src="/assets/js/local-time.js"></script>
 </bx:output>
 <bx:include template="../partials/_foot.bxm">

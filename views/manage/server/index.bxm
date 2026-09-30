@@ -11,7 +11,8 @@
 		<div class="c-manage-posts">
 
 			<div class="c-manage-header">
-				<div>
+				<div class="c-manage-header__lead">
+					<span class="c-manage-header__eyebrow">System</span>
 					<h1 class="c-manage-header__title">Server</h1>
 					<p class="c-manage-header__sub">
 						A live snapshot of this process — memory, CPU, disk, and JVM internals.
@@ -24,6 +25,8 @@
 					</span>
 				</bx:if>
 			</div>
+
+			<bx:include template="../../partials/systemTabs.bxm">
 
 			<bx:if isNull( data.server )>
 				<div class="c-manage-panel__empty">

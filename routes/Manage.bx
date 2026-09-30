@@ -59,8 +59,6 @@ class {
 		this.router.get( "/manage/logout", ( req, res ) => logout( req, res ) );
 
 		this.router.get( "/manage", auth, ( req, res ) => dashboard( req, res ) );
-		this.router.get( "/manage/dashboard/traffic-data", auth, ( req, res ) => trafficData( req, res ) );
-		this.router.get( "/manage/dashboard/insights-data", admin, ( req, res ) => insightsData( req, res ) );
 
 		this.router.get( "/manage/posts", auth, ( req, res ) => postsList( req, res ) );
 		this.router.post( "/manage/posts/:id/toggle-featured", admin, ( req, res ) => toggleFeatured( req, res ) );
@@ -98,6 +96,7 @@ class {
 		this.router.post( "/manage/comments/:id/approve", admin, ( req, res ) => approveManageComment( req, res ) );
 
 		this.router.get( "/manage/insights", admin, ( req, res ) => insightsIndex( req, res ) );
+		this.router.get( "/manage/insights/traffic-data", admin, ( req, res ) => trafficData( req, res ) );
 		this.router.get( "/manage/logs", admin, ( req, res ) => logsIndex( req, res ) );
 		this.router.get( "/manage/server", admin, ( req, res ) => serverIndex( req, res ) );
 		this.router.get( "/manage/server/data", admin, ( req, res ) => serverData( req, res ) );
@@ -114,6 +113,7 @@ class {
 			res.redirect( "/manage/login" );
 			return;
 		}
+		setNavCounts( req, res );
 		next();
 	}
 
@@ -126,7 +126,17 @@ class {
 			res.redirect( "/manage" );
 			return;
 		}
+		setNavCounts( req, res );
 		next();
+	}
+
+	// The sidebar's pending-comments badge (admins only — authors don't see
+	// Comments). Skipped for fetch() calls, which render no sidebar — the
+	// System page polls /manage/server/data every few seconds.
+	private function setNavCounts( req, res ){
+		if ( req.session.manage_user.role == "admin" && !isAjax( req ) ){
+			res.locals.navPendingComments = variables.commentService.getPendingCount();
+		}
 	}
 
 	// ── Flash messages (session-backed, survive one redirect) ─────────────────
@@ -261,51 +271,25 @@ class {
 		res.redirect( "/manage/login" );
 	}
 
-	// ── Dashboard ────────────────────────────────────────────────────────────
+	// ── Home ─────────────────────────────────────────────────────────────────
 
-	// GET /manage — zeroResultSearches/recentActivity/contentHealth are all
-	// small, uncached queries against Post/SearchLog/TagPost (a personal
-	// blog's worth of rows, not RequestLog's volume), so they stay inline.
-	// insightsTotal and server used to be fetched here too, but both are
-	// slow enough on a cold cache to be the actual reason this page felt
-	// slow to load — same reasoning that already split the traffic card
-	// out (see trafficData() below), now applied to these two as well: the
-	// shell renders immediately with a loading skeleton, insightsData()/
-	// serverData() fill each card in over AJAX once they resolve.
+	// GET /manage — only what needs attention, from small queries against
+	// Post and Comment (a personal blog's worth of rows). Traffic and server
+	// metrics used to be here too, but they're RequestLog/JVM work that
+	// already has its own pages (Insights, System), so the home page no
+	// longer pays for them on every visit.
 	function dashboard( req, res ){
 		res.render( "manage/index", {
-			pageTitle       : "Dashboard",
-			manageSection   : "dashboard",
-			manageUser      : req.session.manage_user,
-			zeroResultSearches : variables.postService.getZeroResultSearches( 30 ),
-			recentActivity     : variables.postService.getRecentActivity( 8 ),
-			contentHealth      : variables.postService.getContentHealth()
+			pageTitle      : "Home",
+			manageSection  : "dashboard",
+			manageUser     : req.session.manage_user,
+			recentActivity : variables.postService.getRecentActivity( 8 ),
+			contentHealth  : variables.postService.getContentHealth()
 		} );
 	}
 
-	// GET /manage/dashboard/traffic-data — the traffic card's own chart data,
-	// fetched over AJAX after the dashboard shell renders rather than
-	// blocking the initial page load on a 30-day recursive CTE against
-	// RequestLog (cached via InsightsService, but still not free on a cold
-	// cache) — the card shows a loading skeleton until this resolves.
-	function trafficData( req, res ){
-		var traffic = buildTrafficChartData( insightsFetch( () => variables.insightsService.getDailyTotals( 30 ), [] ) );
-		res.json( { success: true, traffic: traffic } );
-	}
-
-	// GET /manage/dashboard/insights-data — the Analytics card's own visitor
-	// total, same "don't block the shell on this" reasoning as
-	// trafficData() above (a COUNT(DISTINCT ip_address) scan against
-	// RequestLog, with a bot-filtering REGEXP that can't use an index —
-	// measured at ~350ms on a cold cache locally, and only grows with
-	// RequestLog's row count).
-	function insightsData( req, res ){
-		var total = insightsFetch( () => variables.insightsService.getTotal( 30 ) );
-		res.json( { success: !isNull( total ), total: isNull( total ) ? 0 : total.total } );
-	}
-
 	/**
-	 * Turns a day-by-day view-totals array into what the dashboard's Chart.js
+	 * Turns a day-by-day view-totals array into what the Insights Chart.js
 	 * traffic graph needs: parallel labels/values arrays, the period total,
 	 * the single busiest day, and today's own count for the stat boxes
 	 * beside the chart.
@@ -885,12 +869,21 @@ class {
 			pageTitle      : "Insights",
 			manageSection  : "insights",
 			daysBack       : daysBack,
-			total          : insightsFetch( () => variables.insightsService.getTotal( daysBack ) ),
 			topPosts       : insightsFetch( () => variables.postService.getTrendingPosts( 10 ) ),
 			topReferrers   : insightsFetch( () => variables.insightsService.getTopReferrers( daysBack, 10 ) ),
 			top404s        : insightsFetch( () => variables.insightsService.getTop404s( daysBack, 8 ) ),
-			topSearches    : insightsFetch( () => variables.postService.getTopSearches( daysBack, 8 ) )
+			topSearches    : insightsFetch( () => variables.postService.getTopSearches( daysBack, 8 ) ),
+			zeroResultSearches : insightsFetch( () => variables.postService.getZeroResultSearches( daysBack, 8 ) )
 		} );
+	}
+
+	// GET /manage/insights/traffic-data — the page-views chart's data, fetched
+	// after the Insights shell renders so the page doesn't wait on a 30-day
+	// count against RequestLog (past days are cached per day by
+	// InsightsService; today is always counted fresh).
+	function trafficData( req, res ){
+		var traffic = buildTrafficChartData( insightsFetch( () => variables.insightsService.getDailyTotals( 30 ), [] ) );
+		res.json( { success: true, traffic: traffic } );
 	}
 
 	/**
@@ -911,43 +904,44 @@ class {
 	// /manage/insights: insights is filtered/aggregated visitor analytics,
 	// this is an unfiltered access-log viewer for debugging and auditing.
 	function logsIndex( req, res ){
-		var rawPage     = req.query.page ?: "";
-		var currentPage = isNumeric( rawPage ) && rawPage > 0 ? int( rawPage ) : 1;
-		var pathFilter  = trim( req.query.q ?: "" );
-
-		// method/status/quick are the Alpine table's client-side filters —
-		// the server never applies them (they only ever act on whatever
-		// page's rows are already loaded), but round-tripping the current
-		// values through the URL is what makes them survive a pagination
-		// click or a plain reload instead of resetting every time. The view
-		// both seeds Alpine's initial state from these and folds them into
-		// every pagination link it renders, same as it already does for q.
-		var clientFilters = {
-			"method": trim( req.query.method ?: "" ),
-			"status": trim( req.query.status ?: "" ),
-			"quick" : trim( req.query.quick  ?: "" )
+		// The path/method/status filters run in the query, so they cover the
+		// whole log; "quick" is the table's client-side filter over the rows
+		// already on the page, round-tripped through the URL so it survives
+		// Newer/Older clicks and reloads.
+		var logMethods = [ "GET", "POST", "HEAD", "PUT", "PATCH", "DELETE", "OPTIONS" ];
+		var logFilters = {
+			"path"  : trim( req.query.q ?: "" ),
+			"method": uCase( trim( req.query.method ?: "" ) ),
+			"status": lCase( trim( req.query.status ?: "" ) )
 		};
+		if ( !logMethods.findNoCase( logFilters.method ) ) logFilters.method = "";
+		if ( !listFind( "2xx,3xx,4xx,5xx,unknown", logFilters.status ) ) logFilters.status = "";
 
-		var paging = variables.insightsService.getRecentRequests( currentPage, 50, pathFilter );
+		var beforeId = isNumeric( req.query.before ?: "" ) ? int( req.query.before ) : 0;
+		var afterId  = isNumeric( req.query.after ?: "" ) ? int( req.query.after ) : 0;
+		var quick    = trim( req.query.quick ?: "" );
+
+		var paging = variables.insightsService.getRecentRequests( logFilters, beforeId, afterId, 50 );
+
+		var qsParts = [];
+		if ( len( logFilters.path ) ) qsParts.append( "q=" & encodeForURL( logFilters.path ) );
+		if ( len( logFilters.method ) ) qsParts.append( "method=" & encodeForURL( logFilters.method ) );
+		if ( len( logFilters.status ) ) qsParts.append( "status=" & encodeForURL( logFilters.status ) );
+		if ( len( quick ) ) qsParts.append( "quick=" & encodeForURL( quick ) );
 
 		res.render( "manage/logs/index", {
 			pageTitle     : "Request Log",
 			manageSection : "logs",
 			paging        : paging,
-			clientFilters : clientFilters,
-			// Same </script>-escaping as rowsJson below, applied on principle —
-			// these three values are never attacker-controlled in any way that
-			// matters here, but there's no reason to treat this embed
-			// differently from the one right next to it.
-			clientFiltersJson: replace( JSONSerialize( clientFilters ), "</", "<\/", "all" ),
-			// The Alpine table on this page sorts/filters client-side, but only
-			// within whatever's already on the current server-rendered page —
-			// pagination and the path search box above stay server-side (this
-			// log can run to hundreds of pages; shipping the whole thing to the
-			// client isn't on the table). </script> is escaped so a referrer or
-			// user-agent value containing that literal string can't break out
-			// of the embedding <script type="application/json"> tag below.
-			rowsJson: replace( JSONSerialize( _rowsForClient( paging.rows ) ), "</", "<\/", "all" )
+			logFilters    : logFilters,
+			logMethods    : logMethods,
+			isPaged       : beforeId > 0 || afterId > 0,
+			filterQs      : qsParts.toList( "&" ),
+			// </script> is escaped so a referrer or user-agent value containing
+			// that literal string can't break out of the embedding
+			// <script type="application/json"> tags in the view.
+			quickJson     : replace( JSONSerialize( quick ), "</", "<\/", "all" ),
+			rowsJson      : replace( JSONSerialize( _rowsForClient( paging.rows ) ), "</", "<\/", "all" )
 		} );
 	}
 
@@ -1009,7 +1003,7 @@ class {
 	/**
 	 * Turns ServerMonitor.getSnapshot()'s raw struct (bytes, milliseconds,
 	 * 0-1 ratios, epoch millis) into display-ready strings/percentages, so
-	 * the view (both this page and the dashboard summary card) only ever
+	 * the view only ever
 	 * interpolates, never computes.
 	 */
 	private function _formatServerSnapshot( required struct snapshot ){

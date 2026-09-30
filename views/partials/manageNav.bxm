@@ -1,3 +1,5 @@
+<bx:set navSection = data.manageSection ?: "">
+<bx:set navIsAdmin = ( data.manageUser.role ?: "" ) == "admin">
 <bx:output>
 <nav class="c-manage-nav">
 	<div class="c-manage-nav__top">
@@ -10,35 +12,44 @@
 			<i class="bi bi-chevron-double-left" id="manage-nav-toggle-icon"></i>
 		</button>
 	</div>
-	<a href="/manage" class="c-manage-nav__link #( ( data.manageSection ?: '' ) == 'dashboard' ? 'c-manage-nav__link--active' : '' )#" title="Dashboard">
-		<i class="bi bi-speedometer2"></i> <span class="c-manage-nav__label">Dashboard</span>
+	<a href="/manage" class="c-manage-nav__link #( navSection == 'dashboard' ? 'c-manage-nav__link--active' : '' )#" title="Home">
+		<i class="bi bi-house"></i> <span class="c-manage-nav__label">Home</span>
 	</a>
-	<a href="/manage/posts" class="c-manage-nav__link #( ( data.manageSection ?: '' ) == 'posts' ? 'c-manage-nav__link--active' : '' )#" title="Posts">
+
+	<!--- Pages behind the admin gate in routes/Manage.bx are only listed for
+	      admins, so authors never see links that would bounce them. --->
+	<span class="c-manage-nav__group">Write</span>
+	<a href="/manage/posts" class="c-manage-nav__link #( navSection == 'posts' ? 'c-manage-nav__link--active' : '' )#" title="Posts">
 		<i class="bi bi-file-text"></i> <span class="c-manage-nav__label">Posts</span>
 	</a>
-	<a href="/manage/authors" class="c-manage-nav__link #( ( data.manageSection ?: '' ) == 'authors' ? 'c-manage-nav__link--active' : '' )#" title="Authors">
-		<i class="bi bi-people"></i> <span class="c-manage-nav__label">Authors</span>
+	<bx:if navIsAdmin>
+	<a href="/manage/comments" class="c-manage-nav__link #( navSection == 'comments' ? 'c-manage-nav__link--active' : '' )#" title="Comments">
+		<i class="bi bi-chat-left-text"></i> <span class="c-manage-nav__label">Comments</span>
+		<bx:if ( data.navPendingComments ?: 0 ) gt 0>
+			<span class="c-manage-nav__count">#data.navPendingComments#</span>
+		</bx:if>
 	</a>
-	<a href="/manage/media" class="c-manage-nav__link #( ( data.manageSection ?: '' ) == 'media' ? 'c-manage-nav__link--active' : '' )#" title="Media">
+	<a href="/manage/media" class="c-manage-nav__link #( navSection == 'media' ? 'c-manage-nav__link--active' : '' )#" title="Media">
 		<i class="bi bi-images"></i> <span class="c-manage-nav__label">Media</span>
 	</a>
-	<a href="/manage/insights" class="c-manage-nav__link #( ( data.manageSection ?: '' ) == 'insights' ? 'c-manage-nav__link--active' : '' )#" title="Insights">
+
+	<span class="c-manage-nav__group">Readers</span>
+	<a href="/manage/insights" class="c-manage-nav__link #( navSection == 'insights' ? 'c-manage-nav__link--active' : '' )#" title="Insights">
 		<i class="bi bi-bar-chart"></i> <span class="c-manage-nav__label">Insights</span>
 	</a>
-	<bx:if ( data.manageUser.role ?: "" ) == "admin">
-	<a href="/manage/comments" class="c-manage-nav__link #( ( data.manageSection ?: '' ) == 'comments' ? 'c-manage-nav__link--active' : '' )#" title="Comments">
-		<i class="bi bi-chat-left-text"></i> <span class="c-manage-nav__label">Comments</span>
+
+	<span class="c-manage-nav__group">Admin</span>
+	<a href="/manage/authors" class="c-manage-nav__link #( navSection == 'authors' ? 'c-manage-nav__link--active' : '' )#" title="Authors">
+		<i class="bi bi-people"></i> <span class="c-manage-nav__label">Authors</span>
 	</a>
-	</bx:if>
-	<a href="/manage/logs" class="c-manage-nav__link #( ( data.manageSection ?: '' ) == 'logs' ? 'c-manage-nav__link--active' : '' )#" title="Request Log">
-		<i class="bi bi-list-ul"></i> <span class="c-manage-nav__label">Request Log</span>
-	</a>
-	<a href="/manage/server" class="c-manage-nav__link #( ( data.manageSection ?: '' ) == 'server' ? 'c-manage-nav__link--active' : '' )#" title="Server">
-		<i class="bi bi-hdd-stack"></i> <span class="c-manage-nav__label">Server</span>
-	</a>
-	<a href="/manage/settings" class="c-manage-nav__link #( ( data.manageSection ?: '' ) == 'settings' ? 'c-manage-nav__link--active' : '' )#" title="Settings">
+	<a href="/manage/settings" class="c-manage-nav__link #( navSection == 'settings' ? 'c-manage-nav__link--active' : '' )#" title="Settings">
 		<i class="bi bi-gear"></i> <span class="c-manage-nav__label">Settings</span>
 	</a>
+	<a href="/manage/server" class="c-manage-nav__link #( listFind( 'server,logs', navSection ) ? 'c-manage-nav__link--active' : '' )#" title="System">
+		<i class="bi bi-hdd-stack"></i> <span class="c-manage-nav__label">System</span>
+	</a>
+	</bx:if>
+
 	<a href="/manage/logout" class="c-manage-nav__link c-manage-nav__link--signout" title="Sign out">
 		<i class="bi bi-box-arrow-right"></i> <span class="c-manage-nav__label">Sign out</span>
 	</a>

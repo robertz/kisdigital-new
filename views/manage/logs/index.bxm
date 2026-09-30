@@ -17,36 +17,52 @@ site-wide, just here where it's actually used. --->
 
 			<div class="c-manage-header">
 				<div class="c-manage-header__lead">
-					<span class="c-manage-header__eyebrow">Operations</span>
-					<h1 class="c-manage-header__title">
-						Request Log
-						<span class="c-manage-header__count">#numberFormat( data.paging.total )#</span>
-					</h1>
-					<p class="c-manage-header__sub">Every request this server has handled, newest first.</p>
+					<span class="c-manage-header__eyebrow">System</span>
+					<h1 class="c-manage-header__title">Request Log</h1>
+					<p class="c-manage-header__sub">Every request this server has handled in the last 90 days, newest first.</p>
 				</div>
-				<form method="get" action="/manage/logs" class="c-log-search" title="Searches every page, not just the one shown below">
-					<i class="bi bi-search c-log-search__icon"></i>
-					<input
-						type="text"
-						name="q"
-						value="#encodeForHTMLAttribute( data.paging.pathFilter )#"
-						placeholder="Filter by path (all pages)…"
-						class="c-log-search__input">
-					<bx:if len( data.paging.pathFilter )>
-						<a href="/manage/logs" class="c-log-search__clear" title="Clear filter">
-							<i class="bi bi-x-lg"></i>
-						</a>
-					</bx:if>
-				</form>
 			</div>
+
+			<bx:include template="../../partials/systemTabs.bxm">
+
+			<!--- These filters run in the query, so they cover the whole log. --->
+			<form method="get" action="/manage/logs" class="c-log-toolbar c-log-toolbar--server">
+				<div class="c-log-toolbar__filter c-log-toolbar__filter--grow">
+					<label for="log-filter-path">Path starts with</label>
+					<input id="log-filter-path" type="text" name="q" value="#encodeForHTMLAttribute( data.logFilters.path )#" placeholder="/posts/2026">
+				</div>
+				<div class="c-log-toolbar__filter">
+					<label for="log-filter-method">Method</label>
+					<select id="log-filter-method" name="method">
+						<option value="">All</option>
+						<bx:loop array="#data.logMethods#" item="logMethod">
+							<option value="#logMethod#" #( data.logFilters.method == logMethod ? "selected" : "" )#>#logMethod#</option>
+						</bx:loop>
+					</select>
+				</div>
+				<div class="c-log-toolbar__filter">
+					<label for="log-filter-status">Status</label>
+					<select id="log-filter-status" name="status">
+						<option value="">All</option>
+						<bx:loop list="2xx,3xx,4xx,5xx" item="statusOption">
+							<option value="#statusOption#" #( data.logFilters.status == statusOption ? "selected" : "" )#>#statusOption#</option>
+						</bx:loop>
+						<option value="unknown" #( data.logFilters.status == "unknown" ? "selected" : "" )#>Unknown</option>
+					</select>
+				</div>
+				<button type="submit" class="c-log-toolbar__apply">Apply</button>
+				<bx:if len( data.logFilters.path ) || len( data.logFilters.method ) || len( data.logFilters.status )>
+					<a href="/manage/logs" class="c-log-toolbar__reset"><i class="bi bi-x-circle"></i> Clear</a>
+				</bx:if>
+			</form>
 
 			<bx:if !data.paging.rows.len()>
 
 				<div class="c-manage-panel__empty">
 					<i class="bi bi-clipboard-data"></i>
-					<bx:if len( data.paging.pathFilter )>
+					<bx:if len( data.filterQs ) || data.isPaged>
 						<h2>No matching requests</h2>
-						<p>Nothing logged for paths containing "#encodeForHTML( data.paging.pathFilter )#".</p>
+						<p>Nothing logged matches these filters. <a href="/manage/logs">Back to the newest requests</a>.</p>
 					<bx:else>
 						<h2>No requests logged yet</h2>
 						<p>Traffic will start showing up here as soon as this server handles a request.</p>
@@ -56,42 +72,19 @@ site-wide, just here where it's actually used. --->
 			<bx:else>
 
 				<script id="log-rows-data" type="application/json">#data.rowsJson#</script>
-				<script id="log-initial-filters" type="application/json">#data.clientFiltersJson#</script>
+				<script id="log-initial-quick" type="application/json">#data.quickJson#</script>
 
 				<div class="c-manage-panel" x-data="requestLogTable()">
 
 					<div class="c-log-toolbar">
-						<div class="c-log-toolbar__filter">
-							<label for="log-filter-method">Method</label>
-							<select id="log-filter-method" x-model="methodFilter">
-								<option value="">All</option>
-								<template x-for="m in methods" :key="m">
-									<option :value="m" x-text="m"></option>
-								</template>
-							</select>
-						</div>
-						<div class="c-log-toolbar__filter">
-							<label for="log-filter-status">Status</label>
-							<select id="log-filter-status" x-model="statusFilter">
-								<option value="">All</option>
-								<option value="2xx">2xx</option>
-								<option value="3xx">3xx</option>
-								<option value="4xx">4xx</option>
-								<option value="5xx">5xx</option>
-								<option value="unknown">Unknown</option>
-							</select>
-						</div>
 						<div class="c-log-toolbar__filter c-log-toolbar__filter--grow">
-							<label for="log-filter-quick">This page</label>
+							<label for="log-filter-quick">Search this page</label>
 							<input
 								id="log-filter-quick"
 								type="text"
 								x-model="quickFilter"
-								placeholder="Quick filter path, IP, referrer, user agent…">
+								placeholder="Path, IP, referrer or user agent in the rows below">
 						</div>
-						<button type="button" class="c-log-toolbar__reset" @click="reset()" x-show="hasActiveFilters()">
-							<i class="bi bi-x-circle"></i> Reset
-						</button>
 						<span class="c-log-toolbar__count" x-text="filteredRows.length + ' of #data.paging.rows.len()# shown'"></span>
 					</div>
 
@@ -156,68 +149,31 @@ site-wide, just here where it's actually used. --->
 
 						<div class="c-manage-panel__empty c-manage-panel__empty--inline" x-show="!filteredRows.length">
 							<i class="bi bi-funnel"></i>
-							<h2>No rows on this page match those filters</h2>
-							<p>Try Reset, or use the search box above to look across every page.</p>
+							<h2>No rows on this page match that</h2>
+							<p>This box only searches the rows shown here. Use the filters above to search the whole log.</p>
 						</div>
 					</div>
 
-					<bx:if data.paging.totalPages gt 1>
-						<!--- Carries the server-side path search AND the client-side
-						method/status/quick filters forward into every pagination
-						link, so paginating doesn't reset filters a user just set. --->
-						<bx:set qsParts = []>
-						<bx:if len( data.paging.pathFilter )><bx:set qsParts.append( "q=" & encodeForURL( data.paging.pathFilter ) )></bx:if>
-						<bx:if len( data.clientFilters.method )><bx:set qsParts.append( "method=" & encodeForURL( data.clientFilters.method ) )></bx:if>
-						<bx:if len( data.clientFilters.status )><bx:set qsParts.append( "status=" & encodeForURL( data.clientFilters.status ) )></bx:if>
-						<bx:if len( data.clientFilters.quick )><bx:set qsParts.append( "quick=" & encodeForURL( data.clientFilters.quick ) )></bx:if>
-						<bx:set qs = qsParts.len() ? qsParts.toList( "&" ) & "&" : "">
-						<!--- Windowed, not a link per page like the (small, bounded) Posts
-						list — a log this size can run to hundreds of pages. --->
-						<bx:set winStart = max( 1, data.paging.page - 2 )>
-						<bx:set winEnd   = min( data.paging.totalPages, data.paging.page + 2 )>
+					<bx:if data.paging.hasNewer || data.paging.hasOlder>
+						<bx:set qs = len( data.filterQs ) ? data.filterQs & "&" : "">
 						<footer class="c-manage-panel__footer">
-							<span class="c-manage-panel__page-info">
-								Page <strong>#data.paging.page#</strong> of <strong>#data.paging.totalPages#</strong>
-							</span>
-							<!--- The href on every link below is a server-rendered snapshot
-							of the filters as of this page load — correct as a fallback
-							(no-JS, open-in-new-tab), but a filter changed since then only
-							lives in Alpine state. This capture-phase handler rewrites the
-							destination to match *live* filter state before the browser
-							navigates, so paginating after changing a filter carries the
-							filter you actually have selected right now, not the stale one
-							from when the page first loaded. --->
+							<!--- The hrefs carry the quick filter as it was when the page
+							loaded; onPaginate() swaps in its current value, so a change
+							made since then isn't lost on the next click. --->
 							<div class="c-pagination" @click.capture="onPaginate($event)">
-								<bx:if data.paging.page gt 1>
-									<a class="c-pagination__btn" href="/manage/logs?#qs#page=#data.paging.page - 1#" aria-label="Previous page">
-										<i class="bi bi-chevron-left"></i>
+								<bx:if data.paging.hasNewer>
+									<a class="c-pagination__btn c-pagination__btn--wide" href="/manage/logs?#qs#after=#data.paging.newerCursor#">
+										<i class="bi bi-chevron-left"></i> Newer
 									</a>
 								<bx:else>
-									<span class="c-pagination__btn c-pagination__btn--disabled"><i class="bi bi-chevron-left"></i></span>
+									<span class="c-pagination__btn c-pagination__btn--wide c-pagination__btn--disabled"><i class="bi bi-chevron-left"></i> Newer</span>
 								</bx:if>
-
-								<bx:if winStart gt 1>
-									<a class="c-pagination__btn" href="/manage/logs?#qs#page=1">1</a>
-									<bx:if winStart gt 2><span class="c-pagination__ellipsis">…</span></bx:if>
-								</bx:if>
-
-								<bx:loop from="#winStart#" to="#winEnd#" index="pg">
-									<a class="c-pagination__btn #pg == data.paging.page ? 'c-pagination__btn--active' : ''#" href="/manage/logs?#qs#page=#pg#">
-										#pg#
-									</a>
-								</bx:loop>
-
-								<bx:if winEnd lt data.paging.totalPages>
-									<bx:if winEnd lt data.paging.totalPages - 1><span class="c-pagination__ellipsis">…</span></bx:if>
-									<a class="c-pagination__btn" href="/manage/logs?#qs#page=#data.paging.totalPages#">#data.paging.totalPages#</a>
-								</bx:if>
-
-								<bx:if data.paging.page lt data.paging.totalPages>
-									<a class="c-pagination__btn" href="/manage/logs?#qs#page=#data.paging.page + 1#" aria-label="Next page">
-										<i class="bi bi-chevron-right"></i>
+								<bx:if data.paging.hasOlder>
+									<a class="c-pagination__btn c-pagination__btn--wide" href="/manage/logs?#qs#before=#data.paging.olderCursor#">
+										Older <i class="bi bi-chevron-right"></i>
 									</a>
 								<bx:else>
-									<span class="c-pagination__btn c-pagination__btn--disabled"><i class="bi bi-chevron-right"></i></span>
+									<span class="c-pagination__btn c-pagination__btn--wide c-pagination__btn--disabled">Older <i class="bi bi-chevron-right"></i></span>
 								</bx:if>
 							</div>
 						</footer>
@@ -234,13 +190,9 @@ site-wide, just here where it's actually used. --->
 <script src="/assets/js/local-time.js"></script>
 <script>
 function requestLogTable(){
-	var initialFilters = JSON.parse(document.getElementById('log-initial-filters').textContent);
-
 	return {
 		rows: JSON.parse(document.getElementById('log-rows-data').textContent),
-		methodFilter: initialFilters.method,
-		statusFilter: initialFilters.status,
-		quickFilter: initialFilters.quick,
+		quickFilter: JSON.parse(document.getElementById('log-initial-quick').textContent),
 		sortKey: 'timeSort',
 		sortDir: 'desc',
 
@@ -251,71 +203,42 @@ function requestLogTable(){
 			return LocalTime.format(utcIso, 'datetime-seconds') || utcIso;
 		},
 
-		// Alpine calls this automatically (it's a reserved method name) once
-		// the component's reactive state exists — mirrors every filter
-		// change into the URL via replaceState (no reload, no new history
-		// entry) so a plain browser refresh restores the same filters
-		// instead of resetting to "All".
+		// Alpine calls this automatically once the component's state exists —
+		// mirrors the quick filter into the URL via replaceState (no reload,
+		// no new history entry) so a refresh keeps it.
 		init: function(){
 			var self = this;
-			[ 'methodFilter', 'statusFilter', 'quickFilter' ].forEach( function( prop ){
-				self.$watch( prop, function(){ self._syncUrl(); } );
+			self.$watch( 'quickFilter', function(){
+				var url = new URL( window.location.href );
+				self._setQuick( url );
+				window.history.replaceState( {}, '', url );
 			} );
 		},
 
-		// { method, status, quick } → the query param names the server side
-		// (Manage.bx's logsIndex(), and this same file's pagination links)
-		// uses for these same three filters.
-		_filterParams: function(){
-			return { method: this.methodFilter, status: this.statusFilter, quick: this.quickFilter };
+		_setQuick: function( url ){
+			if ( this.quickFilter ) url.searchParams.set( 'quick', this.quickFilter );
+			else url.searchParams.delete( 'quick' );
 		},
 
-		_syncUrl: function(){
-			var url = new URL( window.location.href );
-			var params = this._filterParams();
-			Object.keys( params ).forEach( function( key ){
-				if ( params[ key ] ) url.searchParams.set( key, params[ key ] );
-				else url.searchParams.delete( key );
-			} );
-			window.history.replaceState( {}, '', url );
-		},
-
-		// Rewrites a pagination link's destination to carry *live* filter
-		// state (see the capture-handler comment above the .c-pagination
-		// element) — a modified click (⌘/ctrl/middle-click, "open in new
-		// tab") is left alone so it still opens the plain server-rendered
-		// href rather than hijacking a new-tab open.
+		// A modified click (⌘/ctrl/middle-click) is left alone so "open in
+		// new tab" still gets the plain server-rendered href.
 		onPaginate: function( event ){
 			var link = event.target.closest( 'a.c-pagination__btn' );
 			if ( !link || event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.button === 1 ) return;
 
 			event.preventDefault();
 			var url = new URL( link.href, window.location.origin );
-			var params = this._filterParams();
-			Object.keys( params ).forEach( function( key ){
-				if ( params[ key ] ) url.searchParams.set( key, params[ key ] );
-				else url.searchParams.delete( key );
-			} );
+			this._setQuick( url );
 			window.location.href = url.toString();
 		},
 
-		get methods(){
-			return [...new Set(this.rows.map(function(r){ return r.method; }))].sort();
-		},
-
 		get filteredRows(){
-			var methodFilter = this.methodFilter;
-			var statusFilter = this.statusFilter;
 			var quick = this.quickFilter.trim().toLowerCase();
 
 			var rows = this.rows.filter(function(row){
-				if (methodFilter && row.method !== methodFilter) return false;
-				if (statusFilter && statusClass(row.statusCode) !== statusFilter) return false;
-				if (quick) {
-					var haystack = (row.path + ' ' + row.ip + ' ' + row.referrer + ' ' + row.userAgent).toLowerCase();
-					if (haystack.indexOf(quick) === -1) return false;
-				}
-				return true;
+				if (!quick) return true;
+				var haystack = (row.path + ' ' + row.ip + ' ' + row.referrer + ' ' + row.userAgent).toLowerCase();
+				return haystack.indexOf(quick) !== -1;
 			});
 
 			// statusSort: unknown (empty string) sorts as -1, same idea as the
@@ -345,23 +268,11 @@ function requestLogTable(){
 		sortIcon: function(key){
 			if (this.sortKey !== key) return 'bi-chevron-expand c-log-table__sort-icon c-log-table__sort-icon--idle';
 			return this.sortDir === 'asc' ? 'bi-chevron-up c-log-table__sort-icon' : 'bi-chevron-down c-log-table__sort-icon';
-		},
-
-		hasActiveFilters: function(){
-			return !!(this.methodFilter || this.statusFilter || this.quickFilter);
-		},
-
-		reset: function(){
-			this.methodFilter = '';
-			this.statusFilter = '';
-			this.quickFilter = '';
 		}
 	};
 }
 
-// Shared with filteredRows' statusFilter comparison above — kept as a
-// standalone function (not a method) so it's the exact same classification
-// the status badge itself renders with, not a second copy that could drift.
+// The status badge's colour class.
 function statusClass(code){
 	if (code === '') return 'unknown';
 	if (code < 300) return '2xx';
