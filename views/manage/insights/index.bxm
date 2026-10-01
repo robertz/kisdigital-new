@@ -107,22 +107,9 @@
 					<span class="c-manage-dashboard__icon"><i class="bi bi-file-earmark-text"></i></span>
 					<span class="c-manage-dashboard__eyebrow">Top posts</span>
 				</div>
-				<bx:if isNull( data.topPosts )>
-					<p class="c-manage-dashboard__meta">Couldn't load this &mdash; see server logs.</p>
-				<bx:elseif !data.topPosts.len()>
-					<p class="c-manage-dashboard__meta">No visits recorded yet.</p>
-				<bx:else>
-					<ol class="c-dashboard-list">
-						<bx:loop array="#data.topPosts#" item="row">
-							<li class="c-dashboard-list__item">
-								<a href="/posts/#year( row.publish_date )#/#numberFormat( month( row.publish_date ), "00" )#/#encodeForURL( row.slug )#" class="c-dashboard-list__label c-dashboard-list__label--link" target="_blank" rel="noopener">
-									#encodeForHTML( row.title )#
-								</a>
-								<span class="c-dashboard-list__meta">#( row.views gte 1000 ? numberFormat( row.views / 1000, "0.0" ) & "k" : row.views )# views</span>
-							</li>
-						</bx:loop>
-					</ol>
-				</bx:if>
+				<div class="c-insights-card__body" data-insights-card="top-posts">
+					<p class="c-manage-dashboard__meta c-insights-card__loading">Loading&hellip;</p>
+				</div>
 			</section>
 
 			<!--- Top referrers card --->
@@ -131,20 +118,9 @@
 					<span class="c-manage-dashboard__icon"><i class="bi bi-signpost-split"></i></span>
 					<span class="c-manage-dashboard__eyebrow">Top referrers</span>
 				</div>
-				<bx:if isNull( data.topReferrers )>
-					<p class="c-manage-dashboard__meta">Couldn't load this &mdash; see server logs.</p>
-				<bx:elseif !data.topReferrers.len()>
-					<p class="c-manage-dashboard__meta">No referrer data yet.</p>
-				<bx:else>
-					<ul class="c-dashboard-list">
-						<bx:loop array="#data.topReferrers#" item="row">
-							<li class="c-dashboard-list__item">
-								<span class="c-dashboard-list__label">#encodeForHTML( row.name )#</span>
-								<span class="c-dashboard-list__meta">#numberFormat( row.count )#</span>
-							</li>
-						</bx:loop>
-					</ul>
-				</bx:if>
+				<div class="c-insights-card__body" data-insights-card="referrers">
+					<p class="c-manage-dashboard__meta c-insights-card__loading">Loading&hellip;</p>
+				</div>
 			</section>
 
 			<!--- Top searches card --->
@@ -153,20 +129,9 @@
 					<span class="c-manage-dashboard__icon"><i class="bi bi-search"></i></span>
 					<span class="c-manage-dashboard__eyebrow">Top searches</span>
 				</div>
-				<bx:if isNull( data.topSearches )>
-					<p class="c-manage-dashboard__meta">Couldn't load this &mdash; see server logs.</p>
-				<bx:elseif !data.topSearches.len()>
-					<p class="c-manage-dashboard__meta">No searches recorded yet.</p>
-				<bx:else>
-					<ul class="c-dashboard-list">
-						<bx:loop array="#data.topSearches#" item="row">
-							<li class="c-dashboard-list__item">
-								<span class="c-dashboard-list__label">&ldquo;#encodeForHTML( row.query )#&rdquo;</span>
-								<span class="c-dashboard-list__meta">#row.search_count# #( row.search_count == 1 ? "search" : "searches" )#</span>
-							</li>
-						</bx:loop>
-					</ul>
-				</bx:if>
+				<div class="c-insights-card__body" data-insights-card="searches">
+					<p class="c-manage-dashboard__meta c-insights-card__loading">Loading&hellip;</p>
+				</div>
 			</section>
 
 			<!--- Zero-result searches card --->
@@ -175,20 +140,9 @@
 					<span class="c-manage-dashboard__icon"><i class="bi bi-search"></i></span>
 					<span class="c-manage-dashboard__eyebrow">Searches that found nothing</span>
 				</div>
-				<bx:if isNull( data.zeroResultSearches )>
-					<p class="c-manage-dashboard__meta">Couldn't load this &mdash; see server logs.</p>
-				<bx:elseif data.zeroResultSearches.len()>
-					<ul class="c-dashboard-list">
-						<bx:loop array="#data.zeroResultSearches#" item="row">
-							<li class="c-dashboard-list__item">
-								<span class="c-dashboard-list__label">&ldquo;#encodeForHTML( row.query )#&rdquo;</span>
-								<span class="c-dashboard-list__meta">#row.search_count# #( row.search_count == 1 ? "search" : "searches" )#</span>
-							</li>
-						</bx:loop>
-					</ul>
-				<bx:else>
-					<p class="c-manage-dashboard__meta">No searches have come up empty recently.</p>
-				</bx:if>
+				<div class="c-insights-card__body" data-insights-card="zero-searches">
+					<p class="c-manage-dashboard__meta c-insights-card__loading">Loading&hellip;</p>
+				</div>
 			</section>
 
 			<!--- Top 404s card --->
@@ -197,27 +151,29 @@
 					<span class="c-manage-dashboard__icon"><i class="bi bi-exclamation-triangle"></i></span>
 					<span class="c-manage-dashboard__eyebrow">Top 404s</span>
 				</div>
-				<bx:if isNull( data.top404s )>
-					<p class="c-manage-dashboard__meta">Couldn't load this &mdash; see server logs.</p>
-				<bx:elseif !data.top404s.len()>
-					<p class="c-manage-dashboard__meta">No 404s recorded &mdash; nothing broken lately.</p>
-				<bx:else>
-					<ul class="c-dashboard-list">
-						<bx:loop array="#data.top404s#" item="row">
-							<li class="c-dashboard-list__item">
-								<a href="#encodeForHTMLAttribute( row.path )#" class="c-dashboard-list__label c-dashboard-list__label--link" target="_blank" rel="noopener">
-									#encodeForHTML( row.path )#
-								</a>
-								<span class="c-dashboard-list__meta">#numberFormat( row.count )#</span>
-							</li>
-						</bx:loop>
-					</ul>
-				</bx:if>
+				<div class="c-insights-card__body" data-insights-card="404s">
+					<p class="c-manage-dashboard__meta c-insights-card__loading">Loading&hellip;</p>
+				</div>
 			</section>
 
 		</div>
 
 	</main>
 </div>
+
+<script>
+// Each card is its own request, so they load in parallel and the page never
+// waits on the slowest one. A failed request only affects its own card.
+(function(){
+	document.querySelectorAll('[data-insights-card]').forEach(function(el){
+		fetch('/manage/insights/card/' + el.dataset.insightsCard, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+			.then(function(res){ return res.ok ? res.text() : Promise.reject(); })
+			.then(function(html){ el.innerHTML = html; })
+			.catch(function(){
+				el.innerHTML = '<p class="c-manage-dashboard__meta">Couldn\'t load this &mdash; see server logs.</p>';
+			});
+	});
+})();
+</script>
 </bx:output>
 <bx:include template="../../partials/_foot.bxm">

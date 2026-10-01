@@ -74,6 +74,9 @@ requestLogger   = new models.util.RequestLogger()
 insightsService = new models.services.InsightsService(
 	reReplace( getSystemSetting( "SITEURL", "https://kisdigital.com" ), "^https?://", "", "one" )
 )
+// Summarizes each completed day of RequestLog in the background so
+// /manage/insights never has to count 30 days of raw requests.
+insightsService.startDailySummaries()
 
 // /manage/server — live JVM/OS metrics (memory, CPU, disk, GC, threads) plus
 // Undertow's own connector stats via `app`. See ServerMonitor.bx; no

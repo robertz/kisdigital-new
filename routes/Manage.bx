@@ -98,6 +98,7 @@ class {
 
 		this.router.get( "/manage/insights", admin, ( req, res ) => insightsIndex( req, res ) );
 		this.router.get( "/manage/insights/traffic-data", admin, ( req, res ) => trafficData( req, res ) );
+		this.router.get( "/manage/insights/card/:card", admin, ( req, res, next ) => insightsCard( req, res, next ) );
 		this.router.get( "/manage/logs", admin, ( req, res ) => logsIndex( req, res ) );
 		this.router.get( "/manage/server", admin, ( req, res ) => serverIndex( req, res ) );
 		this.router.get( "/manage/server/data", admin, ( req, res ) => serverData( req, res ) );
@@ -860,21 +861,37 @@ class {
 
 	// ── Visitor insights (RequestLog) ───────────────────────────────────────
 
-	// GET /manage/insights — each card's own query is caught independently
-	// so one failing query (a DB blip) degrades that one card instead of
-	// blanking the whole page behind a 500.
+	// GET /manage/insights — just the page shell. Each card fills itself in
+	// from insightsCard() below, and the chart from trafficData(), so the
+	// page appears at once and its cards load in parallel.
 	function insightsIndex( req, res ){
-		var daysBack = 30;
-
 		res.render( "manage/insights/index", {
-			pageTitle      : "Insights",
-			manageSection  : "insights",
-			daysBack       : daysBack,
-			topPosts       : insightsFetch( () => variables.postService.getTrendingPosts( 10 ) ),
-			topReferrers   : insightsFetch( () => variables.insightsService.getTopReferrers( daysBack, 10 ) ),
-			top404s        : insightsFetch( () => variables.insightsService.getTop404s( daysBack, 8 ) ),
-			topSearches    : insightsFetch( () => variables.postService.getTopSearches( daysBack, 8 ) ),
-			zeroResultSearches : insightsFetch( () => variables.postService.getZeroResultSearches( daysBack, 8 ) )
+			pageTitle     : "Insights",
+			manageSection : "insights",
+			daysBack      : 30
+		} );
+	}
+
+	// GET /manage/insights/card/:card — one card's contents as an HTML
+	// fragment. Each query is caught independently, so a failing one (a DB
+	// blip) degrades only its own card.
+	function insightsCard( req, res, next ){
+		var daysBack = 30;
+		var loaders  = {
+			"top-posts"    : () => variables.postService.getTrendingPosts( 10 ),
+			"referrers"    : () => variables.insightsService.getTopReferrers( daysBack, 10 ),
+			"searches"     : () => variables.postService.getTopSearches( daysBack, 8 ),
+			"zero-searches": () => variables.postService.getZeroResultSearches( daysBack, 8 ),
+			"404s"         : () => variables.insightsService.getTop404s( daysBack, 8 )
+		};
+		var card = req.params.card ?: "";
+		if ( !loaders.keyExists( card ) ){
+			return next();
+		}
+
+		res.render( "manage/insights/card", {
+			card : card,
+			rows : insightsFetch( loaders[ card ] )
 		} );
 	}
 

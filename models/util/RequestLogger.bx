@@ -29,6 +29,7 @@ class {
 	// a DELETE on every single flush.
 	variables.flushesBetweenCleanup = 360;
 	variables.flushesSinceCleanup   = 0;
+	variables.botDetector           = new models.util.BotDetector();
 
 	function init( numeric flushIntervalSeconds = 5, numeric retentionDays = 90 ){
 		variables.flushIntervalSeconds = arguments.flushIntervalSeconds;
@@ -132,6 +133,7 @@ class {
 			}
 
 			for ( var row in batch ){
+				_classify( row );
 				_insertRow( row );
 			}
 
@@ -143,12 +145,25 @@ class {
 		}
 	}
 
+	/**
+	 * Labels a row for /manage/insights at write time, here on the flush
+	 * thread rather than in the request: whether it's a bot (BotDetector, so
+	 * Insights no longer runs a user-agent REGEXP over every row it reads)
+	 * and the referrer's hostname ("" when there's no referrer).
+	 */
+	private function _classify( required struct row ){
+		arguments.row.isBot        = variables.botDetector.isBot( arguments.row.userAgent );
+		arguments.row.referrerHost = len( arguments.row.referrer )
+			? lCase( left( reReplace( arguments.row.referrer, "^[a-zA-Z][a-zA-Z0-9+.-]*://([^/?##:]+).*$", "\1" ), 255 ) )
+			: "";
+	}
+
 	private function _insertRow( required struct row ){
 		queryExecute(
 			"INSERT INTO RequestLog
-				(requested_at, method, path, query_string, status_code, duration_ms, ip_address, referrer, user_agent)
+				(requested_at, method, path, query_string, status_code, duration_ms, ip_address, referrer, user_agent, is_bot, referrer_host)
 			VALUES
-				(:requestedAt, :method, :path, :queryString, :statusCode, :durationMs, :ip, :referrer, :userAgent)",
+				(:requestedAt, :method, :path, :queryString, :statusCode, :durationMs, :ip, :referrer, :userAgent, :isBot, :referrerHost)",
 			{
 				"requestedAt": { value: row.requestedAt, cfsqltype: "cf_sql_timestamp" },
 				"method"     : { value: row.method,      cfsqltype: "cf_sql_varchar" },
@@ -160,7 +175,9 @@ class {
 				"durationMs" : { value: row.durationMs, cfsqltype: "cf_sql_integer" },
 				"ip"         : { value: row.ip,         cfsqltype: "cf_sql_varchar" },
 				"referrer"   : { value: row.referrer,   cfsqltype: "cf_sql_longvarchar" },
-				"userAgent"  : { value: row.userAgent,  cfsqltype: "cf_sql_longvarchar" }
+				"userAgent"  : { value: row.userAgent,  cfsqltype: "cf_sql_longvarchar" },
+				"isBot"      : { value: row.isBot ? 1 : 0, cfsqltype: "cf_sql_tinyint" },
+				"referrerHost": { value: row.referrerHost, cfsqltype: "cf_sql_varchar" }
 			}
 		);
 	}

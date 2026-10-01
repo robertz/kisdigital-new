@@ -191,7 +191,9 @@ create table RequestLog
     duration_ms  int unsigned                             not null,
     ip_address   varchar(45) default ''                   not null,
     referrer     text                                     not null,
-    user_agent   text                                     not null
+    user_agent   text                                     not null,
+    is_bot        tinyint(1)                              null,
+    referrer_host varchar(255)                            null
 );
 
 create index idx_request_log_path
@@ -199,6 +201,16 @@ create index idx_request_log_path
 
 create index idx_request_log_requested_at
     on RequestLog (requested_at);
+
+-- Per-day Insights summaries; see db/migrations/0023_request_log_daily_summaries.sql
+create table RequestLogDaily
+(
+    log_date  date         not null,
+    kind      varchar(16)  not null,
+    name      varchar(500) default '' not null,
+    hits      int unsigned not null,
+    primary key (log_date, kind, name)
+);
 
 -- Project docs (/projects/:slug/docs/:page), editable via /manage/project-docs
 -- instead of hand-edited .bxm template files + a deploy per change (see
