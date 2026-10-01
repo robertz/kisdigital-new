@@ -6,18 +6,25 @@
  * RequestLogger.bx middleware already fills in asynchronously, so there's no
  * external dependency left to be slow, rate-limited, or down.
  *
- * Every query shares the same traffic filter (_where()): GET requests only,
- * excluding /manage/* (CMS admin, not visitor traffic), /assets/* (static
- * files, not pages), /health (infra probe), and known bots/crawlers (see
- * BotDetector.bx) — the same shape of filtering GoatCounter's client-side
- * pageview beacon gave for free by construction (it only ever fired from a
- * real browser rendering a real public page).
+ * Every Insights figure shares the same traffic filter (_visitorFilter()):
+ * GET requests only, excluding /manage/* (CMS admin, not visitor traffic),
+ * /assets/* (static files, not pages), /health (infra probe), and known
+ * bots/crawlers (see BotDetector.bx) — the same shape of filtering
+ * GoatCounter's client-side pageview beacon gave for free by construction
+ * (it only ever fired from a real browser rendering a real public page).
+ *
+ * Completed days are read from RequestLogDaily, a per-day summary built in
+ * the background (see db/migrations/0023_request_log_daily_summaries.sql);
+ * only today is counted from raw RequestLog rows. That keeps each card's
+ * cost to ~30 summary days plus one day of requests, however busy the site.
  */
 class {
 
 	variables.siteHost        = "";
 	variables.botDetector     = "";
 	variables.persistentCache = new models.util.PersistentCache();
+	// Completed days the background job keeps summarized — Insights shows 30.
+	variables.summaryDays     = 31;
 
 	function init( required string siteHost ){
 		variables.siteHost    = arguments.siteHost;
@@ -26,10 +33,10 @@ class {
 	}
 
 	/**
-	 * Broken/removed links and bad referrers, the exact opposite of every
-	 * other query here (which all exclude 404s via _excluding404() as
-	 * noise) — a 404 isn't noise on its own, it's the whole signal: the one
-	 * thing every other "top pages"-style card can't show.
+	 * Broken/removed links and bad referrers, the exact opposite of the page
+	 * views count (which excludes 404s via _excluding404() as noise) — a 404
+	 * isn't noise on its own, it's the whole signal: the one thing every
+	 * other "top pages"-style card can't show.
 	 *
 	 * @return {array} of { path, count }, highest first.
 	 */
@@ -37,15 +44,23 @@ class {
 		var days  = arguments.daysBack;
 		var limit = arguments.limit;
 		return _cached( "insights:top404s:" & days & ":" & limit, 300, () => {
-			var params = _params( days );
+			_ensureDailySummaries( days );
+			var params = _windowParams( days );
 			params[ "lim" ] = { value: limit, cfsqltype: "cf_sql_integer" };
 
 			return queryExecute(
-				"SELECT path, COUNT(*) AS count
-				FROM RequestLog
-				WHERE " & _where() & "
-					AND status_code = 404
-				GROUP BY path
+				"SELECT t.name AS path, SUM(t.hits) AS count
+				FROM (
+					SELECT name, hits
+					FROM RequestLogDaily
+					WHERE kind = '404' AND log_date >= :fromDate AND log_date < :todayDate
+					UNION ALL
+					SELECT LEFT(path, 500) AS name, 1 AS hits
+					FROM RequestLog
+					WHERE " & _visitorFilter() & "
+						AND status_code = 404
+				) t
+				GROUP BY t.name
 				ORDER BY count DESC
 				LIMIT :lim",
 				params,
@@ -68,21 +83,24 @@ class {
 		var days  = arguments.daysBack;
 		var limit = arguments.limit;
 		return _cached( "insights:topReferrers:" & days & ":" & limit, 300, () => {
-			var params = _params( days );
-			params[ "lim" ]     = { value: limit, cfsqltype: "cf_sql_integer" };
+			_ensureDailySummaries( days );
+			var params = _windowParams( days );
+			params[ "lim" ]      = { value: limit, cfsqltype: "cf_sql_integer" };
 			params[ "selfHost" ] = { value: "%" & variables.siteHost & "%", cfsqltype: "cf_sql_varchar" };
 
 			return queryExecute(
-				"SELECT
-					CASE
-						WHEN referrer = '' THEN '(direct)'
-						ELSE SUBSTRING_INDEX(SUBSTRING_INDEX(SUBSTRING_INDEX(referrer, '://', -1), '/', 1), '?', 1)
-					END AS name,
-					COUNT(*) AS count
-				FROM RequestLog
-				WHERE " & _where() & "
-					AND referrer NOT LIKE :selfHost
-				GROUP BY name
+				"SELECT CASE WHEN t.name = '' THEN '(direct)' ELSE t.name END AS name, SUM(t.hits) AS count
+				FROM (
+					SELECT name, hits
+					FROM RequestLogDaily
+					WHERE kind = 'referrer' AND log_date >= :fromDate AND log_date < :todayDate
+					UNION ALL
+					SELECT " & _referrerHostExpr() & " AS name, 1 AS hits
+					FROM RequestLog
+					WHERE " & _visitorFilter() & "
+				) t
+				WHERE t.name NOT LIKE :selfHost
+				GROUP BY t.name
 				ORDER BY count DESC
 				LIMIT :lim",
 				params,
@@ -92,82 +110,102 @@ class {
 	}
 
 	/**
-	 * Site-wide daily request totals (same visitor-traffic filter as every
-	 * other method here) for the Insights page-views chart — the
-	 * full-site equivalent of PostService.getDailyViewTotals(), which only
-	 * ever counted individual post-page views.
-	 *
-	 * Cached per calendar day in cache("persistentCache") rather than as one 30-day
-	 * blob: every day except today is over and immutable, so once a day's
-	 * total is computed it's cached for a week (long enough to survive a
-	 * quiet cache, short enough that a stale value can't linger forever)
-	 * and never recomputed. Only missing (uncached) past days trigger a
-	 * GROUP BY query, and only for the specific date range that's actually
-	 * missing — normally none, since once the window's days are all cached
-	 * they stay cached. Today is still accumulating, so it's always read
-	 * live with a small, index-bound single-day query instead of being
-	 * cached at all. A quiet day still gets a zero row instead of silently
-	 * vanishing from the chart.
+	 * Site-wide daily page views (visitor traffic, excluding 404s) for the
+	 * Insights chart — the full-site equivalent of
+	 * PostService.getDailyViewTotals(), which only counts post-page views.
+	 * Completed days come from RequestLogDaily; today is still accumulating,
+	 * so it's counted live from its own (small) slice of RequestLog. A quiet
+	 * day still gets a zero row instead of vanishing from the chart.
 	 *
 	 * @return {array} Array of structs with keys: view_date, total_views. Ordered oldest to newest.
 	 */
 	function getDailyTotals( numeric daysBack = 30 ){
-		var days          = arguments.daysBack;
-		var todayMidnight = createDate( year( now() ), month( now() ), day( now() ) );
-		var totalsByDate  = {};
-		var missingDates  = [];
+		var days = arguments.daysBack;
+		_ensureDailySummaries( days );
+		var params = _windowParams( days );
 
-		for ( var i = days; i >= 1; i-- ){
-			var dayMidnight = dateAdd( "d", -i, todayMidnight );
-			var dayKey      = dateFormat( dayMidnight, "yyyy-mm-dd" );
-			var cached      = variables.persistentCache.get( "insights:dailyTotal:" & dayKey );
-			if ( cached.isPresent() ){
-				totalsByDate[ dayKey ] = cached.get();
-			} else {
-				arrayAppend( missingDates, dayMidnight );
-			}
+		var totalsByDate = {};
+		var rows = queryExecute(
+			"SELECT log_date, hits
+			FROM RequestLogDaily
+			WHERE kind = 'views' AND log_date >= :fromDate AND log_date < :todayDate",
+			params,
+			{ returnType: "array" }
+		);
+		for ( var row in rows ){
+			totalsByDate[ dateFormat( row.log_date, "yyyy-mm-dd" ) ] = row.hits;
 		}
 
-		if ( arrayLen( missingDates ) ){
-			var rows = queryExecute(
-				"SELECT DATE(requested_at) AS d, COUNT(*) AS total
-				FROM RequestLog
-				WHERE " & _whereBetween() & "
-					AND " & _excluding404() & "
-				GROUP BY DATE(requested_at)",
-				_paramsBetween( missingDates[ 1 ], todayMidnight ),
-				{ returnType: "array" }
-			);
-
-			var countsByDate = {};
-			for ( var row in rows ){
-				countsByDate[ dateFormat( row.d, "yyyy-mm-dd" ) ] = row.total;
-			}
-			for ( var dayMidnight in missingDates ){
-				var dayKey = dateFormat( dayMidnight, "yyyy-mm-dd" );
-				var total  = countsByDate.keyExists( dayKey ) ? countsByDate[ dayKey ] : 0;
-				totalsByDate[ dayKey ] = total;
-				variables.persistentCache.set( "insights:dailyTotal:" & dayKey, total, 604800 );
-			}
-		}
-
-		var todayKey = dateFormat( todayMidnight, "yyyy-mm-dd" );
-		var todayRow = queryExecute(
+		var todayKey = dateFormat( params.todayDate.value, "yyyy-mm-dd" );
+		totalsByDate[ todayKey ] = queryExecute(
 			"SELECT COUNT(*) AS total
 			FROM RequestLog
-			WHERE " & _whereBetween() & "
+			WHERE " & _visitorFilter() & "
 				AND " & _excluding404(),
-			_paramsBetween( todayMidnight, dateAdd( "d", 1, todayMidnight ) ),
+			params,
 			{ returnType: "array" }
-		)[ 1 ];
-		totalsByDate[ todayKey ] = todayRow.total;
+		)[ 1 ].total;
 
 		var result = [];
 		for ( var i = days; i >= 0; i-- ){
-			var dayKey = dateFormat( dateAdd( "d", -i, todayMidnight ), "yyyy-mm-dd" );
-			arrayAppend( result, { "view_date": dayKey, "total_views": totalsByDate[ dayKey ] } );
+			var dayKey = dateFormat( dateAdd( "d", -i, params.todayDate.value ), "yyyy-mm-dd" );
+			arrayAppend( result, { "view_date": dayKey, "total_views": totalsByDate[ dayKey ] ?: 0 } );
 		}
 		return result;
+	}
+
+	/**
+	 * Starts the background job that summarizes each completed day into
+	 * RequestLogDaily: a minute after startup, then every 30 minutes. Called
+	 * once from app.bxs (not init(), so scripts that construct this service
+	 * don't start a thread). Insights still builds any missing day on demand,
+	 * so this only keeps that from ever happening while someone waits.
+	 */
+	function startDailySummaries(){
+		var scheduler = createObject( "java", "java.util.concurrent.Executors" ).newSingleThreadScheduledExecutor();
+		var runnable  = createDynamicProxy( new models.util.Runnable( () => {
+			try {
+				_ensureDailySummaries( variables.summaryDays );
+			} catch ( any e ){
+				println( "[InsightsService] daily summary build failed: " & e.message );
+			}
+		} ), [ "java.lang.Runnable" ] );
+		var minutes   = createObject( "java", "java.util.concurrent.TimeUnit" ).MINUTES;
+		scheduler.scheduleWithFixedDelay( runnable, 1, 30, minutes );
+	}
+
+	/**
+	 * Summarizes every completed day in the last `daysBack` days that
+	 * RequestLogDaily doesn't have yet. Safe to run from several places at
+	 * once: each row is an upsert, and a day only counts as done once its
+	 * 'views' row (written last) exists.
+	 *
+	 * @param {numeric} daysBack - How many completed days back to check.
+	 * @return {numeric} The number of days built.
+	 */
+	function buildMissingDailySummaries( numeric daysBack = 31 ){
+		var todayMidnight = _todayMidnight();
+		var fromDate      = dateAdd( "d", -arguments.daysBack, todayMidnight );
+
+		var built = queryExecute(
+			"SELECT log_date FROM RequestLogDaily
+			WHERE kind = 'views' AND log_date >= :fromDate AND log_date < :todayDate",
+			{
+				"fromDate" : { value: fromDate,      cfsqltype: "cf_sql_date" },
+				"todayDate": { value: todayMidnight, cfsqltype: "cf_sql_date" }
+			},
+			{ returnType: "array" }
+		).map( ( row ) => dateFormat( row.log_date, "yyyy-mm-dd" ) );
+
+		var count = 0;
+		for ( var i = arguments.daysBack; i >= 1; i-- ){
+			var dayMidnight = dateAdd( "d", -i, todayMidnight );
+			if ( !built.contains( dateFormat( dayMidnight, "yyyy-mm-dd" ) ) ){
+				_buildDailySummary( dayMidnight );
+				count++;
+			}
+		}
+		return count;
 	}
 
 	/**
@@ -176,7 +214,7 @@ class {
 	 * bot/asset/admin filtering the aggregate methods above apply. That
 	 * filtering exists to keep visitor-traffic stats honest; a raw log
 	 * browser's entire purpose is to show what actually happened,
-	 * unfiltered, so it deliberately skips _where()/_params() and queries
+	 * unfiltered, so it deliberately skips _visitorFilter() and queries
 	 * RequestLog directly.
 	 *
 	 * The exceptions are /health and /manage/server/data: DigitalOcean's
@@ -185,7 +223,7 @@ class {
 	 * loop — neither is ever a real request a reader or an admin debugging
 	 * something would care about; left in, either would drown out
 	 * everything else in the list. Unlike the bot/asset filtering in
-	 * _where(), these are unconditional (no path-search override), since
+	 * _visitorFilter(), these are unconditional (no path-search override), since
 	 * there's no scenario where seeing this noise here is useful.
 	 *
 	 * Pages by id (keyset) rather than OFFSET, and never counts the table:
@@ -265,27 +303,96 @@ class {
 		return arguments.text.replace( "\", "\\", "all" ).replace( "%", "\%", "all" ).replace( "_", "\_", "all" );
 	}
 
-	// Shared read-through cache for the /manage/insights queries above — all
-	// of them scan the full RequestLog table for the window, so re-running
-	// on every page load (an admin re-checking Insights) is wasted work.
-	// 5 minutes matches getDailyTotals()'s own reasoning: the underlying
-	// data only moves at RequestLogger.bx's flush granularity (every 5s)
-	// anyway, so anything tighter than a few minutes buys nothing. Not used by getDailyTotals()
-	// itself, which already caches per calendar day rather than per query.
+	// Short read-through cache for the Insights cards. With completed days
+	// coming from RequestLogDaily these queries are cheap; the cache just
+	// spares a reload or two from recounting today's rows.
 	private function _cached( required string key, required numeric ttlSeconds, required fn ){
 		return variables.persistentCache.getOrSet( arguments.key, arguments.ttlSeconds, arguments.fn );
 	}
 
-	private function _where(){
+	// Builds any completed day in the window that the background job hasn't
+	// summarized yet (normally none). The lock keeps concurrent card requests
+	// in this server from building the same days twice.
+	private function _ensureDailySummaries( required numeric daysBack ){
+		lock name="insights:dailySummaries" type="exclusive" timeout="300" {
+			buildMissingDailySummaries( max( arguments.daysBack, variables.summaryDays ) );
+		}
+	}
+
+	// Summarizes one completed day. The 'views' row goes last: it's what marks
+	// the day as done, so a build interrupted halfway is simply redone.
+	private function _buildDailySummary( required date dayMidnight ){
+		var params = {
+			"logDate"   : { value: arguments.dayMidnight, cfsqltype: "cf_sql_date" },
+			"rangeStart": { value: arguments.dayMidnight, cfsqltype: "cf_sql_timestamp" },
+			"rangeEnd"  : { value: dateAdd( "d", 1, arguments.dayMidnight ), cfsqltype: "cf_sql_timestamp" },
+			"botPattern": { value: variables.botDetector.sqlPattern(), cfsqltype: "cf_sql_varchar" },
+			"selfHost"  : { value: "%" & variables.siteHost & "%", cfsqltype: "cf_sql_varchar" }
+		};
+
+		queryExecute(
+			"INSERT INTO RequestLogDaily ( log_date, kind, name, hits )
+			SELECT :logDate, 'referrer', t.name, COUNT(*)
+			FROM (
+				SELECT LEFT(" & _referrerHostExpr() & ", 500) AS name
+				FROM RequestLog
+				WHERE " & _visitorFilter() & "
+			) t
+			WHERE t.name NOT LIKE :selfHost
+			GROUP BY t.name
+			ON DUPLICATE KEY UPDATE hits = VALUES(hits)",
+			params
+		);
+
+		queryExecute(
+			"INSERT INTO RequestLogDaily ( log_date, kind, name, hits )
+			SELECT :logDate, '404', t.name, COUNT(*)
+			FROM (
+				SELECT LEFT(path, 500) AS name
+				FROM RequestLog
+				WHERE " & _visitorFilter() & "
+					AND status_code = 404
+			) t
+			GROUP BY t.name
+			ON DUPLICATE KEY UPDATE hits = VALUES(hits)",
+			params
+		);
+
+		queryExecute(
+			"INSERT INTO RequestLogDaily ( log_date, kind, name, hits )
+			SELECT :logDate, 'views', '', COUNT(*)
+			FROM RequestLog
+			WHERE " & _visitorFilter() & "
+				AND " & _excluding404() & "
+			ON DUPLICATE KEY UPDATE hits = VALUES(hits)",
+			params
+		);
+	}
+
+	// Visitor traffic within [:rangeStart, :rangeEnd): GET requests only,
+	// excluding /manage/* (CMS admin), /assets/* (static files), /health
+	// (infra probe) and bots. is_bot is set by RequestLogger as rows are
+	// written; rows logged before that column existed fall back to the old
+	// check (an empty user agent, or one matching :botPattern). That fallback
+	// only ever runs while summarizing a day, or over today's rows.
+	private function _visitorFilter(){
 		return "
-			requested_at >= DATE_SUB(NOW(), INTERVAL :days DAY)
+			requested_at >= :rangeStart
+			AND requested_at < :rangeEnd
 			AND method = 'GET'
 			AND path NOT LIKE '/manage%'
 			AND path NOT LIKE '/assets/%'
 			AND path <> '/health'
-			AND user_agent <> ''
-			AND user_agent NOT REGEXP :botPattern
+			AND COALESCE( is_bot, user_agent = '' OR user_agent REGEXP :botPattern ) = 0
 		";
+	}
+
+	// The referring host ('' for a direct visit): RequestLogger's
+	// referrer_host, or the same thing parsed out of the raw Referer header
+	// for rows logged before that column existed.
+	private function _referrerHostExpr(){
+		return "COALESCE( referrer_host, CASE WHEN referrer = '' THEN ''
+			ELSE LOWER( SUBSTRING_INDEX( SUBSTRING_INDEX( SUBSTRING_INDEX( SUBSTRING_INDEX( referrer, '://', -1 ), '/', 1 ), '?', 1 ), ':', 1 ) ) END )";
 	}
 
 	// NULL-safe on purpose: status_code is NULL for any row logged before
@@ -298,36 +405,21 @@ class {
 		return "( status_code IS NULL OR status_code <> 404 )";
 	}
 
-	private function _params( required numeric days ){
+	// Params for a read over the last `daysBack` completed days (from
+	// RequestLogDaily) plus today (raw RequestLog rows).
+	private function _windowParams( required numeric daysBack ){
+		var todayMidnight = _todayMidnight();
 		return {
-			"days"      : { value: arguments.days, cfsqltype: "cf_sql_integer" },
+			"fromDate"  : { value: dateAdd( "d", -arguments.daysBack, todayMidnight ), cfsqltype: "cf_sql_date" },
+			"todayDate" : { value: todayMidnight, cfsqltype: "cf_sql_date" },
+			"rangeStart": { value: todayMidnight, cfsqltype: "cf_sql_timestamp" },
+			"rangeEnd"  : { value: dateAdd( "d", 1, todayMidnight ), cfsqltype: "cf_sql_timestamp" },
 			"botPattern": { value: variables.botDetector.sqlPattern(), cfsqltype: "cf_sql_varchar" }
 		};
 	}
 
-	// Same traffic filter as _where(), but bound to an explicit [rangeStart,
-	// rangeEnd) window instead of "the last :days days from now" — used by
-	// getDailyTotals() to query a specific missing date range rather than
-	// always rescanning the full daysBack window.
-	private function _whereBetween(){
-		return "
-			requested_at >= :rangeStart
-			AND requested_at < :rangeEnd
-			AND method = 'GET'
-			AND path NOT LIKE '/manage%'
-			AND path NOT LIKE '/assets/%'
-			AND path <> '/health'
-			AND user_agent <> ''
-			AND user_agent NOT REGEXP :botPattern
-		";
-	}
-
-	private function _paramsBetween( required date rangeStart, required date rangeEnd ){
-		return {
-			"rangeStart": { value: arguments.rangeStart, cfsqltype: "cf_sql_timestamp" },
-			"rangeEnd"  : { value: arguments.rangeEnd, cfsqltype: "cf_sql_timestamp" },
-			"botPattern": { value: variables.botDetector.sqlPattern(), cfsqltype: "cf_sql_varchar" }
-		};
+	private function _todayMidnight(){
+		return createDate( year( now() ), month( now() ), day( now() ) );
 	}
 
 }
