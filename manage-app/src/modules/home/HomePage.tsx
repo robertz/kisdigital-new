@@ -252,7 +252,7 @@ export function HomePage() {
 							label="Views today"
 							loading={traffic.isPending}
 							value={traffic.data ? traffic.data.today.toLocaleString() : "–"}
-							hint={<Empty>Last 14 days</Empty>}
+							hint={<Empty>Trend, last 14 days</Empty>}
 							spark={views.slice(-14)}
 						/>
 					)}
