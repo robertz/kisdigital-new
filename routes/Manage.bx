@@ -2,15 +2,6 @@
  * /manage/login and /manage/logout — the only /manage pages rendered on the
  * server. Everything behind the login is the React app and its JSON API
  * (routes/ManageApp.bx, routes/manageapi/).
- *
- * SESSION FIXATION [H2] NOTE: the old ColdBox app called sessionInvalidate()
- * on successful login to rotate the session ID. boxlang-express's Session
- * middleware has no equivalent hook — req.destroySession() expires the
- * *current* cookie (via a second Set-Cookie header) without the app being able
- * to seed a new ID's server-side data, so calling it here would log the user
- * right back out. Left as a known gap rather than worked around unreliably;
- * the session cookie is httpOnly with a 256-bit random ID, which limits the
- * practical exposure in the meantime.
  */
 class {
 
@@ -122,6 +113,9 @@ class {
 
 		_clearLoginAttempts( accountKey );
 
+		// A new session id at sign-in, so one planted in the browser beforehand
+		// never becomes a signed-in session.
+		req.regenerateSession();
 		req.session.manage_user = {
 			"id"           : user.id,
 			"display_name" : user.display_name,
