@@ -377,6 +377,12 @@
 	overflow-y: auto;
 }
 
+/* Without a height of its own the editor grows to fit the whole post and
+   is clipped by its box, leaving nothing for the wheel to scroll. */
+.c-post-editor__panes--split .c-post-editor__cm .cm-editor {
+	height: 100%;
+}
+
 .c-post-editor__panes.is-focus .c-post-editor__cm,
 .c-post-editor__panes.is-focus .c-post-editor__preview {
 	min-height: 70vh;
