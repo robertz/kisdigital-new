@@ -45,7 +45,7 @@ var me    = app.inject( { url: "/me", cookies: login.cookies } )
 
 ## What behaves like a real request
 
-The request goes through the same `Request`/`Response` objects, router and error handling as one arriving over a socket. A `404`, a thrown handler becoming a `500`, an oversized body becoming a `413`, and a response header refused for containing a newline (see [Request & Response](/projects/boxlang-express/docs/request-response)) all behave the same.
+The request goes through the same `Request`/`Response` objects, router and error handling as one arriving over a socket. A `404`, a thrown handler becoming a `500`, an oversized body becoming a `413`, and a response header refused for containing a newline (see [Response](/projects/boxlang-express/docs/response#header-value-validation)) all behave the same.
 
 ## What it can't do
 

@@ -1,32 +1,48 @@
 /**
  * The registered project docs pages (project_slug -> ordered array of
- * {page_slug, title}). Replaces the database-backed ProjectDocService —
+ * {page_slug, title}, plus an optional group that the docs sidebar prints
+ * as a heading whenever it changes). Replaces the database-backed ProjectDocService —
  * editing doc content in the DB via /manage/project-docs meant a page's
  * prose lived nowhere in version control and couldn't be reviewed as a
  * diff, so this went back to plain files: page metadata here, each page's
  * markdown body in views/projects/{slug}/docs/{page_slug}.md, read via
  * fileRead() by routes/Projects.bx and rendered through the same
  * ProjectDocRenderer as before.
+ *
+ * boxlang-express follows the module's own docs/ folder — one page per
+ * feature, under the same slugs and groups as its README's API reference —
+ * with two guides of this site's own in front.
  */
 class {
 
 	variables.docs = {
 		"boxlang-express": [
-			{ page_slug: "getting-started",   title: "Getting Started" },
-			{ page_slug: "config",            title: "Configuration" },
-			{ page_slug: "routing",           title: "Routing" },
-			{ page_slug: "middleware",        title: "Middleware" },
-			{ page_slug: "request-response",  title: "Request & Response" },
-			{ page_slug: "server-sent-events", title: "Server-Sent Events" },
-			{ page_slug: "websockets",         title: "WebSockets" },
-			{ page_slug: "views",             title: "Views & Templates" },
-			{ page_slug: "sessions",          title: "Sessions" },
-			{ page_slug: "static-files",      title: "Static Files & Uploads" },
-			{ page_slug: "errors",            title: "Error Handling" },
-			{ page_slug: "testing",           title: "Testing" },
-			{ page_slug: "lifecycle",         title: "Process Lifecycle" },
-			{ page_slug: "scheduler",         title: "Scheduler" },
-			{ page_slug: "cluster",           title: "Cluster Support" }
+			{ group: "Guides",     page_slug: "getting-started",     title: "Getting Started" },
+			{ group: "Guides",     page_slug: "config",              title: "Configuration" },
+			{ group: "Core",       page_slug: "app",                 title: "App" },
+			{ group: "Core",       page_slug: "routing",             title: "Routing" },
+			{ group: "Core",       page_slug: "request",             title: "Request" },
+			{ group: "Core",       page_slug: "response",            title: "Response" },
+			{ group: "Core",       page_slug: "views",               title: "Views" },
+			{ group: "Core",       page_slug: "error-handling",      title: "Error Handling" },
+			{ group: "Middleware", page_slug: "middleware",          title: "Middleware" },
+			{ group: "Middleware", page_slug: "uploads",             title: "File Uploads" },
+			{ group: "Middleware", page_slug: "sessions",            title: "Sessions" },
+			{ group: "Middleware", page_slug: "helmet",              title: "Security Headers" },
+			{ group: "Middleware", page_slug: "cors",                title: "CORS" },
+			{ group: "Middleware", page_slug: "rate-limiting",       title: "Rate Limiting" },
+			{ group: "Middleware", page_slug: "csrf",                title: "CSRF Protection" },
+			{ group: "Realtime and background work", page_slug: "sse",        title: "Server-Sent Events" },
+			{ group: "Realtime and background work", page_slug: "websockets", title: "WebSockets" },
+			{ group: "Realtime and background work", page_slug: "stomp",      title: "STOMP" },
+			{ group: "Realtime and background work", page_slug: "scheduler",  title: "Scheduler" },
+			{ group: "Realtime and background work", page_slug: "cluster",    title: "Cluster Support" },
+			{ group: "Operations", page_slug: "testing",             title: "Testing" },
+			{ group: "Operations", page_slug: "observability",       title: "Observability" },
+			{ group: "Operations", page_slug: "health-and-shutdown", title: "Health Checks & Graceful Shutdown" },
+			{ group: "Operations", page_slug: "auto-restart",        title: "Auto-Restart" },
+			{ group: "Project",    page_slug: "gotchas",             title: "BoxLang Gotchas" },
+			{ group: "Project",    page_slug: "development",         title: "Hacking on BoxExpress" }
 		],
 		"bx-activitypub": [
 			{ page_slug: "getting-started",   title: "Getting Started" },
@@ -56,9 +72,31 @@ class {
 		]
 	};
 
+	// Pages that were renamed or split, so links to the old addresses (from
+	// posts, search engines, the module's README) still land somewhere useful.
+	variables.movedPages = {
+		"boxlang-express": {
+			"request-response"  : "request",
+			"server-sent-events": "sse",
+			"static-files"      : "middleware",
+			"errors"            : "error-handling",
+			"lifecycle"         : "health-and-shutdown"
+		}
+	};
+
 	/**
 	 * @param {string} projectSlug - The project's slug.
-	 * @return {array} Ordered array of {page_slug, title}, or an empty array if the project has no docs.
+	 * @param {string} pageSlug    - A page slug that isn't registered.
+	 * @return {string} The slug that page moved to, or "" if it never existed.
+	 */
+	function getMovedPage( required string projectSlug, required string pageSlug ){
+		var moved = variables.movedPages[ arguments.projectSlug ] ?: {};
+		return moved[ arguments.pageSlug ] ?: "";
+	}
+
+	/**
+	 * @param {string} projectSlug - The project's slug.
+	 * @return {array} Ordered array of {page_slug, title, group?}, or an empty array if the project has no docs.
 	 */
 	function getDocsForProject( required string projectSlug ){
 		return variables.docs[ arguments.projectSlug ] ?: [];

@@ -22,7 +22,7 @@
 		</div>
 		<div class="c-project-feature">
 			<p class="c-project-feature__title"><i class="bi bi-file-earmark-code"></i> Views &amp; templates</p>
-			<p class="c-project-feature__body"><code>res.render()</code> supports native BoxLang <code>.bxm</code> templates or Handlebars <code>.hbs</code>, picked automatically by file extension.</p>
+			<p class="c-project-feature__body"><code>res.render()</code> runs native BoxLang <code>.bxm</code> templates, with <code>app.locals</code> and <code>res.locals</code> merged into every view's data.</p>
 		</div>
 		<div class="c-project-feature">
 			<p class="c-project-feature__title"><i class="bi bi-hdd-network"></i> Sessions &amp; static files</p>

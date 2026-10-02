@@ -82,6 +82,11 @@ class {
 		}
 
 		if ( docIndex == -1 ){
+			var movedTo = variables.projectDocRegistry.getMovedPage( slug, page );
+			if ( len( movedTo ) ){
+				res.redirect( "/projects/" & slug & "/docs/" & movedTo, 301 );
+				return;
+			}
 			next();
 			return;
 		}

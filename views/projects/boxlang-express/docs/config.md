@@ -95,17 +95,17 @@ Separate from the CLI/runtime config above, BoxLang Express has its own small se
 
 | Setting | Effect |
 |---|---|
-| `"views"` | Directory `res.render()` resolves view files from. See [Views & Templates](/projects/boxlang-express/docs/views). |
-| `"env"` | When set to `"development"`, the default 500 handler exposes the real error message instead of a generic one. Custom error middleware can read this the same way — see [Error Handling](/projects/boxlang-express/docs/errors). |
+| `"views"` | Directory `res.render()` resolves view files from. See [Views](/projects/boxlang-express/docs/views). |
+| `"env"` | When set to `"development"`, the default 500 handler exposes the real error message instead of a generic one. Custom error middleware can read this the same way — see [Error Handling](/projects/boxlang-express/docs/error-handling). |
 | `"trust proxy"` | Which proxies' `X-Forwarded-*` headers to believe: `false` (default), a hop count, a list of proxy addresses/CIDRs, or `true`. See below. |
 | `"trust proxy header"` | A header name, or an ordered array of candidates, checked before `X-Forwarded-For` and independent of `"trust proxy"` — see below. |
-| `"requestId"` | When `true`, gives every request an id — `req.id`, an `X-Request-Id` response header, and the id in log lines. Off by default. See [Process Lifecycle](/projects/boxlang-express/docs/lifecycle). |
+| `"requestId"` | When `true`, gives every request an id — `req.id`, an `X-Request-Id` response header, and the id in log lines. Off by default. See [Observability](/projects/boxlang-express/docs/observability). |
 | `"requestIdHeader"` | Renames the request-id header (default `"X-Request-Id"`). |
 | `"wsOrigins"` | Browser origins allowed to open any `app.ws()` route (default: same-origin only; `"*"` allows every origin). See [WebSockets](/projects/boxlang-express/docs/websockets). |
-| `"reloadOnChange"` | Dev-mode auto-restart on file change. See [Process Lifecycle](/projects/boxlang-express/docs/lifecycle). |
+| `"reloadOnChange"` | Dev-mode auto-restart on file change. See [Auto-Restart](/projects/boxlang-express/docs/auto-restart). |
 | `"wsMaxMessageSize"` | Maximum size in bytes of one incoming WebSocket message (default `1048576`, 1 MB). A larger message is refused and the connection closed with code `1009`. Set it before `listen()` — see [WebSockets](/projects/boxlang-express/docs/websockets). |
 | `"wsIdleTimeoutMs"` | Drops a WebSocket connection that has sent nothing for this many milliseconds (default `0`, off). See [WebSockets](/projects/boxlang-express/docs/websockets). |
-| `"shutdownTimeoutMs"` | How long `SIGTERM`/Ctrl-C wait for in-flight requests to finish (default `5000`); `0` stops immediately. See [Process Lifecycle](/projects/boxlang-express/docs/lifecycle). |
+| `"shutdownTimeoutMs"` | How long `SIGTERM`/Ctrl-C wait for in-flight requests to finish (default `5000`); `0` stops immediately. See [Health Checks & Graceful Shutdown](/projects/boxlang-express/docs/health-and-shutdown). |
 | `"log"` | When `false`, turns off the per-request stdout line (`[2026-08-10 10:45:41] GET /users/42 127.0.0.1`) every request otherwise gets — useful for a high-throughput deployment that doesn't want a synchronous stdout write on every request. On by default. |
 
 ```bxs

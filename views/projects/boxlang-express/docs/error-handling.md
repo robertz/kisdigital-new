@@ -39,7 +39,7 @@ app.use( ( err, req, res, next ) => {
 } )
 ```
 
-Both render a themed template (light/dark aware, matching the rest of the site) rather than the framework's plain JSON default — keeping the whole thing self-contained in the app, no changes to the framework itself. See [Views & Templates](/projects/boxlang-express/docs/views) for how `res.render()` and view partials work.
+Both render a themed template (light/dark aware, matching the rest of the site) rather than the framework's plain JSON default — keeping the whole thing self-contained in the app, no changes to the framework itself. See [Views](/projects/boxlang-express/docs/views) for how `res.render()` and view partials work.
 
 > [!NOTE] Why this only needs app-level middleware
 > Since a 404 catch-all and a 4-arg error handler are both just ordinary middleware, they compose with everything else in the stack — logging middleware still runs first, sessions are still available in the error page if you want them, and nothing about the framework's own routing or dispatch logic needs to change.

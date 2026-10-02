@@ -1,4 +1,4 @@
-# Views & Templates
+# Views
 
 res.render(), `.bxm` templates, and sharing layout across pages.
 
@@ -8,7 +8,7 @@ res.render(), `.bxm` templates, and sharing layout across pages.
 app.set( "views", expandPath( "./views" ) )
 ```
 
-Every view path passed to `res.render()` is resolved against this directory, with a containment check — a view path can't escape it, even if built from user input.
+Every view path passed to `res.render()` is resolved against this directory, and `render()` throws if `app.set( "views", ... )` was never called. The path is checked against the views directory's real (symlink-resolved) path before the file is run — `res.render( req.query.tpl )` with `tpl=../../etc/passwd` throws instead of rendering whatever that resolves to. Treat any user input reaching `render()`'s first argument as something to validate yourself regardless; this just stops the obvious traversal case.
 
 ## .bxm templates
 
@@ -67,7 +67,7 @@ app.get( "/", ( req, res ) => {
 
 ## Quick debugging without a view
 
-For a one-off inspection route, `res.dump()` skips views entirely and sends BoxLang's own rich HTML dump of any variable:
+For a one-off inspection route, `res.dump()` skips views entirely and sends BoxLang's own rich HTML dump of any variable (more under [Response](/projects/boxlang-express/docs/response#tips--tricks-resdump)):
 
 ```bxs
 app.get( "/debug", ( req, res ) => {

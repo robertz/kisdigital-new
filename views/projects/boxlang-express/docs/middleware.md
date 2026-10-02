@@ -1,6 +1,6 @@
 # Middleware
 
-app.use(), execution order, and the middleware that ships with the framework.
+app.use(), execution order, body parsers, and static file serving.
 
 ## Registering middleware
 
@@ -38,22 +38,24 @@ The first argument is only ever treated as a mount path when it's a plain string
 
 ## Order matters
 
-Middleware and routes share one stack, run in the order they were registered. A middleware registered after all your routes acts as a catch-all — that's exactly how a themed 404 page is built, see [Error Handling](/projects/boxlang-express/docs/errors).
+Middleware and routes share one stack, run in the order they were registered. A middleware registered after all your routes acts as a catch-all — that's exactly how a themed 404 page is built, see [Error Handling](/projects/boxlang-express/docs/error-handling).
 
 ## Built-in middleware
+
+Each is opt-in, with its own global function mirroring the Express one of the same name:
 
 | BIF | Purpose |
 |---|---|
 | `boxExpressJSON()` | Parses `application/json` request bodies into `req.body` |
 | `boxExpressUrlencoded()` | Parses `application/x-www-form-urlencoded` bodies into `req.body` |
-| `boxExpressStatic(dir)` | Serves static files from `dir`, with ETag/Last-Modified conditional GET support |
-| `boxExpressSession()` | Cookie-based sessions — populates `req.session` |
-| `boxExpressUpload(options)` | Parses `multipart/form-data` — fields into `req.body`, files into `req.files` |
-| `boxExpressHelmet(options)` | Sets security-hardening response headers (clickjacking, MIME-sniffing, referrer leakage, etc.) — see below |
-| `boxExpressCors(options)` | Cross-Origin Resource Sharing — sets `Access-Control-*` headers and answers preflight requests — see below |
-| `boxExpressRateLimit(options)` | Fixed-window rate limiting, keyed by `req.ip` by default — see below |
-| `boxExpressCsrf(options)` | CSRF protection via `req.session` — exposes `req.csrfToken()` — see below |
-| `boxExpressStomp(options)` | STOMP 1.0/1.1/1.2 pub/sub broker on top of `app.ws()` — see [WebSockets](/projects/boxlang-express/docs/websockets) |
+| `boxExpressStatic(dir)` | Serves static files from `dir` — see [Serving static files](#serving-static-files) below |
+| `boxExpressUpload(options)` | Parses `multipart/form-data` — see [File Uploads](/projects/boxlang-express/docs/uploads) |
+| `boxExpressSession()` | Cookie-based sessions, `req.session` — see [Sessions](/projects/boxlang-express/docs/sessions) |
+| `boxExpressHelmet(options)` | Security-hardening response headers — see [Security Headers](/projects/boxlang-express/docs/helmet) |
+| `boxExpressCors(options)` | Cross-Origin Resource Sharing — see [CORS](/projects/boxlang-express/docs/cors) |
+| `boxExpressRateLimit(options)` | Fixed-window rate limiting — see [Rate Limiting](/projects/boxlang-express/docs/rate-limiting) |
+| `boxExpressCsrf(options)` | CSRF protection via `req.session` — see [CSRF Protection](/projects/boxlang-express/docs/csrf) |
+| `boxExpressStomp(options)` | A STOMP pub/sub broker on top of `app.ws()` — see [STOMP](/projects/boxlang-express/docs/stomp) |
 | `boxExpressRouter()` | Returns a mountable `Router` — see [Routing](/projects/boxlang-express/docs/routing) |
 
 ```bxs
@@ -65,122 +67,101 @@ app.use( "/public", boxExpressStatic( expandPath( "./public" ) ) )
 
 These are opt-in by design — a route that never reads `req.body` doesn't pay for body-parsing on every request.
 
-## Security headers (boxExpressHelmet)
-
-Mirrors the npm [helmet](https://github.com/helmetjs/helmet) package's most commonly used defaults, with no configuration needed:
+The same thing spelled out via the underlying classes, if you'd rather not lean on the BIFs:
 
 ```bxs
-app.use( boxExpressHelmet() )
+bodyParsers = new bxModules.boxexpress.models.middleware.BodyParsers()
+app.use( bodyParsers.json() )
+app.use( bodyParsers.urlencoded() )
+
+staticFiles = new bxModules.boxexpress.models.middleware.StaticFiles()
+app.use( "/public", staticFiles.serve( expandPath( "./public" ) ) )
 ```
 
-| Header | Default |
+## Body size limits
+
+`boxExpressJSON()` and `boxExpressUrlencoded()` cap the request body at 100KB by default, to keep a slow or malicious client from buffering an unbounded body into memory. Override with `{ limit: bytes }`:
+
+```bxs
+app.use( boxExpressJSON( { limit: 5000000 } ) )  // 5MB
+```
+
+A body over the limit gets a `413` response and never reaches your route handler.
+
+## Serving static files
+
+```bxs
+app.use( "/public", boxExpressStatic( expandPath( "./public" ) ) )
+// GET /public/logo.png → serves ./public/logo.png
+```
+
+Mount it with no prefix to serve straight from the site root:
+
+```bxs
+app.use( boxExpressStatic( expandPath( "./public" ) ) )
+// GET /logo.png → serves ./public/logo.png
+```
+
+A request for a file that doesn't exist under the served directory falls through to `next()` rather than erroring — your other routes (or the default 404) still get a chance to handle it.
+
+Requested files are resolved against the real (symlink-resolved) served directory, so a symlink placed inside it can't be used to read files from outside it.
+
+### Dotfiles
+
+A path with any segment starting with `.` (`/.env`, `/.git/config`) is ignored by default — it falls through to the next handler as if the file weren't there, so a stray secret in the public directory isn't served. `/.well-known/` is always served.
+
+| `dotfiles` | Effect |
 |---|---|
-| `X-Content-Type-Options` | `nosniff` |
-| `X-Frame-Options` | `SAMEORIGIN` |
-| `X-DNS-Prefetch-Control` | `off` |
-| `Referrer-Policy` | `no-referrer` |
-| `X-Permitted-Cross-Domain-Policies` | `none` |
-| `Cross-Origin-Opener-Policy` | `same-origin` |
-| `Cross-Origin-Resource-Policy` | `same-origin` |
-| `Strict-Transport-Security` | _off by default — opt in_ |
-| `Content-Security-Policy` | _off by default — opt in_ |
-
-Every option takes three shapes: omitted (the default above), `false` (skip that header entirely), or an exact string to use instead:
+| `"ignore"` (default) | Fall through to `next()` |
+| `"deny"` | Answer `403` |
+| `"allow"` | Serve them |
 
 ```bxs
-app.use( boxExpressHelmet( {
-    frameOptions: "DENY",              // override the default value
-    referrerPolicy: false,             // skip this header entirely
-    hsts: true,                        // opt in, using the built-in default
-    contentSecurityPolicy: "default-src 'self'"   // opt in, with your own policy
-} ) )
+app.use( boxExpressStatic( expandPath( "./public" ), { dotfiles: "deny" } ) )
 ```
 
-`hsts` and `contentSecurityPolicy` are opt-in rather than on by default: `Strict-Transport-Security` only makes sense over an actually-secure connection — BoxLang Express's own `HttpServer` never terminates TLS itself, see [Request & Response](/projects/boxlang-express/docs/request-response) for `req.secure` — so turning it on unconditionally could advertise a guarantee the app doesn't meet. A generic default `Content-Security-Policy` is exactly the kind of thing that breaks a real app's own inline scripts/styles or asset domains if applied blindly, so it needs the app's own policy string rather than a one-size-fits-all default.
+> [!NOTE] Behavior change in 0.2.20
+> Dotfiles used to be served. If you relied on that, pass `{ dotfiles: "allow" }`.
 
-## CORS (boxExpressCors)
+### Streaming
 
-Cross-Origin Resource Sharing, mirroring the npm [cors](https://github.com/expressjs/cors) package's most commonly used options. With no options, reflects whatever `Origin` the request sent (or `*` if there wasn't one) — permissive by default, same as the npm package:
+Files are streamed from disk rather than read into memory, so a large file costs the same memory as a small one, `HEAD` never reads the file, and files over 2 GB (including `Range` requests into them) work. The same applies to `res.sendFile()` and `res.download()`. Common modern types — `.mjs`, `.webp`, `.wasm`, `.map` — get their proper `Content-Type`.
+
+### Directory requests without a trailing slash
+
+A request that resolves to a directory but is missing its trailing slash (e.g. `/public/docs` when `./public/docs/index.html` exists) gets a `301` redirect to the slash-suffixed URL instead of a 404 — the same behavior as `express.static()`. The slash-suffixed URL is the canonical one: relative asset links inside the served HTML resolve correctly against it and wouldn't against the bare path.
 
 ```bxs
-app.use( boxExpressCors() )
-app.use( boxExpressCors( { origin: "https://example.com" } ) )
-app.use( boxExpressCors( { origin: [ "https://a.com", "https://b.com" ], credentials: true } ) )
+app.use( "/public", boxExpressStatic( expandPath( "./public" ) ) )
+// GET /public/docs   → 301 to /public/docs/
+// GET /public/docs/  → serves ./public/docs/index.html
 ```
 
-| Option | Default | Effect |
-|---|---|---|
-| `origin` | `true` | `true` reflects the request's `Origin`; `false` disables CORS entirely; a string allows only that exact origin; an array allows any origin in the list |
-| `methods` | `GET,HEAD,PUT,PATCH,POST,DELETE` | `Access-Control-Allow-Methods` on a preflight response |
-| `allowedHeaders` | _reflects the preflight's own request_ | `Access-Control-Allow-Headers` on a preflight response |
-| `exposedHeaders` | _none_ | `Access-Control-Expose-Headers` on every response |
-| `credentials` | `false` | sets `Access-Control-Allow-Credentials: true` when `true`. Requires an explicit `origin` (a string or array) — combined with `origin: true` or `"*"` it throws, since reflecting any origin with credentials lets every website make authenticated requests as your visitors |
-| `maxAge` | _none_ | `Access-Control-Max-Age` (seconds) on a preflight response |
-| `preflightContinue` | `false` | call `next()` for a preflight instead of answering it directly |
-| `optionsSuccessStatus` | `204` | status code for a handled preflight |
+### Conditional GET (ETag / 304)
 
-A CORS preflight — an `OPTIONS` request carrying `Access-Control-Request-Method` — is answered directly by this middleware (`204`, the relevant headers, no body) rather than falling through to the router, since nothing would otherwise be registered to handle `OPTIONS` on an arbitrary route. Pass `{ preflightContinue: true }` if a later handler needs to see the preflight request itself instead.
+Static file responses automatically set `ETag` and `Last-Modified`, and honor `If-None-Match` — a matching request gets a `304 Not Modified` with no body, instead of re-sending the file. `If-None-Match` handles a list of tags, `*`, and weak tags, and compares case-sensitively. The same conditional-GET support applies to `res.sendFile()`.
 
-`Vary: Origin` is sent whenever the response depends on the request's `Origin`, so a shared cache doesn't serve one origin's CORS headers to another.
+### Cache-Control (options.maxAge)
 
-## Rate limiting (boxExpressRateLimit)
-
-Fixed-window rate limiting, mirroring the npm [express-rate-limit](https://github.com/express-rate-limit/express-rate-limit) package's most commonly used options:
+`boxExpressStatic()` and `res.sendFile()` both accept `options.maxAge` (seconds) to also set `Cache-Control: public, max-age=<n>`, letting a browser skip revalidation entirely for that long instead of asking on every request. Off by default — no header at all unless asked for:
 
 ```bxs
-app.use( boxExpressRateLimit() )                                     // 100 req/min per req.ip
-app.use( "/login", boxExpressRateLimit( { windowMs: 15 * 60000, max: 5 } ) )  // 5 req/15min, scoped to one route
-```
+app.use( "/public", boxExpressStatic( expandPath( "./public" ), { maxAge: 86400 } ) )  // 1 day
 
-Sets the draft-standard `RateLimit-Limit`/`RateLimit-Remaining`/`RateLimit-Reset` headers, and responds `429` with `Retry-After` once a key's count exceeds `max` within `windowMs`. Fixed window, not a sliding one or a token bucket — a client can get up to 2x `max` requests through right at a window boundary, the same trade-off most minimal in-memory rate limiters make in exchange for O(1) bookkeeping per request.
-
-By default the store is in-memory on each `RateLimit` instance (same trade-off as `Session`'s default `MemoryStore` — fine for a single-process app, not a cluster). To share the count across instances, name a registered BoxLang cache:
-
-```bxs
-app.use( "/login", boxExpressRateLimit( { max: 5, windowMs: 15 * 60000, cache: "shared" } ) )
-```
-
-`cache` takes the same `fallback`/`requireDurable` options and degrades the same way as durable sessions (see [Falling back without durable storage](/projects/boxlang-express/docs/sessions#falling-back-without-durable-storage)): with no durable cache it counts per process, with a warning, and never fails the request. `store: myStore` — any object with `hit( key, windowMs )` returning `{ count, resetAt }` — plugs in your own.
-
-The read-then-write against the cache isn't atomic, so under heavy concurrency a limit can run a few requests over, never far under. Every request also costs a cache round trip — a database call for a `JDBCStore` — so use it on routes that matter (login, signup) rather than as a blanket limit.
-
-Each call creates its own counters, so different routes can have independent limits:
-
-```bxs
-app.post(
-    "/upload",
-    boxExpressRateLimit( { windowMs: 5 * 60000, max: 10 } ),
-    boxExpressUpload( { dest: expandPath( "./uploads" ) } ),
-    ( req, res ) => { /* ... */ }
-)
-```
-
-## CSRF protection (boxExpressCsrf)
-
-Mirrors the classic [csurf](https://github.com/expressjs/csurf) package's session-based token strategy. The token lives in `req.session`, not its own cookie, so this must be registered _after_ `boxExpressSession()`:
-
-```bxs
-app.use( boxExpressSession() )
-app.use( boxExpressUrlencoded() )   // before Csrf if reading the token from a form field
-app.use( boxExpressCsrf() )
-
-app.get( "/form", ( req, res ) => {
-    res.render( "form", { csrfToken: req.csrfToken() } )
+app.get( "/report", ( req, res ) => {
+    res.sendFile( expandPath( "./reports/latest.pdf" ), { maxAge: 3600 } )  // 1 hour
 } )
 ```
 
-```html
-<form method="POST" action="/form">
-  <input type="hidden" name="_csrf" value="#data.csrfToken#">
-  ...
-</form>
-```
+### HEAD and Range requests
 
-"Safe" methods (`GET`/`HEAD`/`OPTIONS` by default) never validate — a token is only minted and exposed via `req.csrfToken()` for those, since that's how a token gets into a form before any state-changing request happens. Every other method must submit a matching token: `req.body._csrf` first, falling back to an `X-CSRF-Token` header for non-form (JSON/AJAX) clients. A missing/mismatched token gets a `403` before the route handler ever runs. The comparison is constant-time and case-sensitive. Registering this before `req.session` exists throws immediately rather than silently doing nothing.
+`HEAD /public/logo.png` returns the same headers a `GET` would — `Content-Type`, `Content-Length`, `ETag`, `Last-Modified` — with no response body. See [Routing](/projects/boxlang-express/docs/routing) for how `HEAD` works across the framework generally.
+
+Static files also honor a `Range` request header and respond `206 Partial Content` with just the requested slice — the details are the same as for `res.sendFile()`, under [Response](/projects/boxlang-express/docs/response#range-requests-partial-content).
 
 ## Writing your own middleware: a Google OAuth example
 
-Everything above is a BIF that ships with the framework, but a middleware "layer" is just a `(req, res, next)` function — nothing stops you from writing your own. As a worked example, here's a small Google OAuth 2.0 login flow built entirely out of the pieces already on this page: `req.session` from `boxExpressSession()`, `res.redirect()`, and the same `state`-parameter CSRF check `boxExpressCsrf()` uses for forms, applied here to the OAuth redirect instead.
+Everything above ships with the framework, but a middleware "layer" is just a `(req, res, next)` function — nothing stops you from writing your own. As a worked example, here's a small Google OAuth 2.0 login flow built entirely out of the pieces already on this page: `req.session` from `boxExpressSession()`, `res.redirect()`, and the same `state`-parameter check [CSRF protection](/projects/boxlang-express/docs/csrf) uses for forms, applied here to the OAuth redirect instead.
 
 Rather than one factory returning one handler, this one returns a _struct_ of three related handlers — a pattern worth using any time a feature needs more than one route to work together:
 
@@ -293,4 +274,4 @@ app.use( ( err, req, res, next ) => {
 } )
 ```
 
-Register error-handling middleware last, after every route — mirroring the built-in default it's overriding. See [Error Handling](/projects/boxlang-express/docs/errors) for the full picture, including the framework's own default 404/500 behavior.
+Register error-handling middleware last, after every route — mirroring the built-in default it's overriding. See [Error Handling](/projects/boxlang-express/docs/error-handling) for the full picture, including the framework's own default 404/500 behavior.
