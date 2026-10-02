@@ -10,7 +10,7 @@ Both the [Scheduler](/projects/boxlang-express/docs/scheduler) and [STOMP](/proj
 
 ## Enabling it
 
-Off by default — an app that never opts in pays nothing for any of this. Configuration, in increasing precedence — module default (off) → `boxlang.json` → `app.set("cluster", {...})`:
+Off by default — an app that never opts in pays nothing for any of this. Configuration, in increasing precedence — module default (off) → your BoxLang config (`.boxlang.json`) → `app.set("cluster", {...})`:
 
 ```json
 {
@@ -33,7 +33,7 @@ Off by default — an app that never opts in pays nothing for any of this. Confi
 |---|---|---|
 | `enabled` | — | Off by default. Every `ClusterManager` method is a no-op until this is `true` — a clustered job runs on every instance, same as an unclustered one, and `options.cluster` on `boxExpressStomp()` relays nothing. |
 | `name` | when enabled | This instance's own identity, written to the shared cache as its heartbeat key — typically a reachable `ws://` URL for the relay mesh to dial. |
-| `cacheProvider` | when enabled | The name of a `boxlang.json` cache backed by a genuinely durable/shared object store. |
+| `cacheProvider` | when enabled | The name of a cache from your BoxLang config, backed by a genuinely durable/shared object store. |
 | `secretKey` | for STOMP relay | Gates the relay mesh's `/__cluster` endpoint. Required (at least 16 characters) whenever a STOMP broker is given `{ cluster: ... }` — see below. Every instance must share the same value, sourced from an environment variable, never a literal in source. |
 | `peerIdleTimeoutSeconds` | — | Default `30`. How long a missed heartbeat is tolerated before a peer is considered gone. |
 

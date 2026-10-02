@@ -5,11 +5,13 @@
  * queues. Publishing the same post twice is a no-op, and drafts/scheduled posts
  * are refused (bx-activitypub's isPublic() gate).
  *
- *   boxlang --bx-config ./boxlang.json scripts/activitypub-publish.bxs --post=<Post.id>
+ * Run it from the project root, where BoxLang picks up .boxlang.json:
+ *
+ *   boxlang scripts/activitypub-publish.bxs --post=<Post.id>
  */
 postId = cliGetArgs().options.post ?: ""
 if ( !len( postId ) ){
-	println( "usage: boxlang --bx-config ./boxlang.json scripts/activitypub-publish.bxs --post=<Post.id>" )
+	println( "usage (from the project root): boxlang scripts/activitypub-publish.bxs --post=<Post.id>" )
 	createObject( "java", "java.lang.System" ).exit( 1 )
 }
 

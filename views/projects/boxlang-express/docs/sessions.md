@@ -86,7 +86,7 @@ app.use( boxExpressSession( { store: boxExpressCacheStore( "sessions" ) } ) )
 
 `boxExpressSession( { cache: "sessions" } )` is shorthand for the same thing.
 
-The named cache (`"sessions"` here) should already be registered in `boxlang.json` — this doesn't create one, it just talks to it (if it's missing, the app keeps serving — see [Falling back without durable storage](#falling-back-without-durable-storage)). Point that cache's `objectStore` at `"JDBCStore"` and session data lands in a real SQL table instead of memory, surviving a restart and shared across every process pointed at the same database. `JDBCStore` auto-detects the database vendor from the JDBC driver (MySQL, Postgres, SQL Server, Oracle, SQLite, Derby, HSQLDB, MariaDB) to generate the right SQL for each:
+The named cache (`"sessions"` here) should already be registered in your BoxLang config (`.boxlang.json`) — this doesn't create one, it just talks to it (if it's missing, the app keeps serving — see [Falling back without durable storage](#falling-back-without-durable-storage)). Point that cache's `objectStore` at `"JDBCStore"` and session data lands in a real SQL table instead of memory, surviving a restart and shared across every process pointed at the same database. `JDBCStore` auto-detects the database vendor from the JDBC driver (MySQL, Postgres, SQL Server, Oracle, SQLite, Derby, HSQLDB, MariaDB) to generate the right SQL for each:
 
 ```json
 "caches": {

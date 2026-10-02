@@ -78,7 +78,7 @@ RUN rm -rf /app/* /app/.[!.]*
 #
 # ARG, not ENV: with any BOXLANG_* environment variable set at runtime,
 # BoxLang (1.17.3 and 1.17.6, at least) drops the "modules" block from
-# --bx-config's boxlang.json, so every module loses its settings there —
+# the project's config file, so every module loses its settings there —
 # bx-activitypub then has no datasource and the app fails at startup.
 # BOXLANG_MODULES also maps onto the "modules" key directly ("not a JSON
 # Object, ignoring it"). Both are only needed by install-bx-module below, and
@@ -98,7 +98,15 @@ ARG BOXLANG_MODULES=boxlang-express,bx-mysql,bx-markdown,bx-password-encrypt,bx-
 ARG MODULE_CACHE_BUST=2026-09-29-bx-activitypub-0.7.0
 RUN install-bx-module "$BOXLANG_MODULES" --local
 
-COPY app.bxs boxlang.json ./
+# BoxLang picks up .boxlang.json from the directory it's run in (WORKDIR
+# above), which is what gives the app its datasource, caches and module
+# settings. That discovery arrived in 1.18.0, and the base image tag floats,
+# so an older cached base would start the app with no config at all. This
+# stops the build instead, which leaves the previous deployment running.
+RUN boxlang --version | grep -Eq 'v(1\.(1[8-9]|[2-9][0-9])|[2-9][0-9]*)\.' \
+	|| ( echo "BoxLang 1.18.0 or newer is required for .boxlang.json discovery" && boxlang --version && exit 1 )
+
+COPY app.bxs .boxlang.json ./
 COPY views/ views/
 COPY routes/ routes/
 COPY models/ models/
@@ -136,4 +144,4 @@ EXPOSE 3005
 # loud `OutOfMemoryError: Direct buffer memory` instead.
 ENV JAVA_OPTS="-Xmx600m -Xms128m -XX:+UseSerialGC -XX:ActiveProcessorCount=1 -XX:MaxDirectMemorySize=64m"
 
-CMD ["boxlang", "--bx-config", "boxlang.json", "app.bxs"]
+CMD ["boxlang", "app.bxs"]

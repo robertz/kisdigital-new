@@ -1,27 +1,52 @@
 # Configuration
 
-boxlang.json, the --bx-config flag, environment variable interpolation, and app-level settings.
+.boxlang.json, the --bx-config flag, environment variable interpolation, and app-level settings.
 
-## boxlang.json: global vs. project
+## Where BoxLang looks for config
 
-BoxLang's CLI only auto-loads one config file: `~/.boxlang/config/boxlang.json`, the machine-wide config. A `boxlang.json` placed next to your entry script is **not** discovered automatically.
+BoxLang builds its configuration in layers, each one overriding the one before it:
 
-| Location | Auto-loaded? | Scope |
+| Order | Source | Scope |
 |---|---|---|
-| `~/.boxlang/config/boxlang.json` | Yes, always | Every BoxLang process on the machine |
-| `./boxlang.json` (project-local) | No — requires `--bx-config` | Only when explicitly passed |
+| 1 | The defaults that ship inside BoxLang | Always loaded |
+| 2 | `~/.boxlang/config/boxlang.json` | Every BoxLang process for your user account |
+| 3 | `.boxlang.json` in the directory you run `boxlang` from, **or** the file named by `--bx-config` / `BOXLANG_CONFIG` | This project only |
+| 4 | `BOXLANG_*` environment variables and `boxlang.*` Java system properties | Highest priority |
+
+> [!NOTE] Changed in BoxLang 1.18
+> Before 1.18 the CLI only auto-loaded the user-level file, and a project config had to be passed with `--bx-config` on every run. From 1.18.0 a `.boxlang.json` in the working directory is picked up on its own. On an older BoxLang, keep passing `--bx-config`.
+
+## Per project: .boxlang.json
+
+Put a `.boxlang.json` (note the leading dot) in your project root and start the app from there, with no flag:
+
+```bash
+boxlang app.bxs
+```
+
+It only needs the settings you want to change, such as the datasource and caches your app uses. Three details are worth knowing, each confirmed directly on 1.18.0 with a throwaway config that set an unusual timezone and added a cache:
+
+- **It's found by working directory, not by script location.** `boxlang app.bxs` run from the project root loads it; `boxlang /path/to/project/app.bxs` run from somewhere else doesn't, even though the file sits right next to `app.bxs`. A start script or a service definition should `cd` into the project first. In a Dockerfile, `WORKDIR` does that.
+- **The name has to be exact.** A `boxlang.json` without the leading dot is not discovered.
+- **Settings merge by top-level key.** If `.boxlang.json` defines `datasources`, that whole block replaces the one in your user-level file rather than being combined entry by entry. Repeat anything you still need.
+
+Commit `.boxlang.json` so everyone on the project shares the same settings, and keep secrets out of it with the `${env.NAME}` placeholders described below.
 
 ## Using --bx-config
 
+To use a different file for one run, a CI job, or a deployment, name it explicitly:
+
 ```bash
-boxlang --bx-config ./boxlang.json app.bxs
+boxlang --bx-config ./config/staging.json app.bxs
 ```
+
+The explicit file is an alternative to `.boxlang.json`, not a layer on top of it: when `--bx-config` or `BOXLANG_CONFIG` is given, BoxLang uses that file and doesn't look in the working directory at all. Run with both present, the cache defined only in `.boxlang.json` was not loaded.
 
 Other useful global CLI flags (from `boxlang --help`):
 
 | Flag | Purpose |
 |---|---|
-| `--bx-config <PATH>` | Use a custom configuration file |
+| `--bx-config <PATH>` | Use a specific configuration file instead of `.boxlang.json` |
 | `--bx-home <PATH>` | Set the BoxLang runtime home directory |
 | `--bx-debug` | Enable debug mode with startup timing |
 | `--bx-code <CODE>` | Execute inline BoxLang code, no file needed |
@@ -49,7 +74,7 @@ Other built-in placeholders available in any BoxLang config file: `${boxlang-hom
 
 ## .env files
 
-Unlike `boxlang.json`, a `.env` file in the current working directory **is** loaded automatically — no flag needed. This was confirmed directly: a script run from a directory containing a `.env` with `MY_VAR=value` saw it via `System.getenv("MY_VAR")`; the same script run one directory over, with no `.env` present, didn't.
+Like `.boxlang.json`, a `.env` file in the current working directory is loaded automatically — no flag needed. This was confirmed directly: a script run from a directory containing a `.env` with `MY_VAR=value` saw it via `System.getenv("MY_VAR")`; the same script run one directory over, with no `.env` present, didn't.
 
 ```plain
 MYSQL_HOST=localhost
@@ -59,7 +84,7 @@ MYSQL_USERNAME=root
 MYSQL_PASSWORD=super-secret
 ```
 
-This is what the `${env.VARIABLE_NAME:defaultValue}` placeholders above actually resolve against day to day — a `.env` file per environment (gitignored, never committed) is the natural way to supply real values locally without exporting shell variables or hardcoding secrets into `boxlang.json` itself.
+This is what the `${env.VARIABLE_NAME:defaultValue}` placeholders above actually resolve against day to day — a `.env` file per environment (gitignored, never committed) is the natural way to supply real values locally without exporting shell variables or hardcoding secrets into `.boxlang.json` itself.
 
 A real OS environment variable of the same name always wins over the `.env` file's value — confirmed the same way, by setting `MY_VAR` in the shell before running a script whose `.env` set a different value for it, and seeing the shell's value win. `.env` only fills in what isn't already set, same as the standard dotenv convention everywhere else — safe to layer under CI/production environments that already export real values.
 

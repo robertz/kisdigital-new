@@ -57,7 +57,7 @@ services:
       # doesn't shadow public/assets/dist or boxlang_modules/ (both built
       # into the image).
       - ./app.bxs:/app/app.bxs
-      - ./boxlang.json:/app/boxlang.json
+      - ./.boxlang.json:/app/.boxlang.json
       - ./views:/app/views
       - ./routes:/app/routes
       - ./models:/app/models
