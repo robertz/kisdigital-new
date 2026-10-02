@@ -83,6 +83,8 @@ class {
 				return;
 			}
 
+			req.regenerateSession();
+
 			if ( user.role == "admin" || user.role == "author" ){
 				req.session.manage_user = {
 					"id"           : user.id,

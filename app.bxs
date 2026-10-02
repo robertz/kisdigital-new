@@ -89,6 +89,11 @@ serverMonitor = new models.util.ServerMonitor( app )
 // static assets included, same scope as an actual Apache access log.
 app.use( requestLogger.middleware() )
 
+// Production is only ever reached over HTTPS (Cloudflare and DigitalOcean's
+// ingress terminate it); local dev is plain HTTP, where a Secure cookie
+// would never be sent back.
+servedOverHttps = getSystemSetting( "ENV", "production" ) == "production"
+
 app.use(
 	boxExpressJSON(),
 	boxExpressUrlencoded(),
@@ -98,8 +103,10 @@ app.use(
 	// only overrides the cache entry's TTL per request, not its idle
 	// timeout, so a shorter defaultLastAccessTimeout there silently evicts
 	// idle sessions well before the cookie itself expires.
-	boxExpressSession( { store: boxExpressCacheStore("sessionCache"), maxAge: 30 * 24 * 60 * 60 } ),
-	boxExpressHelmet( { referrerPolicy: "strict-origin-when-cross-origin" } )
+	boxExpressSession( { store: boxExpressCacheStore("sessionCache"), maxAge: 30 * 24 * 60 * 60, secure: servedOverHttps } ),
+	// HSTS covers this host only: other kisdigital.com subdomains aren't
+	// this app's to promise HTTPS for.
+	boxExpressHelmet( { referrerPolicy: "strict-origin-when-cross-origin", hsts: servedOverHttps ? "max-age=15552000" : false } )
 )
 
 // esbuild content-hashes every filename under dist/ (see the manifest logic

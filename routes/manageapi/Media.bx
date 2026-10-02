@@ -109,8 +109,15 @@ class {
 
 		try {
 			var object = variables.r2Client.getObject( key );
+			// The stored type is whatever the uploading browser sent, so only
+			// image types are passed on: anything else served from this site's
+			// own address could run as a page in the admin's session.
+			var storedType = lCase( trim( listFirst( object.contentType, ";" ) ) );
+			var isImage    = listFind( "image/jpeg,image/png,image/webp,image/gif", storedType ) > 0;
 			res.set( "Cache-Control", "no-store" );
-			res.sendBytes( object.bytes, object.contentType );
+			res.set( "Content-Security-Policy", "default-src 'none'; sandbox" );
+			if ( !isImage ) res.set( "Content-Disposition", "attachment" );
+			res.sendBytes( object.bytes, isImage ? storedType : "application/octet-stream" );
 		} catch ( any e ) {
 			println( "[error] media read failed for '" & key & "': " & e.message );
 			res.status( 502 ).json( { "error": "Couldn't open the file: " & e.message } );
