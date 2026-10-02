@@ -49,6 +49,7 @@ import { ButtonLink, IconButtonLink } from "../../shared/links";
 import { uploadImage } from "../../shared/media";
 import { HistoryDrawer } from "./HistoryDrawer";
 import { MarkdownEditor, type MarkdownEditorHandle } from "./MarkdownEditor";
+import { headingOffsetsIn, linkScroll } from "./scrollSync";
 import { canDelete, postsApi, type Post, type PostInput, type Revision } from "./api";
 import { useLocalDraft } from "./useLocalDraft";
 
@@ -171,6 +172,27 @@ function PostEditor({ post }: { post: Post | null }) {
 		staleTime: Infinity,
 		gcTime: 60_000,
 	});
+
+	// Side by side, scrolling either pane brings the other to the same place.
+	const [previewPane, setPreviewPane] = useState<HTMLDivElement | null>(null);
+	const scrollLink = useRef<ReturnType<typeof linkScroll> | null>(null);
+	useEffect(() => {
+		const scroller = editor.current?.scroller();
+		if (mode !== "split" || !previewPane || !scroller) return;
+		const unlink = linkScroll(
+			{ el: scroller, headings: () => editor.current?.headingOffsets() ?? [] },
+			{ el: previewPane, headings: () => headingOffsetsIn(previewPane) },
+		);
+		scrollLink.current = unlink;
+		return () => {
+			unlink();
+			scrollLink.current = null;
+		};
+	}, [mode, previewPane]);
+	// A fresh preview can be a different height, which moves everything in it.
+	useEffect(() => {
+		scrollLink.current?.sync();
+	}, [preview.data]);
 
 	function update(patch: Partial<Draft>) {
 		setDraft((current) => ({ ...current, ...patch }));
@@ -616,7 +638,7 @@ function PostEditor({ post }: { post: Post | null }) {
 									/>
 								</div>
 								{mode !== "write" && (
-									<div className="c-post-editor__preview c-post__body">
+									<div ref={setPreviewPane} className="c-post-editor__preview c-post__body">
 										{preview.isError ? (
 											<Alert severity="error">{errorMessage(preview.error, "Preview failed to load.")}</Alert>
 										) : preview.data ? (

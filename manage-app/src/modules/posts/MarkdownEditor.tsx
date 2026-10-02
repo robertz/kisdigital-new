@@ -13,6 +13,9 @@ export interface MarkdownEditorHandle {
 	prefixLines: (prefix: string, numbered?: boolean) => void;
 	insertAtCursor: (text: string) => void;
 	focus: () => void;
+	scroller: () => HTMLElement | null;
+	/** Scroll offsets of the body's "#" headings, for lining up the preview. */
+	headingOffsets: () => number[];
 }
 
 interface Props {
@@ -93,6 +96,23 @@ function prefix(view: EditorView, linePrefix: string, numbered = false) {
 	view.dispatch({ changes });
 	view.focus();
 	return true;
+}
+
+// "#" headings outside fenced code, where a "#" line is a comment.
+function headingOffsets(view: EditorView): number[] {
+	const offsets: number[] = [];
+	let fence = "";
+	for (let number = 1; number <= view.state.doc.lines; number++) {
+		const line = view.state.doc.line(number);
+		const marker = /^ {0,3}(```|~~~)/.exec(line.text)?.[1];
+		if (marker) {
+			if (!fence) fence = marker;
+			else if (fence === marker) fence = "";
+		} else if (!fence && /^ {0,3}#{1,6}\s/.test(line.text)) {
+			offsets.push(view.lineBlockAt(line.from).top);
+		}
+	}
+	return offsets;
 }
 
 function imageFiles(list: FileList | undefined | null): File[] {
@@ -184,6 +204,8 @@ export function MarkdownEditor({ ref, value, onChange, onImageFiles, placeholder
 				view.focus();
 			},
 			focus: () => viewRef.current?.focus(),
+			scroller: () => viewRef.current?.scrollDOM ?? null,
+			headingOffsets: () => (viewRef.current ? headingOffsets(viewRef.current) : []),
 		}),
 		[],
 	);
