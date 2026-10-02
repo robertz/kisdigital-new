@@ -17,6 +17,12 @@ app.all( "/ping", ( req, res ) => res.send( "matched: " & req.method ) )
 
 `app.all()` matches every HTTP method for a path — useful for logging or auth checks scoped to one route without duplicating the handler per verb.
 
+## Matching rules
+
+- Path matching is case-insensitive for literal segments, which matches Express's own default.
+- A route registered with no handler function throws immediately, rather than silently registering nothing.
+- Register all routes and middleware before calling `listen()` — see [App](/projects/boxlang-express/docs/app#register-everything-before-listen).
+
 ## HEAD is automatic
 
 Every `app.get()` route also answers `HEAD` for free — same handler, same headers (including `Content-Length`), just with the body thrown away before it reaches the client, same as Express. This applies to static file serving too:
@@ -62,6 +68,8 @@ app.get( "/files/*", ( req, res ) => {
 // GET /files/a/b/c.txt → matches
 ```
 
+A `*` anywhere other than the end of the pattern throws at registration time, rather than silently matching more or less than you'd expect.
+
 ## param() callbacks
 
 `app.param(name, callback)` registers a callback that runs once before any route handler using that param name, letting you resolve/validate it in one place instead of every handler:
@@ -77,7 +85,7 @@ app.get( "/users/:id", ( req, res ) => {
 } )
 ```
 
-Calling `next(err)` from inside a param() callback aborts straight to error-handling middleware, same as from a regular handler.
+Calling `next(err)` from inside a param() callback aborts straight to error-handling middleware, same as from a regular handler. It works the same on a standalone `Router` — `router.param(...)`.
 
 ## Chaining with route()
 
@@ -89,9 +97,11 @@ app.route( "/widgets" )
     .post( ( req, res ) => res.status( 201 ).json( { created: true } ) )
 ```
 
+It works the same on a standalone `Router` — `router.route(path)`.
+
 ## Mountable routers
 
-A `Router` is a standalone, mountable route table — group related routes and mount them under a path prefix:
+A `Router` is a standalone, mountable route table with the same routing methods as `app` — group related routes and mount them under a path prefix. Create one with `boxExpressRouter()` (or `new bxModules.boxexpress.models.Router()` directly):
 
 ```bxs
 apiRouter = boxExpressRouter()
@@ -108,4 +118,4 @@ Inside a mounted router, `req.path` has the mount prefix stripped for the durati
 
 ## 404 for unmatched routes
 
-If nothing in the stack matches, the framework's default handler sends a 404. See [Error Handling](/projects/boxlang-express/docs/errors) for how to replace it with a themed page.
+If nothing in the stack matches, the framework's default handler sends a 404. See [Error Handling](/projects/boxlang-express/docs/error-handling) for how to replace it with a themed page.

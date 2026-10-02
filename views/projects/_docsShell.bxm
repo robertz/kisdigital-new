@@ -4,7 +4,12 @@
 	<div class="c-docs">
 		<nav class="c-docs-nav">
 			<span class="c-docs-nav__heading">#encodeForHTML( data.projectName )# Docs</span>
+			<bx:set navGroup = "">
 			<bx:loop array="#data.docs#" item="doc">
+				<bx:if len( doc.group ?: "" ) && doc.group != navGroup>
+					<bx:set navGroup = doc.group>
+					<span class="c-docs-nav__group">#encodeForHTML( doc.group )#</span>
+				</bx:if>
 				<a href="/projects/#data.projectSlug#/docs/#doc.page_slug#" class="c-docs-nav__link #( doc.page_slug == data.currentSlug ? 'c-docs-nav__link--active' : '' )#">#encodeForHTML( doc.title )#</a>
 			</bx:loop>
 		</nav>
@@ -25,5 +30,19 @@
 		</div>
 	</div>
 </div>
+<script>
+// With a long docs list the current page's link can sit below the sidebar's
+// fold (or off the end of the horizontal bar on a phone). Scroll the sidebar
+// itself, not the page, so that link is in view.
+(function(){
+	var nav = document.querySelector('.c-docs-nav');
+	var active = nav && nav.querySelector('.c-docs-nav__link--active');
+	if (!active) return;
+	var navBox = nav.getBoundingClientRect();
+	var linkBox = active.getBoundingClientRect();
+	nav.scrollTop  += linkBox.top - navBox.top - ( nav.clientHeight - linkBox.height ) / 2;
+	nav.scrollLeft += linkBox.left - navBox.left - ( nav.clientWidth - linkBox.width ) / 2;
+})();
+</script>
 </bx:output>
 <bx:include template="../partials/_foot.bxm">

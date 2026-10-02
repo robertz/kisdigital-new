@@ -8,7 +8,20 @@ Cookie-based sessions via req.session.
 app.use( boxExpressSession() )
 ```
 
-Once registered, every request gets a session — a new one is created and a session cookie set if the request didn't already carry one.
+Once registered, every request gets a session — a new one is created and a session cookie set if the request didn't already carry one. This mirrors [express-session](https://github.com/expressjs/session)'s default behavior: the cookie carries only an opaque, unguessable session id, and the data lives server-side, keyed by that id.
+
+```bxs
+app.use( boxExpressSession( { name: "sid", maxAge: 3600 } ) )  // custom cookie name, 1h (seconds) maxAge
+```
+
+The default cookie is `connect.sid` with a 24-hour `maxAge`. Sessions are rolling: every request through this middleware resets both the cookie's and the stored data's expiry to `maxAge` from now.
+
+Or via the underlying class:
+
+```bxs
+session = new bxModules.boxexpress.models.middleware.Session()
+app.use( session.session( { maxAge: 3600 } ) )
+```
 
 ## Reading and writing session data
 
@@ -19,7 +32,7 @@ app.get( "/visit-count", ( req, res ) => {
 } )
 ```
 
-`req.session` is a plain struct — read and write it directly. It's persisted server-side and keyed by `req.sessionID`, which is also readable directly for logging or debugging.
+`req.session` is a plain struct — read and write it directly. It's saved automatically (no explicit `req.session.save()` call), persisted server-side and keyed by `req.sessionID`, which is also readable directly for logging or debugging.
 
 ## Ending a session
 
@@ -65,7 +78,7 @@ Both default to `true` (the historical always-save behavior), so upgrading doesn
 
 ## Durable sessions (boxExpressCacheStore)
 
-The default session store is an in-memory `ConcurrentHashMap` on the `Session` instance — fine for one process, gone on restart, and not shared across a cluster. It holds at most `maxSessions` sessions (default `100000`); past that, new sessions aren't stored — existing ones keep working — and a warning is logged, so a flood of cookieless requests can't exhaust memory. With the default `saveUninitialized: true` every new visitor counts toward that cap, so set it to `false` if you can. Expired entries are swept at most every 30 seconds. `boxExpressCacheStore()` is a ready-made `store` backed by BoxLang's own `cache()` service instead:
+The default session store is an in-memory `ConcurrentHashMap` on the `Session` instance — fine for one process, gone on restart, and not shared across a cluster. It holds at most `maxSessions` sessions (default `100000`); past that, new sessions aren't stored — existing ones keep working — and a warning is logged, so a flood of cookieless requests can't exhaust memory. With the default `saveUninitialized: true` every new visitor counts toward that cap, so set it to `false` if you can. Expired entries are swept at most every 30 seconds. To swap in something durable, pass `{ store: myStore }` — any object exposing `get(id)` / `set(id, data, maxAge)` / `destroy(id)`. `boxExpressCacheStore()` is a ready-made `store` backed by BoxLang's own `cache()` service:
 
 ```bxs
 app.use( boxExpressSession( { store: boxExpressCacheStore( "sessions" ) } ) )
@@ -73,7 +86,7 @@ app.use( boxExpressSession( { store: boxExpressCacheStore( "sessions" ) } ) )
 
 `boxExpressSession( { cache: "sessions" } )` is shorthand for the same thing.
 
-The named cache (`"sessions"` here) should already be registered in `boxlang.json` — this doesn't create one, it just talks to it (if it's missing, the app keeps serving — see [Falling back without durable storage](#falling-back-without-durable-storage)). Point that cache's `objectStore` at `"JDBCStore"` and session data lands in a real SQL table instead of memory, surviving a restart and shared across every process pointed at the same database:
+The named cache (`"sessions"` here) should already be registered in `boxlang.json` — this doesn't create one, it just talks to it (if it's missing, the app keeps serving — see [Falling back without durable storage](#falling-back-without-durable-storage)). Point that cache's `objectStore` at `"JDBCStore"` and session data lands in a real SQL table instead of memory, surviving a restart and shared across every process pointed at the same database. `JDBCStore` auto-detects the database vendor from the JDBC driver (MySQL, Postgres, SQL Server, Oracle, SQLite, Derby, HSQLDB, MariaDB) to generate the right SQL for each:
 
 ```json
 "caches": {
@@ -97,7 +110,7 @@ See [Configuration](/projects/boxlang-express/docs/config) for the full datasour
 
 ## Falling back without durable storage
 
-`boxExpressCacheStore()` (and [rate limiting's](/projects/boxlang-express/docs/middleware) `cache` option) degrade instead of failing requests:
+`boxExpressCacheStore()` (and [rate limiting's](/projects/boxlang-express/docs/rate-limiting) `cache` option) degrade instead of failing requests:
 
 - **The named cache isn't registered** — sessions live in this process's memory, with a warning logged at startup.
 - **The cache is registered but in-memory** (BoxLang's default `ConcurrentStore`, which `isDistributed()` reports as not shared) — it's used as-is, with a warning that entries aren't shared across instances or kept across restarts.
