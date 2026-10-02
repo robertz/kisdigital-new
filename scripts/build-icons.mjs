@@ -1,7 +1,7 @@
 // Generates public/assets/css/icons-generated.css — a CSS-mask replacement
 // for the Bootstrap Icons webfont/CDN CSS this site used to load in full
 // (2000+ glyphs) for the ~90 it actually uses. Scans views/**/*.bxm,
-// public/assets/js/*.js, and models/**/*.bx for literal "bi-*" class names
+// public/assets/js/*.js, models/**/*.bx, and manage-app/src/**/*.ts(x) for literal "bi-*" class names
 // (including ones picked dynamically at runtime, e.g. a ternary between two
 // class strings, or interpolated from a data file like ProjectRegistry.bx's
 // icon field — every case is still literal text somewhere in the source, so
@@ -35,6 +35,7 @@ const sourceFiles = [
 	...walk(join(root, "views"), [".bxm"]),
 	...walk(join(root, "public/assets/js"), [".js"]),
 	...walk(join(root, "models"), [".bx"]),
+	...walk(join(root, "manage-app/src"), [".ts", ".tsx"]),
 ];
 
 const iconNames = new Set();

@@ -1,0 +1,179 @@
+/**
+ * Revision history for posts: a snapshot each time a post is saved, plus each
+ * user's unsaved work in progress (an "autosave"), stored in PostRevision.
+ *
+ * The table is optional (db/migrations/0025_add_post_revision.sql). Every
+ * method here degrades to "no history" when it's missing or unreachable, so
+ * saving a post never depends on it.
+ */
+class {
+
+	variables.keepSaves = 30;
+
+	/**
+	 * Stores a snapshot taken at save time, unless it matches the previous
+	 * one. Clears this user's autosave for the post, which the save has just
+	 * superseded.
+	 *
+	 * @param {struct} content - Keys: title, description, coverImage, body, tags (array).
+	 */
+	function recordSave( required string postId, required string userId, required struct content ){
+		try {
+			_deleteAutosave( arguments.postId, arguments.userId );
+
+			var latest = queryExecute(
+				"SELECT title, description, cover_image, body, tags
+				FROM PostRevision
+				WHERE post_id = :postId AND kind = 'save'
+				ORDER BY id DESC
+				LIMIT 1",
+				{ "postId": { value: arguments.postId, cfsqltype: "cf_sql_varchar" } },
+				{ returnType: "array" }
+			);
+			var tagList = arguments.content.tags.toList( "," );
+			if ( latest.len()
+				&& compare( latest[ 1 ].title, arguments.content.title ) == 0
+				&& compare( latest[ 1 ].description, arguments.content.description ) == 0
+				&& compare( latest[ 1 ].cover_image ?: "", arguments.content.coverImage ) == 0
+				&& compare( latest[ 1 ].body, arguments.content.body ) == 0
+				&& compare( latest[ 1 ].tags, tagList ) == 0 ){
+				return;
+			}
+
+			_insert( arguments.postId, arguments.userId, "save", arguments.content );
+
+			// Keeps the newest keepSaves snapshots. The derived table is there
+			// because MySQL won't delete from a table it's also selecting from.
+			queryExecute(
+				"DELETE FROM PostRevision
+				WHERE post_id = :postId AND kind = 'save'
+					AND id NOT IN (
+						SELECT id FROM (
+							SELECT id FROM PostRevision
+							WHERE post_id = :postId AND kind = 'save'
+							ORDER BY id DESC
+							LIMIT :keep
+						) AS kept
+					)",
+				{
+					"postId": { value: arguments.postId,    cfsqltype: "cf_sql_varchar" },
+					"keep"  : { value: variables.keepSaves, cfsqltype: "cf_sql_integer" }
+				}
+			);
+		} catch ( any e ) {
+			println( "[error] revision save failed: " & e.message );
+		}
+	}
+
+	/**
+	 * Replaces this user's autosave for the post. The post itself is untouched.
+	 *
+	 * @return {boolean} False when the table isn't available.
+	 */
+	function recordAutosave( required string postId, required string userId, required struct content ){
+		try {
+			_deleteAutosave( arguments.postId, arguments.userId );
+			_insert( arguments.postId, arguments.userId, "autosave", arguments.content );
+			return true;
+		} catch ( any e ) {
+			return false;
+		}
+	}
+
+	/**
+	 * A post's history, newest first, without the bodies.
+	 *
+	 * @return {struct} { available: boolean, revisions: array of { id, kind, created, userName, title, words } }
+	 */
+	function listRevisions( required string postId ){
+		try {
+			var rows = queryExecute(
+				"SELECT R.id, R.kind, R.created, R.title, R.body, U.display_name
+				FROM PostRevision R
+				LEFT JOIN User U ON U.id = R.user_id
+				WHERE R.post_id = :postId
+				ORDER BY R.id DESC
+				LIMIT 60",
+				{ "postId": { value: arguments.postId, cfsqltype: "cf_sql_varchar" } },
+				{ returnType: "array" }
+			);
+			return {
+				"available": true,
+				"revisions": rows.map( ( row ) => {
+					return {
+						"id"      : row.id,
+						"kind"    : row.kind,
+						"created" : dateTimeFormat( row.created, "yyyy-mm-dd'T'HH:nn:ss'Z'" ),
+						"userName": row.display_name ?: "",
+						"title"   : row.title,
+						"words"   : reMatch( "\S+", row.body ).len()
+					};
+				} )
+			};
+		} catch ( any e ) {
+			return { "available": false, "revisions": [] };
+		}
+	}
+
+	/**
+	 * One revision in full.
+	 *
+	 * @return {struct} Empty when it doesn't exist or doesn't belong to the post.
+	 */
+	function getRevision( required string postId, required numeric revisionId ){
+		try {
+			var rows = queryExecute(
+				"SELECT id, kind, created, title, description, cover_image, body, tags
+				FROM PostRevision
+				WHERE id = :id AND post_id = :postId
+				LIMIT 1",
+				{
+					"id"    : { value: arguments.revisionId, cfsqltype: "cf_sql_bigint" },
+					"postId": { value: arguments.postId,     cfsqltype: "cf_sql_varchar" }
+				},
+				{ returnType: "array" }
+			);
+			if ( !rows.len() ) return {};
+			return {
+				"id"         : rows[ 1 ].id,
+				"kind"       : rows[ 1 ].kind,
+				"created"    : dateTimeFormat( rows[ 1 ].created, "yyyy-mm-dd'T'HH:nn:ss'Z'" ),
+				"title"      : rows[ 1 ].title,
+				"description": rows[ 1 ].description,
+				"coverImage" : rows[ 1 ].cover_image ?: "",
+				"body"       : rows[ 1 ].body,
+				"tags"       : listToArray( rows[ 1 ].tags, "," )
+			};
+		} catch ( any e ) {
+			return {};
+		}
+	}
+
+	private function _deleteAutosave( required string postId, required string userId ){
+		queryExecute(
+			"DELETE FROM PostRevision WHERE post_id = :postId AND user_id = :userId AND kind = 'autosave'",
+			{
+				"postId": { value: arguments.postId, cfsqltype: "cf_sql_varchar" },
+				"userId": { value: arguments.userId, cfsqltype: "cf_sql_varchar" }
+			}
+		);
+	}
+
+	private function _insert( required string postId, required string userId, required string kind, required struct content ){
+		queryExecute(
+			"INSERT INTO PostRevision (post_id, user_id, kind, title, description, cover_image, body, tags)
+			VALUES (:postId, :userId, :kind, :title, :description, :coverImage, :body, :tags)",
+			{
+				"postId"     : { value: arguments.postId,                                   cfsqltype: "cf_sql_varchar" },
+				"userId"     : { value: arguments.userId,                                   cfsqltype: "cf_sql_varchar" },
+				"kind"       : { value: arguments.kind,                                     cfsqltype: "cf_sql_varchar" },
+				"title"      : { value: left( arguments.content.title, 255 ),               cfsqltype: "cf_sql_varchar" },
+				"description": { value: left( arguments.content.description, 500 ),         cfsqltype: "cf_sql_varchar" },
+				"coverImage" : { value: arguments.content.coverImage,                       cfsqltype: "cf_sql_varchar", null: !len( trim( arguments.content.coverImage ) ) },
+				"body"       : { value: arguments.content.body,                             cfsqltype: "cf_sql_longvarchar" },
+				"tags"       : { value: left( arguments.content.tags.toList( "," ), 1000 ), cfsqltype: "cf_sql_varchar" }
+			}
+		);
+	}
+
+}

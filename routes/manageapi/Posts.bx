@@ -1,0 +1,329 @@
+/**
+ * /manage/api/posts — the post list, editor and calendar: read, create,
+ * update, delete, feature, preview, schedule, and revision history.
+ */
+class {
+
+	variables.postService     = "";
+	variables.postRenderer    = "";
+	variables.revisionService = "";
+
+	function init( required postService, required postRenderer, required revisionService ){
+		variables.postService     = arguments.postService;
+		variables.postRenderer    = arguments.postRenderer;
+		variables.revisionService = arguments.revisionService;
+		return this;
+	}
+
+	function register( required router, required auth, required admin ){
+		arguments.router.get( "/manage/api/tags", arguments.auth, ( req, res ) => tags( req, res ) );
+		arguments.router.get( "/manage/api/posts", arguments.auth, ( req, res ) => listPosts( req, res ) );
+		arguments.router.post( "/manage/api/posts", arguments.auth, ( req, res ) => savePost( req, res ) );
+		// Before /:id, which would otherwise take "search" and "calendar" for ids.
+		arguments.router.get( "/manage/api/posts/search", arguments.auth, ( req, res ) => searchPosts( req, res ) );
+		arguments.router.get( "/manage/api/posts/calendar", arguments.auth, ( req, res ) => calendar( req, res ) );
+		arguments.router.get( "/manage/api/posts/:id", arguments.auth, ( req, res ) => getPost( req, res ) );
+		arguments.router.put( "/manage/api/posts/:id", arguments.auth, ( req, res ) => savePost( req, res ) );
+		arguments.router.delete( "/manage/api/posts/:id", arguments.auth, ( req, res ) => deletePost( req, res ) );
+		arguments.router.post( "/manage/api/posts/:id/featured", arguments.admin, ( req, res ) => toggleFeatured( req, res ) );
+		arguments.router.post( "/manage/api/posts/:id/schedule", arguments.auth, ( req, res ) => schedulePost( req, res ) );
+		arguments.router.put( "/manage/api/posts/:id/autosave", arguments.auth, ( req, res ) => autosavePost( req, res ) );
+		arguments.router.get( "/manage/api/posts/:id/revisions", arguments.auth, ( req, res ) => listRevisions( req, res ) );
+		arguments.router.get( "/manage/api/posts/:id/revisions/:revisionId", arguments.auth, ( req, res ) => getRevision( req, res ) );
+		arguments.router.post( "/manage/api/preview", arguments.auth, ( req, res ) => preview( req, res ) );
+	}
+
+	// GET /manage/api/posts/search?q=boxlang — posts by title, for the
+	// command palette.
+	function searchPosts( req, res ){
+		var text = trim( req.query.q ?: "" );
+		res.json( {
+			"posts": len( text ) < 2 ? [] : variables.postService.searchManagePosts( text, 8 ).map( ( row ) => {
+				return { "id": row.id, "title": row.title, "status": row.status };
+			} )
+		} );
+	}
+
+	// GET /manage/api/posts/calendar?month=2026-10 — what publishes in a
+	// month, plus the drafts that could be scheduled into it.
+	function calendar( req, res ){
+		var month = trim( req.query.month ?: "" );
+		if ( !reFind( "^\d{4}-(0[1-9]|1[0-2])$", month ) ){
+			month = dateFormat( now(), "yyyy-mm" );
+		}
+		var monthStart = createDate( val( left( month, 4 ) ), val( right( month, 2 ) ), 1 );
+
+		res.json( {
+			"month" : month,
+			"posts" : variables.postService.getCalendarPosts( monthStart, dateAdd( "m", 1, monthStart ) ).map( ( row ) => {
+				return {
+					"id"         : row.id,
+					"title"      : row.title,
+					"status"     : row.status,
+					"publishDate": dateTimeFormat( row.publish_date, "yyyy-mm-dd'T'HH:nn" ),
+					"isScheduled": row.status == "published" && row.publish_date > now()
+				};
+			} ),
+			"drafts": variables.postService.getDrafts( 50 ).map( ( row ) => {
+				return { "id": row.id, "title": row.title };
+			} )
+		} );
+	}
+
+	// POST /manage/api/posts/:id/schedule — body: { date: "2026-10-12" }.
+	// Moves a scheduled post to another day at the same time, or schedules a
+	// draft for 9:00 that day. A live post is refused: its publish date is
+	// part of its public address.
+	function schedulePost( req, res ){
+		var post = loadEditablePost( req, res );
+		if ( isNull( post ) ) return;
+
+		var payload = isStruct( req.body ?: "" ) ? req.body : {};
+		var day     = trim( payload.date ?: "" );
+		if ( !reFind( "^\d{4}-\d{2}-\d{2}$", day ) || !isDate( day ) ){
+			res.status( 422 ).json( { "error": "Choose a day to schedule this for." } );
+			return;
+		}
+		if ( post.getStatus() == "archived" || ( post.getStatus() == "published" && !post.getIsScheduled() ) ){
+			res.status( 409 ).json( { "error": "Only a draft or a scheduled post can be moved. This one is already " & post.getStatus() & "." } );
+			return;
+		}
+
+		var current     = post.getPublishDate();
+		var publishDate = createDateTime(
+			val( listGetAt( day, 1, "-" ) ), val( listGetAt( day, 2, "-" ) ), val( listGetAt( day, 3, "-" ) ),
+			post.getIsScheduled() ? hour( current ) : 9,
+			post.getIsScheduled() ? minute( current ) : 0,
+			0
+		);
+		if ( publishDate <= now() ){
+			res.status( 422 ).json( { "error": "That time has already passed. Pick a later day, or publish it from the editor." } );
+			return;
+		}
+
+		variables.postService.schedulePost( post.getId(), publishDate );
+		res.json( { "post": postJson( variables.postService.getPostById( post.getId() ) ) } );
+	}
+
+	// PUT /manage/api/posts/:id/autosave — keeps the editor's unsaved work
+	// on the server without changing the post. "saved" is false until the
+	// PostRevision table exists.
+	function autosavePost( req, res ){
+		var post = loadEditablePost( req, res );
+		if ( isNull( post ) ) return;
+
+		res.json( { "saved": variables.revisionService.recordAutosave( post.getId(), req.session.manage_user.id, revisionContent( req ) ) } );
+	}
+
+	// GET /manage/api/posts/:id/revisions
+	function listRevisions( req, res ){
+		var post = loadEditablePost( req, res );
+		if ( isNull( post ) ) return;
+
+		res.json( variables.revisionService.listRevisions( post.getId() ) );
+	}
+
+	// GET /manage/api/posts/:id/revisions/:revisionId
+	function getRevision( req, res ){
+		var post = loadEditablePost( req, res );
+		if ( isNull( post ) ) return;
+
+		var revision = isNumeric( req.params.revisionId ?: "" ) ? variables.revisionService.getRevision( post.getId(), int( req.params.revisionId ) ) : {};
+		if ( revision.isEmpty() ){
+			res.status( 404 ).json( { "error": "That version no longer exists." } );
+			return;
+		}
+		res.json( { "revision": revision } );
+	}
+
+	// The parts of a post a revision keeps, from a request body.
+	private function revisionContent( req ){
+		var payload  = isStruct( req.body ?: "" ) ? req.body : {};
+		var postTags = [];
+		for ( var tag in ( isArray( payload.tags ?: "" ) ? payload.tags : [] ) ){
+			if ( isSimpleValue( tag ) && len( trim( tag ) ) ) postTags.append( trim( tag ) );
+		}
+		return {
+			"title"      : toString( payload.title ?: "" ),
+			"description": toString( payload.description ?: "" ),
+			"coverImage" : toString( payload.coverImage ?: "" ),
+			"body"       : toString( payload.body ?: "" ),
+			"tags"       : postTags
+		};
+	}
+
+	// GET /manage/api/tags
+	function tags( req, res ){
+		res.json( { "tags": variables.postService.getAllTagNames() } );
+	}
+
+	// GET /manage/api/posts?page=2
+	function listPosts( req, res ){
+		var rawPage     = req.query.page ?: "";
+		var currentPage = isNumeric( rawPage ) && rawPage > 0 ? int( rawPage ) : 1;
+		var paging      = variables.postService.getManagePosts( currentPage, 20 );
+
+		res.json( {
+			"posts"     : paging.posts.map( ( post ) => postJson( post ) ),
+			"total"     : val( paging.total ),
+			"page"      : paging.page,
+			"totalPages": paging.totalPages
+		} );
+	}
+
+	// GET /manage/api/posts/:id
+	function getPost( req, res ){
+		var post = loadEditablePost( req, res );
+		if ( isNull( post ) ) return;
+
+		res.json( { "post": postJson( post, true ) } );
+	}
+
+	// POST /manage/api/posts      — create
+	// PUT  /manage/api/posts/:id  — update
+	function savePost( req, res ){
+		var postId  = trim( req.params.id ?: "" );
+		var isNew   = !len( postId );
+		var payload = isStruct( req.body ?: "" ) ? req.body : {};
+
+		if ( !isNew && isNull( loadEditablePost( req, res ) ) ) return;
+
+		if ( !len( trim( payload.title ?: "" ) ) ){
+			res.status( 422 ).json( { "error": "Title is required." } );
+			return;
+		}
+
+		var postTags = [];
+		for ( var tag in ( isArray( payload.tags ?: "" ) ? payload.tags : [] ) ){
+			if ( isSimpleValue( tag ) && len( trim( tag ) ) ) postTags.append( trim( tag ) );
+		}
+		var postStatus = lCase( trim( payload.status ?: "draft" ) );
+
+		var bean = new models.PostBean();
+		bean.setId(          postId );
+		bean.setTitle(       payload.title );
+		bean.setSlug(        payload.slug ?: "" );
+		bean.setDescription( payload.description ?: "" );
+		bean.setCoverImage(  payload.coverImage ?: "" );
+		bean.setBody(        payload.body ?: "" );
+		bean.setStatus(      listFind( "draft,published,archived", postStatus ) ? postStatus : "draft" );
+		bean.setFeatured(    isBoolean( payload.featured ?: false ) && payload.featured );
+		bean.setPublishDate( payload.publishDate ?: "" );
+		bean.setTags(        postTags );
+
+		var saved = variables.postService.savePost( bean );
+		variables.postService.syncTags( saved.id, postTags.toList( "," ) );
+		if ( isNew ){
+			variables.postService.ensureAuthor( saved.id, req.session.manage_user.id );
+		}
+		variables.revisionService.recordSave( saved.id, req.session.manage_user.id, revisionContent( req ) );
+
+		// Reloaded rather than echoed back: savePost() resolves a blank slug
+		// and a blank publish date itself, and the post URL depends on both.
+		res.status( isNew ? 201 : 200 ).json( { "post": postJson( variables.postService.getPostById( saved.id ), true ) } );
+	}
+
+	// DELETE /manage/api/posts/:id — permanent, and only for a post that
+	// isn't published (a draft or an archived post). A scheduled post counts
+	// as published.
+	function deletePost( req, res ){
+		var post = loadEditablePost( req, res );
+		if ( isNull( post ) ) return;
+
+		if ( post.getStatus() == "published" ){
+			res.status( 409 ).json( { "error": "A published post can't be deleted. Change it to a draft or archive it first." } );
+			return;
+		}
+
+		variables.postService.deleteUnpublishedPost( post.getId() );
+		if ( variables.postService.getPostById( post.getId() ).exists() ){
+			res.status( 409 ).json( { "error": "The post was published before it could be deleted." } );
+			return;
+		}
+
+		println( "[manage] post '" & post.getId() & "' (" & post.getTitle() & ") deleted by user '" & req.session.manage_user.id & "'" );
+		res.json( { "deleted": true } );
+	}
+
+	// POST /manage/api/posts/:id/featured
+	function toggleFeatured( req, res ){
+		var post = variables.postService.getPostById( trim( req.params.id ?: "" ) );
+		if ( !post.exists() ){
+			res.status( 404 ).json( { "error": "That post no longer exists." } );
+			return;
+		}
+
+		variables.postService.toggleFeatured( post.getId() );
+		res.json( { "featured": post.getFeatured() ? false : true } );
+	}
+
+	// POST /manage/api/preview — renders unsaved markdown exactly as the
+	// public post page would. Never touches the database.
+	function preview( req, res ){
+		var payload = isStruct( req.body ?: "" ) ? req.body : {};
+		try {
+			res.json( { "html": variables.postRenderer.render( payload.body ?: "" ) } );
+		} catch ( any e ) {
+			res.status( 422 ).json( { "error": "Couldn't render preview: " & e.message } );
+		}
+	}
+
+	// ── Helpers ──────────────────────────────────────────────────────────────
+
+	/**
+	 * Loads the post named by :id, answering 404 or 403 itself when it's
+	 * missing or not this user's to edit. Returns null in those cases.
+	 */
+	private function loadEditablePost( req, res ){
+		var post = variables.postService.getPostById( trim( req.params.id ?: "" ) );
+		if ( !post.exists() ){
+			res.status( 404 ).json( { "error": "That post no longer exists." } );
+			return;
+		}
+
+		// Non-admin users may only edit posts they authored.
+		if ( !variables.postService.canUserEditPost( post.getId(), req.session.manage_user.id, req.session.manage_user.role ) ){
+			println( "[auth] unauthorized post edit attempt — user '" & req.session.manage_user.id & "' on post '" & post.getId() & "' from " & req.ip );
+			res.status( 403 ).json( { "error": "You are not authorised to edit this post." } );
+			return;
+		}
+
+		return post;
+	}
+
+	// A post that has never been published is stored with a placeholder date
+	// at the start of 1970 (see PostService.savePost()), which isn't a date
+	// anyone chose.
+	private function hasPublishDate( required post ){
+		var publishDate = arguments.post.getPublishDate();
+		return isDate( publishDate ) && year( publishDate ) > 1970;
+	}
+
+	private function postJson( required post, boolean full = false ){
+		var publishDate = arguments.post.getPublishDate();
+		var result = {
+			"id"         : arguments.post.getId(),
+			"title"      : arguments.post.getTitle(),
+			"slug"       : arguments.post.getSlug(),
+			"status"     : arguments.post.getStatus(),
+			"featured"   : arguments.post.getFeatured() ? true : false,
+			// Server wall-clock time in the shape a datetime-local input uses,
+			// the same value the editor sends back on save.
+			"publishDate": hasPublishDate( arguments.post ) ? dateTimeFormat( publishDate, "yyyy-mm-dd'T'HH:nn" ) : "",
+			"isScheduled": arguments.post.getIsScheduled() ? true : false,
+			"postUrl"    : len( arguments.post.getSlug() ) ? arguments.post.getPostUrl() : "",
+			"tags"       : arguments.post.getTags(),
+			"authorName" : arguments.post.getAuthorName(),
+			"views"      : val( arguments.post.getViews() )
+		};
+
+		if ( arguments.full ){
+			result[ "description" ] = arguments.post.getDescription();
+			result[ "coverImage" ]  = arguments.post.getCoverImage();
+			result[ "body" ]        = arguments.post.getBody();
+		}
+
+		return result;
+	}
+
+}

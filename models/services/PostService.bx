@@ -829,6 +829,21 @@ class {
 		);
 	}
 
+	/**
+	 * Permanently deletes a post that isn't published. Its tags, author link,
+	 * comments and view counts go with it through their ON DELETE CASCADE
+	 * foreign keys. The status check is repeated in the statement itself so a
+	 * post published a moment ago can't be removed by a stale request.
+	 *
+	 * @param {string} postId - The post UUID.
+	 */
+	function deleteUnpublishedPost( required string postId ){
+		queryExecute(
+			"DELETE FROM Post WHERE id = :id AND status <> 'published'",
+			{ "id": { value: arguments.postId, cfsqltype: "cf_sql_varchar" } }
+		);
+	}
+
 	// "Trending" is a rolling window over ViewDaily, not the all-time Views
 	// counter — a post that was popular last year but dead since shouldn't
 	// outrank something getting real traffic this month. Code-level constant
@@ -1177,6 +1192,181 @@ class {
 			"missingCoverCount": counts.missing_cover_count,
 			"missingTagsCount" : missingTags
 		};
+	}
+
+	/**
+	 * Posts that reference an image URL, either as their cover image or
+	 * anywhere in their body. Used by the Media page to show where a file is
+	 * in use before it's replaced or deleted.
+	 *
+	 * @param {string} imageUrl - The image's full public URL.
+	 * @return {array} Array of structs with keys: id, title, status. Newest first.
+	 */
+	function getPostsUsingImage( required string imageUrl ){
+		// The URL is matched literally: LIKE's own wildcards are escaped.
+		var pattern = "%" & arguments.imageUrl.replace( "\", "\\", "all" ).replace( "%", "\%", "all" ).replace( "_", "\_", "all" ) & "%";
+
+		return queryExecute(
+			"SELECT P.id, P.title, P.status
+			FROM Post P
+			WHERE P.cover_image = :imageUrl
+				OR P.body LIKE :pattern
+			ORDER BY P.last_updated DESC
+			LIMIT 50",
+			{
+				"imageUrl": { value: arguments.imageUrl, cfsqltype: "cf_sql_varchar" },
+				"pattern" : { value: pattern,            cfsqltype: "cf_sql_varchar" }
+			},
+			{ returnType: "array" }
+		);
+	}
+
+	/**
+	 * Points every post that uses one image address at another, in its cover
+	 * image and its body. Used when a file on the image server is renamed or
+	 * moved, which changes its address.
+	 *
+	 * @return {numeric} How many posts were changed.
+	 */
+	function replaceImageUrl( required string oldUrl, required string newUrl ){
+		var affected = getPostsUsingImage( arguments.oldUrl ).len();
+		if ( !affected ) return 0;
+
+		var pattern = "%" & arguments.oldUrl.replace( "\", "\\", "all" ).replace( "%", "\%", "all" ).replace( "_", "\_", "all" ) & "%";
+		queryExecute(
+			"UPDATE Post
+			SET body = REPLACE(body, :oldUrl, :newUrl),
+				cover_image = CASE WHEN cover_image = :oldUrl THEN :newUrl ELSE cover_image END
+			WHERE cover_image = :oldUrl
+				OR body LIKE :pattern",
+			{
+				"oldUrl" : { value: arguments.oldUrl, cfsqltype: "cf_sql_varchar" },
+				"newUrl" : { value: arguments.newUrl, cfsqltype: "cf_sql_varchar" },
+				"pattern": { value: pattern,          cfsqltype: "cf_sql_varchar" }
+			}
+		);
+		return affected;
+	}
+
+	/**
+	 * Published and scheduled posts whose publish date falls in a range, for
+	 * the editorial calendar.
+	 *
+	 * @return {array} Array of structs with keys: id, title, status, publish_date.
+	 */
+	function getCalendarPosts( required date rangeStart, required date rangeEnd ){
+		return queryExecute(
+			"SELECT P.id, P.title, P.status, P.publish_date
+			FROM Post P
+			WHERE P.status IN ('published', 'archived')
+				AND P.publish_date >= :rangeStart
+				AND P.publish_date < :rangeEnd
+			ORDER BY P.publish_date ASC",
+			{
+				"rangeStart": { value: arguments.rangeStart, cfsqltype: "cf_sql_timestamp" },
+				"rangeEnd"  : { value: arguments.rangeEnd,   cfsqltype: "cf_sql_timestamp" }
+			},
+			{ returnType: "array" }
+		);
+	}
+
+	/**
+	 * Drafts, most recently edited first. A draft has no publish date of its
+	 * own, so the calendar lists these beside the month for scheduling.
+	 *
+	 * @return {array} Array of structs with keys: id, title.
+	 */
+	function getDrafts( numeric limit = 50 ){
+		return queryExecute(
+			"SELECT P.id, P.title
+			FROM Post P
+			WHERE P.status = 'draft'
+			ORDER BY P.last_updated DESC
+			LIMIT :lim",
+			{ "lim": { value: arguments.limit, cfsqltype: "cf_sql_integer" } },
+			{ returnType: "array" }
+		);
+	}
+
+	/**
+	 * Schedules a post: published, with the given publish date. With a date
+	 * in the future it stays hidden from visitors until then.
+	 */
+	function schedulePost( required string postId, required date publishDate ){
+		queryExecute(
+			"UPDATE Post SET status = 'published', publish_date = :publishDate WHERE id = :id",
+			{
+				"id"         : { value: arguments.postId,      cfsqltype: "cf_sql_varchar" },
+				"publishDate": { value: arguments.publishDate, cfsqltype: "cf_sql_timestamp" }
+			}
+		);
+	}
+
+	/**
+	 * Posts whose title contains the text, any status, most recently edited
+	 * first. Backs the manage app's command palette.
+	 *
+	 * @return {array} Array of structs with keys: id, title, status.
+	 */
+	function searchManagePosts( required string text, numeric limit = 8 ){
+		var pattern = "%" & arguments.text.replace( "\", "\\", "all" ).replace( "%", "\%", "all" ).replace( "_", "\_", "all" ) & "%";
+		return queryExecute(
+			"SELECT P.id, P.title, P.status
+			FROM Post P
+			WHERE P.title LIKE :pattern
+			ORDER BY P.last_updated DESC
+			LIMIT :lim",
+			{
+				"pattern": { value: pattern,         cfsqltype: "cf_sql_varchar" },
+				"lim"    : { value: arguments.limit, cfsqltype: "cf_sql_integer" }
+			},
+			{ returnType: "array" }
+		);
+	}
+
+	/**
+	 * How many posts are in each state, for the dashboard's status chart.
+	 * "scheduled" is a published post whose publish date hasn't arrived.
+	 *
+	 * @return {struct} Keys: draft, scheduled, published, archived.
+	 */
+	function getStatusCounts(){
+		var counts = queryExecute(
+			"SELECT
+				SUM(CASE WHEN P.status = 'draft' THEN 1 ELSE 0 END) AS draft_count,
+				SUM(CASE WHEN P.status = 'published' AND P.publish_date > NOW() THEN 1 ELSE 0 END) AS scheduled_count,
+				SUM(CASE WHEN P.status = 'published' AND P.publish_date <= NOW() THEN 1 ELSE 0 END) AS published_count,
+				SUM(CASE WHEN P.status = 'archived' THEN 1 ELSE 0 END) AS archived_count
+			FROM Post P",
+			{},
+			{ returnType: "array" }
+		)[ 1 ];
+
+		return {
+			"draft"    : val( counts.draft_count ?: 0 ),
+			"scheduled": val( counts.scheduled_count ?: 0 ),
+			"published": val( counts.published_count ?: 0 ),
+			"archived" : val( counts.archived_count ?: 0 )
+		};
+	}
+
+	/**
+	 * Scheduled posts, soonest first.
+	 *
+	 * @param {numeric} limit - Maximum number of posts to return.
+	 * @return {array} Array of structs with keys: id, title, publish_date.
+	 */
+	function getUpcomingPosts( numeric limit = 5 ){
+		return queryExecute(
+			"SELECT P.id, P.title, P.publish_date
+			FROM Post P
+			WHERE P.status = 'published'
+				AND P.publish_date > NOW()
+			ORDER BY P.publish_date ASC
+			LIMIT :lim",
+			{ "lim": { value: arguments.limit, cfsqltype: "cf_sql_integer" } },
+			{ returnType: "array" }
+		);
 	}
 
 	// Shared read-through cache for getTrendingPosts()/getTopSearches() —

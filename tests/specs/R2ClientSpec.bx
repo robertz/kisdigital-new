@@ -75,6 +75,25 @@ class extends="testbox.system.BaseSpec" {
 				} )
 			} )
 
+			describe( "presignDeleteUrl()", function(){
+				it( "targets the correct account/bucket/key path", function(){
+					var url = variables.r2.presignDeleteUrl( "posts/photo.jpg" )
+					expect( url ).toInclude( "https://test-account-id.r2.cloudflarestorage.com/test-bucket/posts/photo.jpg?" )
+					expect( url ).toMatch( "X-Amz-Signature=[0-9a-f]{64}$" )
+				} )
+
+				it( "percent-encodes each path segment but keeps the slashes", function(){
+					var url = variables.r2.presignDeleteUrl( "my photos/a+b (1).jpg" )
+					expect( url ).toInclude( "/test-bucket/my%20photos/a%2Bb%20%281%29.jpg?" )
+				} )
+
+				it( "signs a different request than an upload to the same key", function(){
+					var del = variables.r2.presignDeleteUrl( "posts/photo.jpg", 300 )
+					var put = variables.r2.presignPutUrl( "posts/photo.jpg", "image/jpeg", 300 ).uploadUrl
+					expect( listLast( del, "=" ) ).notToBe( listLast( put, "=" ) )
+				} )
+			} )
+
 			describe( "presignListUrl()", function(){
 				it( "targets the bucket root, not an object key", function(){
 					var url = variables.r2.presignListUrl( "posts/" )

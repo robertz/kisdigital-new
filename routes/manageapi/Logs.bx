@@ -1,0 +1,64 @@
+/**
+ * /manage/api/logs — the raw RequestLog, newest first. Unlike Insights this
+ * is unfiltered and unaggregated: an access-log viewer for debugging.
+ */
+class {
+
+	variables.insightsService = "";
+	variables.logMethods      = [ "GET", "POST", "HEAD", "PUT", "PATCH", "DELETE", "OPTIONS" ];
+
+	function init( required insightsService ){
+		variables.insightsService = arguments.insightsService;
+		return this;
+	}
+
+	function register( required router, required auth, required admin ){
+		arguments.router.get( "/manage/api/logs", arguments.admin, ( req, res ) => listRequests( req, res ) );
+	}
+
+	// GET /manage/api/logs?q=/posts&method=GET&status=4xx&before=123
+	// The filters run in the query, so they cover the whole log. Pages are
+	// cursors (before/after a row id), never offsets.
+	function listRequests( req, res ){
+		var logFilters = {
+			"path"  : trim( req.query.q ?: "" ),
+			"method": uCase( trim( req.query.method ?: "" ) ),
+			"status": lCase( trim( req.query.status ?: "" ) )
+		};
+		if ( !variables.logMethods.findNoCase( logFilters.method ) ) logFilters.method = "";
+		if ( !listFind( "2xx,3xx,4xx,5xx,unknown", logFilters.status ) ) logFilters.status = "";
+
+		var beforeId = isNumeric( req.query.before ?: "" ) ? int( req.query.before ) : 0;
+		var afterId  = isNumeric( req.query.after ?: "" ) ? int( req.query.after ) : 0;
+		var paging   = variables.insightsService.getRecentRequests( logFilters, beforeId, afterId, 50 );
+
+		res.json( {
+			"rows"       : _rowsForClient( paging.rows ),
+			"hasNewer"   : paging.hasNewer ? true : false,
+			"hasOlder"   : paging.hasOlder ? true : false,
+			"newerCursor": paging.newerCursor,
+			"olderCursor": paging.olderCursor
+		} );
+	}
+
+	private function _rowsForClient( required array rows ){
+		return arguments.rows.map( ( row ) => {
+			return {
+				"id"         : row.id,
+				// A UTC ISO string, not a display label — the browser formats
+				// it into the viewer's own local timezone client-side and
+				// it doubles as the sort key since ISO-with-Z strings sort as text.
+				"timeSort"   : dateTimeFormat( row.requested_at, "yyyy-mm-dd'T'HH:nn:ss'Z'" ),
+				"method"     : row.method,
+				"path"       : row.path,
+				"queryString": row.query_string,
+				"statusCode" : isNull( row.status_code ) ? "" : row.status_code,
+				"durationMs" : row.duration_ms,
+				"ip"         : row.ip_address,
+				"referrer"   : row.referrer,
+				"userAgent"  : row.user_agent
+			};
+		} );
+	}
+
+}

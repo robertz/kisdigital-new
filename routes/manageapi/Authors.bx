@@ -1,0 +1,113 @@
+/**
+ * /manage/api/authors — the people who can sign in to /manage. Admins manage
+ * everyone; an author can load and edit only their own profile, and can't
+ * change their own role.
+ */
+class {
+
+	variables.authorService = "";
+
+	function init( required authorService ){
+		variables.authorService = arguments.authorService;
+		return this;
+	}
+
+	function register( required router, required auth, required admin ){
+		arguments.router.get( "/manage/api/authors", arguments.admin, ( req, res ) => listAuthors( req, res ) );
+		arguments.router.post( "/manage/api/authors", arguments.admin, ( req, res ) => saveAuthor( req, res ) );
+		arguments.router.get( "/manage/api/authors/:id", arguments.auth, ( req, res ) => getAuthor( req, res ) );
+		arguments.router.put( "/manage/api/authors/:id", arguments.auth, ( req, res ) => saveAuthor( req, res ) );
+	}
+
+	// GET /manage/api/authors
+	function listAuthors( req, res ){
+		res.json( { "authors": variables.authorService.getAuthors().map( ( author ) => authorJson( author ) ) } );
+	}
+
+	// GET /manage/api/authors/:id
+	function getAuthor( req, res ){
+		var author = loadEditableAuthor( req, res );
+		if ( isNull( author ) ) return;
+
+		res.json( { "author": authorJson( author ) } );
+	}
+
+	// POST /manage/api/authors      — create (admin)
+	// PUT  /manage/api/authors/:id  — update
+	function saveAuthor( req, res ){
+		var authorId    = trim( req.params.id ?: "" );
+		var isNew       = !len( authorId );
+		var payload     = isStruct( req.body ?: "" ) ? req.body : {};
+		var newPassword = trim( payload.password ?: "" );
+		var existing    = javacast( "null", "" );
+
+		if ( !isNew ){
+			existing = loadEditableAuthor( req, res );
+			if ( isNull( existing ) ) return;
+		}
+
+		if ( !len( trim( payload.displayName ?: "" ) ) ){
+			res.status( 422 ).json( { "error": "Display name is required." } );
+			return;
+		}
+		if ( !isValid( "email", trim( payload.email ?: "" ) ) ){
+			res.status( 422 ).json( { "error": "A valid email is required." } );
+			return;
+		}
+		if ( isNew && !len( newPassword ) ){
+			res.status( 422 ).json( { "error": "Password is required for new authors." } );
+			return;
+		}
+
+		var requestedRole = lCase( trim( payload.role ?: "author" ) );
+
+		var bean = new models.AuthorBean();
+		bean.setId(          authorId );
+		bean.setDisplayName( trim( payload.displayName ) );
+		bean.setEmail(       trim( payload.email ) );
+		bean.setAbout(       payload.about ?: "" );
+		bean.setAvatarLabel( left( trim( payload.avatarLabel ?: "" ), 2 ).uCase() );
+		// Only admins may assign or change roles; anyone else keeps the one they have.
+		bean.setRole( req.session.manage_user.role == "admin"
+			? ( listFind( "admin,author", requestedRole ) ? requestedRole : "author" )
+			: existing.getRole() );
+
+		var savedId = variables.authorService.saveAuthor( bean, newPassword );
+		res.status( isNew ? 201 : 200 ).json( { "author": authorJson( variables.authorService.getAuthorById( savedId ) ) } );
+	}
+
+	/**
+	 * Loads the author named by :id, answering 404 or 403 itself when it's
+	 * missing or not this user's to edit. Returns null in those cases.
+	 */
+	private function loadEditableAuthor( req, res ){
+		var author = variables.authorService.getAuthorById( trim( req.params.id ?: "" ) );
+		if ( !author.exists() ){
+			res.status( 404 ).json( { "error": "That author no longer exists." } );
+			return;
+		}
+
+		if ( !variables.authorService.canUserEditAuthor( author.getId(), req.session.manage_user.id, req.session.manage_user.role ) ){
+			println( "[auth] unauthorized author edit attempt — user '" & req.session.manage_user.id & "' on author '" & author.getId() & "' from " & req.ip );
+			res.status( 403 ).json( { "error": "You are not authorised to edit this author." } );
+			return;
+		}
+
+		return author;
+	}
+
+	private function authorJson( required author ){
+		var created = arguments.author.getCreated();
+		return {
+			"id"         : arguments.author.getId(),
+			"displayName": arguments.author.getDisplayName(),
+			"email"      : arguments.author.getEmail(),
+			"role"       : arguments.author.getRole(),
+			"about"      : arguments.author.getAbout(),
+			"avatarLabel": arguments.author.getAvatarLabel(),
+			"postCount"  : val( arguments.author.getPostCount() ),
+			"created"    : isDate( created ) ? dateTimeFormat( created, "yyyy-mm-dd'T'HH:nn:ss'Z'" ) : ""
+		};
+	}
+
+}

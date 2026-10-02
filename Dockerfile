@@ -1,6 +1,7 @@
 # ── Assets ───────────────────────────────────────────────────────────────
-# esbuild bundles + hashes CSS/JS into public/assets/dist/ (gitignored, so it
-# has to be produced here rather than assumed present in the build context).
+# esbuild bundles + hashes CSS/JS into public/assets/dist/, and Vite builds the
+# /manage React app into public/assets/dist/manage/ (gitignored, so both have
+# to be produced here rather than assumed present in the build context).
 FROM node:20-alpine AS assets
 WORKDIR /app
 COPY package.json package-lock.json ./
@@ -15,6 +16,7 @@ COPY models models
 COPY public/assets/css public/assets/css
 COPY public/assets/scss public/assets/scss
 COPY public/assets/js public/assets/js
+COPY manage-app manage-app
 RUN npm run build
 
 # ── Runtime ──────────────────────────────────────────────────────────────
