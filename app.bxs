@@ -2,8 +2,8 @@
  * KISDigital — boxlang-express port of the ColdBox/cbwire site.
  *
  * cbwire's live admin components have no boxlang-express equivalent, so
- * /manage's post/author/settings editors are plain POST-and-redirect forms
- * instead (see routes/Manage.bx). Everything else is a fairly direct port:
+ * everything behind /manage's login is a React app (manage-app/, served by
+ * routes/ManageApp.bx with its JSON API in routes/manageapi/). Everything else is a fairly direct port:
  * ColdBox's Router -> the route registrations below, handlers -> routes/*.bx,
  * WireBox DI -> the manual service instantiation right here.
  */
@@ -229,7 +229,24 @@ app.use( new routes.Projects( siteDefaults, projectDocRegistry, projectDocRender
 app.use( new routes.Games( siteDefaults ).router )
 new routes.Chat( app )
 app.use( new routes.Empire( app, empireService, siteDefaults ).router )
-app.use( new routes.Manage( authService, postService, authorService, settingsService, postRenderer, r2Client, getSystemSetting( "R2_UPLOAD_PREFIX", "posts" ), insightsService, serverMonitor, googleOAuthClient, commentService ).router )
+app.use( new routes.Manage( authService, googleOAuthClient ).router )
+app.use( new routes.ManageApp(
+	commentService,
+	getSystemSetting( "R2_UPLOAD_PREFIX", "posts" ),
+	expandPath( "./public/assets/dist/manage/manifest.json" ),
+	getSystemSetting( "MANAGE_DEV_SERVER", "" ),
+	app.getSetting( "env" ) != "development",
+	[
+		new routes.manageapi.Dashboard( postService, commentService, insightsService, serverMonitor ),
+		new routes.manageapi.Posts( postService, postRenderer, new models.services.RevisionService() ),
+		new routes.manageapi.Comments( commentService ),
+		new routes.manageapi.Media( r2Client, postService, new models.services.MediaService() ),
+		new routes.manageapi.Authors( authorService ),
+		new routes.manageapi.Settings( settingsService ),
+		new routes.manageapi.Logs( insightsService ),
+		new routes.manageapi.System( serverMonitor )
+	]
+).router )
 
 // ── 404 / 500 (themed, matching the site's own look) ────────────────────
 app.use( ( req, res ) => {

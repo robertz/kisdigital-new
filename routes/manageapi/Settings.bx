@@ -1,0 +1,49 @@
+/**
+ * /manage/api/settings — application configuration values, saved one field
+ * at a time.
+ */
+class {
+
+	variables.settingsService = "";
+
+	function init( required settingsService ){
+		variables.settingsService = arguments.settingsService;
+		return this;
+	}
+
+	function register( required router, required auth, required admin ){
+		arguments.router.get( "/manage/api/settings", arguments.admin, ( req, res ) => listSettings( req, res ) );
+		arguments.router.put( "/manage/api/settings", arguments.admin, ( req, res ) => updateSetting( req, res ) );
+	}
+
+	// GET /manage/api/settings
+	function listSettings( req, res ){
+		res.json( {
+			"settings": variables.settingsService.getAll().map( ( setting ) => {
+				return {
+					"category"   : setting.category,
+					"key"        : setting.setting_key,
+					"value"      : toString( setting.setting_value ?: "" ),
+					"type"       : setting.setting_type ?: "string",
+					"description": setting.description ?: ""
+				};
+			} )
+		} );
+	}
+
+	// PUT /manage/api/settings — body: { category, key, value }
+	function updateSetting( req, res ){
+		var payload    = isStruct( req.body ?: "" ) ? req.body : {};
+		var category   = trim( payload.category ?: "" );
+		var settingKey = trim( payload.key ?: "" );
+
+		if ( variables.settingsService.getSetting( settingKey, category ).isEmpty() ){
+			res.status( 404 ).json( { "error": "That setting doesn't exist." } );
+			return;
+		}
+
+		variables.settingsService.updateSetting( category, settingKey, toString( payload.value ?: "" ) );
+		res.json( { "saved": true } );
+	}
+
+}

@@ -217,10 +217,10 @@ class {
 	 * unfiltered, so it deliberately skips _visitorFilter() and queries
 	 * RequestLog directly.
 	 *
-	 * The exceptions are /health and /manage/server/data: DigitalOcean's
-	 * platform probe hits /health every few seconds forever, and
-	 * /manage/server/data is the server-monitor page's own 5s polling
-	 * loop — neither is ever a real request a reader or an admin debugging
+	 * The exceptions are /health and the System pages' own polling:
+	 * DigitalOcean's platform probe hits /health every few seconds forever,
+	 * and the dashboard and System page poll for server metrics while open
+	 * — none of it is ever a real request a reader or an admin debugging
 	 * something would care about; left in, either would drown out
 	 * everything else in the list. Unlike the bot/asset filtering in
 	 * _visitorFilter(), these are unconditional (no path-search override), since
@@ -241,7 +241,7 @@ class {
 	 * @return {struct} { rows, hasNewer, hasOlder, newerCursor, olderCursor }
 	 */
 	function getRecentRequests( struct filters = {}, numeric beforeId = 0, numeric afterId = 0, numeric pageSize = 50 ){
-		var clauses = [ "path NOT IN ('/health', '/manage/server/data')" ];
+		var clauses = [ "path NOT IN ('/health', '/manage/api/system', '/manage/api/dashboard/system', '/manage/server/data')" ];
 		var params  = { "lim": { value: arguments.pageSize + 1, cfsqltype: "cf_sql_integer" } };
 
 		var pathPrefix = trim( arguments.filters.path ?: "" );

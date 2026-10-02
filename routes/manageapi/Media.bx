@@ -1,0 +1,298 @@
+/**
+ * /manage/api/media — presigned R2 URLs for the Media page and the post
+ * editor's image picker. The server only signs: the browser lists, uploads
+ * and creates folders against R2 directly, so file bytes never pass through
+ * this app (see R2Client.presignPutUrl()).
+ *
+ * Browsing and uploading are open to any signed-in author, since the
+ * editor's picker needs them. Deleting is admin-only, like the Media page.
+ */
+class {
+
+	variables.r2Client     = "";
+	variables.postService  = "";
+	variables.mediaService = "";
+
+	function init( required r2Client, required postService, required mediaService ){
+		variables.r2Client     = arguments.r2Client;
+		variables.postService  = arguments.postService;
+		variables.mediaService = arguments.mediaService;
+		return this;
+	}
+
+	function register( required router, required auth, required admin ){
+		// ?path=sub/dir&token=… — one directory, folders as CommonPrefixes and
+		// files as Contents, 1000 keys at a time (token continues a listing).
+		arguments.router.get( "/manage/api/media/list-url", arguments.auth, ( req, res ) => _presignedListing( req, res ) );
+		arguments.router.post( "/manage/api/media/upload-url", arguments.auth, ( req, res ) => _presignedUpload( req, res ) );
+		arguments.router.post( "/manage/api/media/create-folder", arguments.auth, ( req, res ) => _presignedCreateFolder( req, res ) );
+		arguments.router.get( "/manage/api/media/usage", arguments.auth, ( req, res ) => imageUsage( req, res ) );
+		arguments.router.post( "/manage/api/media/delete", arguments.admin, ( req, res ) => deleteMediaObject( req, res ) );
+		arguments.router.post( "/manage/api/media/move", arguments.admin, ( req, res ) => moveMediaObject( req, res ) );
+		arguments.router.get( "/manage/api/media/file", arguments.admin, ( req, res ) => readMediaObject( req, res ) );
+		arguments.router.get( "/manage/api/media/alt", arguments.auth, ( req, res ) => listAltText( req, res ) );
+		arguments.router.put( "/manage/api/media/alt", arguments.admin, ( req, res ) => saveAltText( req, res ) );
+	}
+
+	// POST /manage/api/media/move — body: { key, toPath?, newName?, updatePosts? }.
+	// Renames a file (newName), moves it to another folder (toPath), or both.
+	// Its public address changes, so anything linking to the old one breaks;
+	// updatePosts rewrites the posts that do to the new address.
+	function moveMediaObject( req, res ){
+		if ( !variables.r2Client.isConfigured() ){
+			return res.status( 501 ).json( { "error": "Image hosting isn't configured (missing R2 env vars)." } );
+		}
+
+		var payload = isStruct( req.body ?: "" ) ? req.body : {};
+		var fromKey = trim( payload.key ?: "" );
+		if ( !isSafeKey( fromKey ) ){
+			res.status( 422 ).json( { "error": "That isn't a valid file." } );
+			return;
+		}
+
+		var fileName   = listLast( fromKey, "/" );
+		var folder     = left( fromKey, len( fromKey ) - len( fileName ) );
+		var extension  = listLen( fileName, "." ) > 1 ? "." & lCase( listLast( fileName, "." ) ) : "";
+		var targetName = fileName;
+		if ( len( trim( payload.newName ?: "" ) ) ){
+			// The extension can't change: it has to keep matching the file's real type.
+			targetName = slugifyFilename( trim( payload.newName ) & ".x" ) & extension;
+		}
+		var targetFolder = structKeyExists( payload, "toPath" ) ? sanitizeMediaPath( payload.toPath ?: "" ) : folder;
+		var toKey        = targetFolder & targetName;
+
+		if ( toKey == fromKey ){
+			res.json( { "key": fromKey, "url": variables.r2Client.publicUrl( fromKey ) } );
+			return;
+		}
+
+		try {
+			if ( variables.r2Client.objectExists( toKey ) ){
+				res.status( 409 ).json( { "error": "A file named " & targetName & " already exists there." } );
+				return;
+			}
+			variables.r2Client.moveObject( fromKey, toKey );
+		} catch ( any e ) {
+			println( "[error] media move failed for '" & fromKey & "': " & e.message );
+			res.status( 502 ).json( { "error": "Couldn't move the file: " & e.message } );
+			return;
+		}
+
+		variables.mediaService.moveAlt( fromKey, toKey );
+		println( "[manage] media '" & fromKey & "' moved to '" & toKey & "' by user '" & req.session.manage_user.id & "'" );
+
+		// The file is already moved at this point, so a failure here is
+		// reported alongside the success rather than instead of it.
+		var postsUpdated = 0;
+		var updateFailed = false;
+		if ( isBoolean( payload.updatePosts ?: false ) && payload.updatePosts ){
+			try {
+				postsUpdated = variables.postService.replaceImageUrl( variables.r2Client.publicUrl( fromKey ), variables.r2Client.publicUrl( toKey ) );
+			} catch ( any e ) {
+				println( "[error] post link update failed after moving '" & fromKey & "': " & e.message );
+				updateFailed = true;
+			}
+		}
+
+		res.json( { "key": toKey, "url": variables.r2Client.publicUrl( toKey ), "postsUpdated": postsUpdated, "updateFailed": updateFailed } );
+	}
+
+	// GET /manage/api/media/file?key=posts/photo.jpg — the image's bytes,
+	// served from this site so the crop tool's canvas can read them. The
+	// public image address is another origin, which a canvas can't export.
+	function readMediaObject( req, res ){
+		var key = trim( req.query.key ?: "" );
+		if ( !variables.r2Client.isConfigured() || !isSafeKey( key ) ){
+			res.status( 422 ).json( { "error": "That isn't a valid file." } );
+			return;
+		}
+
+		try {
+			var object = variables.r2Client.getObject( key );
+			res.set( "Cache-Control", "no-store" );
+			res.sendBytes( object.bytes, object.contentType );
+		} catch ( any e ) {
+			println( "[error] media read failed for '" & key & "': " & e.message );
+			res.status( 502 ).json( { "error": "Couldn't open the file: " & e.message } );
+		}
+	}
+
+	// GET /manage/api/media/alt?path=sub/dir — alt text for the images in one
+	// directory. "available" is false until the MediaAlt table exists.
+	function listAltText( req, res ){
+		res.json( variables.mediaService.getAltForPrefix( sanitizeMediaPath( req.query.path ?: "" ) ) );
+	}
+
+	// PUT /manage/api/media/alt — body: { key, alt }. A blank alt clears it.
+	function saveAltText( req, res ){
+		var payload = isStruct( req.body ?: "" ) ? req.body : {};
+		var key     = trim( payload.key ?: "" );
+		if ( !isSafeKey( key ) ){
+			res.status( 422 ).json( { "error": "That isn't a valid file." } );
+			return;
+		}
+		if ( !variables.mediaService.setAlt( key, toString( payload.alt ?: "" ) ) ){
+			res.status( 503 ).json( { "error": "Alt text isn't available until the MediaAlt table is created (db/migrations/0024_add_media_alt.sql)." } );
+			return;
+		}
+		res.json( { "saved": true } );
+	}
+
+	// GET /manage/api/media/usage?key=posts/photo.jpg — the posts that use
+	// this image as a cover or link to it in their body.
+	function imageUsage( req, res ){
+		var key = trim( req.query.key ?: "" );
+		if ( !isSafeKey( key ) ){
+			res.status( 422 ).json( { "error": "That isn't a valid file." } );
+			return;
+		}
+
+		res.json( {
+			"posts": variables.postService.getPostsUsingImage( variables.r2Client.publicUrl( key ) ).map( ( row ) => {
+				return { "id": row.id, "title": row.title, "status": row.status };
+			} )
+		} );
+	}
+
+	// POST /manage/api/media/delete — body: { key }. Permanent: R2 keeps no
+	// copy unless the bucket itself has versioning on. An empty folder is
+	// removed by deleting its ".keep" marker.
+	function deleteMediaObject( req, res ){
+		if ( !variables.r2Client.isConfigured() ){
+			return res.status( 501 ).json( { "error": "Image hosting isn't configured (missing R2 env vars)." } );
+		}
+
+		var payload = isStruct( req.body ?: "" ) ? req.body : {};
+		var key     = trim( payload.key ?: "" );
+		if ( !isSafeKey( key ) ){
+			res.status( 422 ).json( { "error": "That isn't a valid file." } );
+			return;
+		}
+
+		try {
+			variables.r2Client.deleteObject( key );
+		} catch ( any e ) {
+			println( "[error] media delete failed for '" & key & "': " & e.message );
+			res.status( 502 ).json( { "error": "The image host refused the delete." } );
+			return;
+		}
+
+		variables.mediaService.removeAlt( key );
+		println( "[manage] media '" & key & "' deleted by user '" & req.session.manage_user.id & "'" );
+		res.json( { "deleted": true } );
+	}
+
+	/**
+	 * A key as R2 lists it: a relative path naming a file. Looser than
+	 * sanitizeMediaPath() because it has to accept names already in the
+	 * bucket, but still no empty, "." or ".." segments.
+	 */
+	private function isSafeKey( required string key ){
+		if ( !len( arguments.key ) || len( arguments.key ) > 1024 || right( arguments.key, 1 ) == "/" ) return false;
+		for ( var segment in listToArray( arguments.key, "/", true ) ){
+			if ( !len( segment ) || segment == "." || segment == ".." ) return false;
+		}
+		return true;
+	}
+
+	private function _presignedListing( req, res ){
+		if ( !variables.r2Client.isConfigured() ){
+			return res.status( 501 ).json( { success: false, error: "Image hosting isn't configured (missing R2 env vars)." } );
+		}
+
+		try {
+			var path = sanitizeMediaPath( req.query.path ?: "" );
+			var listUrl = variables.r2Client.presignListUrl( path, 1000, 300, "/", trim( req.query.token ?: "" ) );
+			res.json( { success: true, listUrl: listUrl, publicBaseUrl: variables.r2Client.getPublicBaseUrl(), path: path } );
+		} catch ( any e ) {
+			println( "[error] directory list presign failed: " & e.message );
+			res.status( 502 ).json( { success: false, error: "Couldn't prepare the directory listing." } );
+		}
+	}
+
+	private function _presignedUpload( req, res ){
+		if ( !variables.r2Client.isConfigured() ){
+			return res.status( 501 ).json( { success: false, error: "Image hosting isn't configured (missing R2 env vars)." } );
+		}
+
+		var filename    = trim( req.body.filename ?: "" );
+		var contentType = trim( req.body.contentType ?: "" );
+		var allowedTypes = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif" };
+		var ext = allowedTypes[ lCase( contentType ) ] ?: "";
+		if ( !len( ext ) ){
+			return res.status( 415 ).json( { success: false, error: "Unsupported image type: #encodeForHTML( contentType )#. Use JPEG, PNG, WebP, or GIF." } );
+		}
+
+		try {
+			var path = sanitizeMediaPath( req.body.path ?: "" );
+			var key = path & slugifyFilename( filename ) & "." & ext;
+			var presigned = variables.r2Client.presignPutUrl( key, contentType );
+			res.json( { success: true, uploadUrl: presigned.uploadUrl, url: presigned.publicUrl, key: key } );
+		} catch ( any e ) {
+			println( "[error] upload presign failed: " & e.message );
+			res.status( 502 ).json( { success: false, error: "Couldn't prepare the upload." } );
+		}
+	}
+
+	// A "folder" only starts showing up in listings once something exists
+	// under its prefix — S3-compatible storage has no real mkdir. Writing a
+	// zero-byte "<path>/<name>/.keep" object is the standard workaround; the
+	// browser's listing parser drops ".keep" entries so they never render as
+	// a file (see manage-app/src/shared/media.ts).
+	private function _presignedCreateFolder( req, res ){
+		if ( !variables.r2Client.isConfigured() ){
+			return res.status( 501 ).json( { success: false, error: "Image hosting isn't configured (missing R2 env vars)." } );
+		}
+
+		var path = sanitizeMediaPath( req.body.path ?: "" );
+		var name = trim( req.body.name ?: "" );
+		if ( !len( name ) || name == "." || name == ".." || !reFind( "^[A-Za-z0-9._ -]+$", name ) ){
+			return res.status( 422 ).json( { success: false, error: "Enter a valid folder name (letters, numbers, spaces, dots, dashes, underscores)." } );
+		}
+
+		try {
+			var folderPath = path & name & "/";
+			var presigned = variables.r2Client.presignPutUrl( folderPath & ".keep", "application/x-directory" );
+			res.json( { success: true, uploadUrl: presigned.uploadUrl, path: folderPath } );
+		} catch ( any e ) {
+			println( "[error] create-folder presign failed: " & e.message );
+			res.status( 502 ).json( { success: false, error: "Couldn't prepare the new folder." } );
+		}
+	}
+
+	/**
+	 * Turns a client-supplied directory path into a safe key prefix: strips
+	 * leading/trailing slashes, drops empty/"."/".." segments (blocks
+	 * traversal out of the bucket root), and restricts each remaining
+	 * segment to a conservative charset. Returns "" for the bucket root, or
+	 * "a/b/" (trailing slash, no leading slash) for a subdirectory — ready to
+	 * prepend directly to an object key or pass as a list prefix.
+	 */
+	private function sanitizeMediaPath( required string path ){
+		var segments = listToArray( arguments.path.reReplace( "\\", "/", "all" ), "/" );
+		var cleanSegments = [];
+		for ( var seg in segments ){
+			var s = trim( seg );
+			if ( !len( s ) || s == "." || s == ".." || !reFind( "^[A-Za-z0-9._ -]+$", s ) ) continue;
+			cleanSegments.append( s );
+		}
+		return cleanSegments.len() ? cleanSegments.toList( "/" ) & "/" : "";
+	}
+
+	/**
+	 * Turns a client-supplied filename into a safe R2 object-key segment:
+	 * strips the extension, lowercases, replaces anything that isn't
+	 * alphanumeric with a hyphen, and collapses/trims repeats. Re-uploading
+	 * the same filename overwrites the existing object at that key rather
+	 * than growing a new one — deliberate, since the point of using the
+	 * original name is a stable, predictable URL.
+	 */
+	private function slugifyFilename( required string filename ){
+		var base = listLen( arguments.filename, "." ) > 1
+			? listDeleteAt( arguments.filename, listLen( arguments.filename, "." ), "." )
+			: arguments.filename;
+		var slug = lCase( trim( base ) ).reReplace( "[^a-z0-9]+", "-", "all" ).reReplace( "^-+|-+$", "", "all" );
+		return len( slug ) ? slug : "image";
+	}
+
+}

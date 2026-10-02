@@ -1,0 +1,142 @@
+/**
+ * /manage — the React app (manage-app/) and the JSON API behind it.
+ *
+ * Every /manage page except login is a client-side route of the app, served
+ * by shell() below. This class owns the shell and the sign-in guards; each
+ * section's API is its own class under routes/manageapi/, passed in as
+ * apiModules and mounted through its register(). Login and logout are in
+ * routes/Manage.bx.
+ *
+ * API routes answer 401/403 as JSON rather than redirecting, and take the
+ * CSRF token from the X-CSRF-Token header (see boxExpressCsrf()).
+ */
+class {
+
+	variables.commentService = "";
+	variables.r2UploadPrefix = "posts";
+	variables.manifestPath   = "";
+	variables.devServerUrl   = "";
+	variables.cacheManifest  = true;
+	variables.assetBase      = "/assets/dist/manage/";
+
+	function init( required commentService, r2UploadPrefix = "posts", required string manifestPath, string devServerUrl = "", boolean cacheManifest = true, array apiModules = [] ){
+		variables.commentService = arguments.commentService;
+		variables.r2UploadPrefix = len( trim( arguments.r2UploadPrefix ) ) ? trim( arguments.r2UploadPrefix ).reReplace( "^/+|/+$", "", "all" ) : "posts";
+		variables.manifestPath   = arguments.manifestPath;
+		variables.devServerUrl   = trim( arguments.devServerUrl ).reReplace( "/+$", "" );
+		variables.cacheManifest  = arguments.cacheManifest;
+
+		var page  = ( req, res, next ) => requirePage( req, res, next );
+		var auth  = ( req, res, next ) => requireApiAuth( req, res, next );
+		var admin = ( req, res, next ) => requireApiAdmin( req, res, next );
+
+		this.router = boxExpressRouter();
+		this.router.use( boxExpressCsrf() );
+
+		// Client-side routes. Each needs an entry here so a reload or a
+		// pasted link lands on the app shell instead of a 404.
+		var appPaths = [
+			"/manage",
+			"/manage/posts", "/manage/posts/new", "/manage/posts/calendar", "/manage/posts/:id/edit",
+			"/manage/comments", "/manage/media", "/manage/insights",
+			"/manage/authors", "/manage/authors/new", "/manage/authors/:id/edit",
+			"/manage/settings", "/manage/server", "/manage/logs"
+		];
+		for ( var appPath in appPaths ){
+			this.router.get( appPath, page, ( req, res ) => shell( req, res ) );
+		}
+
+		for ( var apiModule in arguments.apiModules ){
+			apiModule.register( this.router, auth, admin );
+		}
+
+		return this;
+	}
+
+	// ── Guards ───────────────────────────────────────────────────────────────
+
+	function requirePage( req, res, next ){
+		if ( !len( req.session.manage_user ?: "" ) ){
+			res.redirect( "/manage/login" );
+			return;
+		}
+		next();
+	}
+
+	function requireApiAuth( req, res, next ){
+		if ( !len( req.session.manage_user ?: "" ) ){
+			res.status( 401 ).json( { "error": "Your session has expired." } );
+			return;
+		}
+		next();
+	}
+
+	function requireApiAdmin( req, res, next ){
+		if ( !len( req.session.manage_user ?: "" ) ){
+			res.status( 401 ).json( { "error": "Your session has expired." } );
+			return;
+		}
+		if ( req.session.manage_user.role != "admin" ){
+			res.status( 403 ).json( { "error": "Only an admin can do that." } );
+			return;
+		}
+		next();
+	}
+
+	// ── App shell ────────────────────────────────────────────────────────────
+
+	function shell( req, res ){
+		var user = req.session.manage_user;
+		var boot = {
+			"user": {
+				"id"         : user.id,
+				"displayName": user.display_name,
+				"email"      : user.email,
+				"role"       : user.role
+			},
+			"csrfToken"      : req.csrfToken(),
+			"pendingComments": user.role == "admin" ? val( variables.commentService.getPendingCount() ) : 0,
+			"r2UploadPrefix" : variables.r2UploadPrefix
+		};
+
+		res.render( "manage/app", {
+			pageTitle   : "Manage",
+			// "</" is escaped so no value can close the embedding <script> tag.
+			bootJson    : replace( jsonSerialize( boot ), "</", "<\/", "all" ),
+			manageAssets: resolveAssets()
+		} );
+	}
+
+	/**
+	 * Where the app's script and styles load from: the Vite dev server when
+	 * MANAGE_DEV_SERVER is set, otherwise the hashed files a build listed in
+	 * its manifest. The manifest is re-read per request outside production so
+	 * a rebuild doesn't need a server restart.
+	 */
+	private function resolveAssets(){
+		if ( len( variables.devServerUrl ) ){
+			return { "devServer": variables.devServerUrl, "entry": "", "css": [] };
+		}
+		if ( variables.cacheManifest && structKeyExists( variables, "assets" ) ){
+			return variables.assets;
+		}
+
+		var manifest = fileExists( variables.manifestPath ) ? jsonDeserialize( fileRead( variables.manifestPath ) ) : {};
+		var entry    = manifest[ "src/main.tsx" ] ?: {};
+		var styles   = [];
+		for ( var cssFile in ( entry.css ?: [] ) ){
+			styles.append( variables.assetBase & cssFile );
+		}
+
+		var resolved = {
+			"devServer": "",
+			"entry"    : len( entry.file ?: "" ) ? variables.assetBase & entry.file : "",
+			"css"      : styles
+		};
+		if ( variables.cacheManifest && len( resolved.entry ) ){
+			variables.assets = resolved;
+		}
+		return resolved;
+	}
+
+}

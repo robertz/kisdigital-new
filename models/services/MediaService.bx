@@ -1,0 +1,96 @@
+/**
+ * Alt text for images on the image server (R2), stored in the MediaAlt table
+ * because R2 itself only holds the files.
+ *
+ * The table is optional (db/migrations/0024_add_media_alt.sql). Every method
+ * here degrades to "no alt text" when it's missing or unreachable, so the
+ * Media page and the post editor's picker keep working either way.
+ */
+class {
+
+	/**
+	 * Alt text for every image directly under a directory prefix.
+	 *
+	 * @param {string} prefix - "" for the bucket root, or "a/b/".
+	 * @return {struct} { available: boolean, alt: { objectKey: altText } }
+	 */
+	function getAltForPrefix( required string prefix ){
+		try {
+			var rows = queryExecute(
+				"SELECT object_key, alt_text
+				FROM MediaAlt
+				WHERE object_key LIKE :pattern
+					AND object_key NOT LIKE :nested",
+				{
+					"pattern": { value: _escapeLike( arguments.prefix ) & "%",   cfsqltype: "cf_sql_varchar" },
+					"nested" : { value: _escapeLike( arguments.prefix ) & "%/%", cfsqltype: "cf_sql_varchar" }
+				},
+				{ returnType: "array" }
+			);
+			var altByKey = {};
+			for ( var row in rows ){
+				altByKey[ row.object_key ] = row.alt_text;
+			}
+			return { "available": true, "alt": altByKey };
+		} catch ( any e ) {
+			return { "available": false, "alt": {} };
+		}
+	}
+
+	/**
+	 * Stores an image's alt text; blank clears it.
+	 *
+	 * @return {boolean} False when the table isn't available.
+	 */
+	function setAlt( required string objectKey, required string altText ){
+		try {
+			if ( !len( trim( arguments.altText ) ) ){
+				removeAlt( arguments.objectKey );
+				return true;
+			}
+			queryExecute(
+				"INSERT INTO MediaAlt (object_key, alt_text)
+				VALUES (:objectKey, :altText)
+				ON DUPLICATE KEY UPDATE alt_text = :altText",
+				{
+					"objectKey": { value: arguments.objectKey,                    cfsqltype: "cf_sql_varchar" },
+					"altText"  : { value: left( trim( arguments.altText ), 500 ), cfsqltype: "cf_sql_varchar" }
+				}
+			);
+			return true;
+		} catch ( any e ) {
+			println( "[error] alt text save failed: " & e.message );
+			return false;
+		}
+	}
+
+	// Called when the image itself is deleted.
+	function removeAlt( required string objectKey ){
+		try {
+			queryExecute(
+				"DELETE FROM MediaAlt WHERE object_key = :objectKey",
+				{ "objectKey": { value: arguments.objectKey, cfsqltype: "cf_sql_varchar" } }
+			);
+		} catch ( any e ) {}
+	}
+
+	// Called when the image is renamed or moved, so its alt text follows it.
+	function moveAlt( required string fromKey, required string toKey ){
+		try {
+			removeAlt( arguments.toKey );
+			queryExecute(
+				"UPDATE MediaAlt SET object_key = :toKey WHERE object_key = :fromKey",
+				{
+					"toKey"  : { value: arguments.toKey,   cfsqltype: "cf_sql_varchar" },
+					"fromKey": { value: arguments.fromKey, cfsqltype: "cf_sql_varchar" }
+				}
+			);
+		} catch ( any e ) {}
+	}
+
+	// Treats the prefix literally inside LIKE; MySQL's default escape is a backslash.
+	private function _escapeLike( required string value ){
+		return arguments.value.replace( "\", "\\", "all" ).replace( "%", "\%", "all" ).replace( "_", "\_", "all" );
+	}
+
+}

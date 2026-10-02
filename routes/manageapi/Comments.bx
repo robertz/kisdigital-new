@@ -1,0 +1,72 @@
+/**
+ * /manage/api/comments — every comment across all posts, with soft-delete
+ * and approval for replies held as pending (fediverse replies, and local
+ * replies in fediverse threads; see CommentService).
+ */
+class {
+
+	variables.commentService = "";
+
+	function init( required commentService ){
+		variables.commentService = arguments.commentService;
+		return this;
+	}
+
+	function register( required router, required auth, required admin ){
+		arguments.router.get( "/manage/api/comments", arguments.admin, ( req, res ) => listComments( req, res ) );
+		arguments.router.post( "/manage/api/comments/:id/approve", arguments.admin, ( req, res ) => approveComment( req, res ) );
+		arguments.router.delete( "/manage/api/comments/:id", arguments.admin, ( req, res ) => removeComment( req, res ) );
+	}
+
+	// GET /manage/api/comments?page=2 — pending first, then newest first.
+	function listComments( req, res ){
+		var rawPage     = req.query.page ?: "";
+		var currentPage = isNumeric( rawPage ) && rawPage > 0 ? int( rawPage ) : 1;
+		var paging      = variables.commentService.getManageComments( currentPage, 20 );
+
+		res.json( {
+			"comments": paging.comments.map( ( comment ) => {
+				return {
+					"id"         : comment.id,
+					"postTitle"  : comment.postTitle,
+					"postUrl"    : comment.postUrl,
+					"isReply"    : comment.isReply ? true : false,
+					"isRemote"   : comment.isRemote ? true : false,
+					"authorName" : comment.authorName ?: "",
+					"authorEmail": comment.authorEmail ?: "",
+					"remoteUrl"  : comment.remoteUrl,
+					"body"       : comment.body,
+					"isDeleted"  : comment.isDeleted ? true : false,
+					"isPending"  : comment.isPending ? true : false,
+					"created"    : dateTimeFormat( comment.created, "yyyy-mm-dd'T'HH:nn:ss'Z'" )
+				};
+			} ),
+			"total"     : val( paging.total ),
+			"pending"   : val( paging.pending ),
+			"page"      : paging.page,
+			"totalPages": paging.totalPages
+		} );
+	}
+
+	// POST /manage/api/comments/:id/approve — publishes a pending reply. For
+	// a fediverse reply, its author's later replies then skip the queue.
+	function approveComment( req, res ){
+		var commentId = trim( req.params.id ?: "" );
+		if ( !len( commentId ) || !variables.commentService.approveComment( commentId ) ){
+			res.status( 409 ).json( { "error": "That comment wasn't pending." } );
+			return;
+		}
+		res.json( { "approved": true } );
+	}
+
+	// DELETE /manage/api/comments/:id — a soft delete: the row stays so its
+	// replies keep their place in the thread.
+	function removeComment( req, res ){
+		var commentId = trim( req.params.id ?: "" );
+		if ( len( commentId ) ){
+			variables.commentService.deleteComment( commentId, req.session.manage_user.id, req.session.manage_user.role );
+		}
+		res.json( { "deleted": true } );
+	}
+
+}

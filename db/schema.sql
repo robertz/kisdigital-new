@@ -331,3 +331,36 @@ create index idx_empirebattle_defender_created
 
 create index idx_empirebattle_attacker_created
     on EmpireBattle (attacker_empire_id, created);
+
+-- Alt text for images on the image server, keyed by the object's key in the
+-- bucket. See db/migrations/0024_add_media_alt.sql.
+create table MediaAlt
+(
+    object_key varchar(512)                        not null
+        primary key,
+    alt_text   varchar(500)                        not null,
+    updated_at timestamp default CURRENT_TIMESTAMP not null on update CURRENT_TIMESTAMP
+);
+
+-- Revision history for posts: a snapshot per save, plus each user's unsaved
+-- work in progress. See db/migrations/0025_add_post_revision.sql.
+create table PostRevision
+(
+    id          bigint auto_increment
+        primary key,
+    post_id     varchar(36)                               not null,
+    user_id     varchar(36)                               null,
+    kind        enum ('save', 'autosave') default 'save'  not null,
+    title       varchar(255)                              not null,
+    description varchar(500)                              not null,
+    cover_image varchar(1000)                             null,
+    body        mediumtext                                not null,
+    tags        varchar(1000)             default ''      not null,
+    created     timestamp default CURRENT_TIMESTAMP       not null,
+    constraint PostRevision_Post_id_fk
+        foreign key (post_id) references Post (id)
+            on update cascade on delete cascade
+);
+
+create index idx_postrevision_post_created
+    on PostRevision (post_id, created);

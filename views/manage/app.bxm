@@ -1,0 +1,28 @@
+<bx:include template="../partials/_head.bxm">
+<bx:output>
+<!--- The React app (manage-app/) renders the sidebar and the page into this
+      element, side by side at every width. --->
+<div id="manage-root" class="c-manage-app">
+	<bx:if !len( data.manageAssets.devServer ) && !len( data.manageAssets.entry )>
+		<main class="c-manage-main">
+			<div class="c-manage-alert c-manage-alert--error">
+				<i class="bi bi-exclamation-circle-fill"></i>
+				The manage app hasn't been built. Run <code>npm run build</code>, or start <code>npm run dev:manage</code> with MANAGE_DEV_SERVER set.
+			</div>
+		</main>
+	</bx:if>
+</div>
+
+<script type="application/json" id="manage-boot">#data.bootJson#</script>
+
+<bx:if len( data.manageAssets.devServer )>
+	<script type="module" src="#encodeForHTMLAttribute( data.manageAssets.devServer )#/@vite/client"></script>
+	<script type="module" src="#encodeForHTMLAttribute( data.manageAssets.devServer )#/src/main.tsx"></script>
+<bx:elseif len( data.manageAssets.entry )>
+	<bx:loop array="#data.manageAssets.css#" item="manageCssHref">
+		<link rel="stylesheet" href="#encodeForHTMLAttribute( manageCssHref )#">
+	</bx:loop>
+	<script type="module" src="#encodeForHTMLAttribute( data.manageAssets.entry )#"></script>
+</bx:if>
+</bx:output>
+<bx:include template="../partials/_foot.bxm">

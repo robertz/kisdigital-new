@@ -71,7 +71,7 @@ class {
 	 * @return {struct} { uploadUrl, publicUrl }.
 	 */
 	function presignPutUrl( required string key, required string contentType, numeric expiresSeconds = 300 ){
-		var uploadUrl = _presign( "PUT", "/#variables.bucket#/#arguments.key#", {}, arguments.expiresSeconds );
+		var uploadUrl = _presign( "PUT", _objectPath( arguments.key ), {}, arguments.expiresSeconds );
 		return { "uploadUrl": uploadUrl, "publicUrl": "#variables.publicBaseUrl#/#arguments.key#" };
 	}
 
@@ -92,7 +92,7 @@ class {
 	 *        cover-image picker that just want every key under the prefix.
 	 * @return {string} Signed URL.
 	 */
-	function presignListUrl( required string prefix, numeric maxKeys = 100, numeric expiresSeconds = 300, string delimiter = "" ){
+	function presignListUrl( required string prefix, numeric maxKeys = 100, numeric expiresSeconds = 300, string delimiter = "", string continuationToken = "" ){
 		var queryParams = {
 			"list-type": "2",
 			"max-keys": arguments.maxKeys,
@@ -101,7 +101,138 @@ class {
 		if ( len( arguments.delimiter ) ){
 			queryParams[ "delimiter" ] = arguments.delimiter;
 		}
+		// A listing holds at most 1000 keys; R2 hands back a token for the rest.
+		if ( len( arguments.continuationToken ) ){
+			queryParams[ "continuation-token" ] = arguments.continuationToken;
+		}
 		return _presign( "GET", "/#variables.bucket#", queryParams, arguments.expiresSeconds );
+	}
+
+	/**
+	 * Presigns a DELETE for one object. Unlike the upload and list URLs this
+	 * one is used by deleteObject() below, not handed to the browser.
+	 */
+	function presignDeleteUrl( required string key, numeric expiresSeconds = 60 ){
+		return _presign( "DELETE", _objectPath( arguments.key ), {}, arguments.expiresSeconds );
+	}
+
+	/**
+	 * Permanently deletes one object. Done from the server rather than the
+	 * browser so it doesn't depend on the bucket's CORS rules allowing DELETE,
+	 * and there are no file bytes to keep off this app's wire. R2 answers 204
+	 * whether or not the key existed.
+	 *
+	 * @throws {R2Error} if R2 refuses the request or can't be reached.
+	 */
+	function deleteObject( required string key ){
+		var response = _send( "DELETE", arguments.key );
+		if ( response.statusCode() < 200 || response.statusCode() >= 300 ){
+			throw( type: "R2Error", message: "Delete failed (HTTP " & response.statusCode() & ")" );
+		}
+	}
+
+	/**
+	 * Reads one object into memory, for the Media page's crop tool: a canvas
+	 * can only work on an image served from this site's own address.
+	 *
+	 * @return {struct} { bytes, contentType }
+	 * @throws {R2Error} if the object is missing or larger than maxBytes.
+	 */
+	function getObject( required string key, numeric maxBytes = 26214400 ){
+		var response = _send( "GET", arguments.key );
+		if ( response.statusCode() != 200 ){
+			throw( type: "R2Error", message: "Couldn't read the file (HTTP " & response.statusCode() & ")" );
+		}
+		if ( arrayLen( response.body() ) > arguments.maxBytes ){
+			throw( type: "R2Error", message: "The file is too large to open here." );
+		}
+		return {
+			"bytes"      : response.body(),
+			"contentType": response.headers().firstValue( "content-type" ).orElse( "application/octet-stream" )
+		};
+	}
+
+	/**
+	 * True when an object is stored under this key.
+	 *
+	 * @throws {R2Error} if R2 answers with anything but found or not found.
+	 */
+	function objectExists( required string key ){
+		var response = _send( "HEAD", arguments.key );
+		if ( response.statusCode() == 404 ) return false;
+		if ( response.statusCode() == 200 ) return true;
+		throw( type: "R2Error", message: "Lookup failed (HTTP " & response.statusCode() & ")" );
+	}
+
+	/**
+	 * Moves an object to a new key (a rename is a move within its folder).
+	 * S3-compatible storage has no rename, so this reads the object, writes
+	 * it under the new key with the same content type, and deletes the
+	 * original only once that write has succeeded.
+	 *
+	 * The bytes pass through this process, unlike an upload. That's a
+	 * deliberate trade against S3's server-side copy: it reuses the request
+	 * signing uploads already depend on instead of a second, header-signed
+	 * variant. maxBytes keeps an unexpectedly large object from being pulled
+	 * into this JVM's (small) heap.
+	 *
+	 * @throws {R2Error} if the object is missing, too large, or any step fails.
+	 */
+	function moveObject( required string fromKey, required string toKey, numeric maxBytes = 26214400 ){
+		var read = _send( "GET", arguments.fromKey );
+		if ( read.statusCode() != 200 ){
+			throw( type: "R2Error", message: "Couldn't read the file (HTTP " & read.statusCode() & ")" );
+		}
+		var bytes = read.body();
+		if ( arrayLen( bytes ) > arguments.maxBytes ){
+			throw( type: "R2Error", message: "The file is too large to move from here." );
+		}
+
+		var contentType = read.headers().firstValue( "content-type" ).orElse( "application/octet-stream" );
+		var written     = _send( "PUT", arguments.toKey, bytes, contentType );
+		if ( written.statusCode() < 200 || written.statusCode() >= 300 ){
+			throw( type: "R2Error", message: "Couldn't write the file (HTTP " & written.statusCode() & ")" );
+		}
+
+		deleteObject( arguments.fromKey );
+	}
+
+	/**
+	 * One request to the bucket's S3 endpoint for a single object, signed for
+	 * 60 seconds. The response body comes back as bytes.
+	 */
+	private function _send( required string method, required string key, body, string contentType = "" ){
+		var duration   = createObject( "java", "java.time.Duration" );
+		var publishers = createObject( "java", "java.net.http.HttpRequest$BodyPublishers" );
+		var builder    = createObject( "java", "java.net.http.HttpRequest" )
+			.newBuilder()
+			.uri( createObject( "java", "java.net.URI" ).create( _presign( arguments.method, _objectPath( arguments.key ), {}, 60 ) ) )
+			.timeout( duration.ofSeconds( 30 ) );
+
+		if ( len( arguments.contentType ) ){
+			builder = builder.header( "Content-Type", arguments.contentType );
+		}
+		builder = builder.method( arguments.method, isNull( arguments.body ) ? publishers.noBody() : publishers.ofByteArray( arguments.body ) );
+
+		try {
+			return createObject( "java", "java.net.http.HttpClient" )
+				.newBuilder()
+				.connectTimeout( duration.ofSeconds( 5 ) )
+				.build()
+				.send( builder.build(), createObject( "java", "java.net.http.HttpResponse$BodyHandlers" ).ofByteArray() );
+		} catch ( any e ) {
+			throw( type: "R2Error", message: "Couldn't reach the image host: " & e.message );
+		}
+	}
+
+	/**
+	 * The request path for an object. Each key segment is percent-encoded,
+	 * because a key can hold spaces and other characters that aren't valid
+	 * in a URL as they stand; the slashes between segments are kept.
+	 */
+	private function _objectPath( required string key ){
+		var encodedKey = listToArray( arguments.key, "/", true ).map( ( segment ) => _uriEncode( segment ) ).toList( "/" );
+		return "/#variables.bucket#/#encodedKey#";
 	}
 
 	/**

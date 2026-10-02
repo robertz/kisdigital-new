@@ -1,0 +1,145 @@
+/**
+ * /manage/api/dashboard — the numbers behind the dashboard's cards and the
+ * Insights page. Each card has its own endpoint so the page shows at once
+ * and a slow or failing query only affects its own card.
+ */
+class {
+
+	variables.postService     = "";
+	variables.commentService  = "";
+	variables.insightsService = "";
+	variables.serverMonitor   = "";
+
+	function init( required postService, required commentService, required insightsService, required serverMonitor ){
+		variables.postService     = arguments.postService;
+		variables.commentService  = arguments.commentService;
+		variables.insightsService = arguments.insightsService;
+		variables.serverMonitor   = arguments.serverMonitor;
+		return this;
+	}
+
+	function register( required router, required auth, required admin ){
+		arguments.router.get( "/manage/api/dashboard", arguments.auth, ( req, res ) => dashboard( req, res ) );
+		arguments.router.get( "/manage/api/dashboard/top-posts", arguments.auth, ( req, res ) => dashboardTopPosts( req, res ) );
+		arguments.router.get( "/manage/api/dashboard/traffic", arguments.admin, ( req, res ) => dashboardTraffic( req, res ) );
+		arguments.router.get( "/manage/api/dashboard/audience", arguments.admin, ( req, res ) => dashboardAudience( req, res ) );
+		arguments.router.get( "/manage/api/dashboard/system", arguments.admin, ( req, res ) => dashboardSystem( req, res ) );
+	}
+
+	// GET /manage/api/dashboard
+	function dashboard( req, res ){
+		var health = variables.postService.getContentHealth();
+
+		res.json( {
+			"contentHealth": {
+				"draftCount"       : val( health.draftCount ?: 0 ),
+				"upcomingCount"    : val( health.upcomingCount ?: 0 ),
+				"missingCoverCount": val( health.missingCoverCount ?: 0 ),
+				"missingTagsCount" : val( health.missingTagsCount ?: 0 )
+			},
+			"recentActivity": variables.postService.getRecentActivity( 8 ).map( ( row ) => {
+				return {
+					"id"         : row.id,
+					"title"      : row.title,
+					"status"     : row.status,
+					"lastUpdated": dateTimeFormat( row.last_updated, "yyyy-mm-dd'T'HH:nn:ss'Z'" )
+				};
+			} ),
+			"pendingComments": req.session.manage_user.role == "admin" ? val( variables.commentService.getPendingCount() ) : 0,
+			"statusCounts"   : variables.postService.getStatusCounts(),
+			"upcoming"       : variables.postService.getUpcomingPosts( 5 ).map( ( row ) => {
+				return {
+					"id"         : row.id,
+					"title"      : row.title,
+					"publishDate": dateTimeFormat( row.publish_date, "yyyy-mm-dd'T'HH:nn" )
+				};
+			} )
+		} );
+	}
+
+	// GET /manage/api/dashboard/top-posts?limit=8 — most-viewed published
+	// posts over the trailing 30 days.
+	function dashboardTopPosts( req, res ){
+		res.json( {
+			"posts": variables.postService.getTrendingPosts( listLimit( req, 8 ) ).map( ( row ) => {
+				return {
+					"title": row.title,
+					"url"  : "/posts/" & year( row.publish_date ) & "/" & numberFormat( month( row.publish_date ), "00" ) & "/" & encodeForURL( row.slug ),
+					"views": val( row.views )
+				};
+			} )
+		} );
+	}
+
+	// GET /manage/api/dashboard/traffic — site-wide daily page views for the
+	// last 30 days, plus the total for the 30 days before that to compare.
+	function dashboardTraffic( req, res ){
+		var rows     = variables.insightsService.getDailyTotals( 60 );
+		var cutoff   = max( rows.len() - 30, 0 );
+		var days     = [];
+		var total    = 0;
+		var previous = 0;
+
+		for ( var i = 1; i <= rows.len(); i++ ){
+			var views = val( rows[ i ].total_views );
+			if ( i <= cutoff ){
+				previous += views;
+				continue;
+			}
+			total += views;
+			days.append( { "date": dateFormat( rows[ i ].view_date, "yyyy-mm-dd" ), "views": views } );
+		}
+
+		res.json( {
+			"days"         : days,
+			"total"        : total,
+			"previousTotal": previous,
+			// getDailyTotals() always ends with today, counted live.
+			"today"        : days.len() ? days[ days.len() ].views : 0
+		} );
+	}
+
+	// GET /manage/api/dashboard/audience — a list that failed to load comes
+	// back as null so the others still show.
+	function dashboardAudience( req, res ){
+		var rowLimit = listLimit( req, 6 );
+		res.json( {
+			"referrers"   : loadOrNull( () => variables.insightsService.getTopReferrers( 30, rowLimit ).map( ( row ) => { return { "label": row.name, "count": val( row.count ) }; } ) ),
+			"searches"    : loadOrNull( () => variables.postService.getTopSearches( 30, rowLimit ).map( ( row ) => { return { "label": row.query, "count": val( row.search_count ) }; } ) ),
+			"zeroSearches": loadOrNull( () => variables.postService.getZeroResultSearches( 30, rowLimit ).map( ( row ) => { return { "label": row.query, "count": val( row.search_count ) }; } ) ),
+			"notFound"    : loadOrNull( () => variables.insightsService.getTop404s( 30, rowLimit ).map( ( row ) => { return { "label": row.path, "count": val( row.count ) }; } ) )
+		} );
+	}
+
+	// GET /manage/api/dashboard/system — the three figures the dashboard
+	// gauges show; the System page has the rest.
+	function dashboardSystem( req, res ){
+		var snapshot = variables.serverMonitor.getSnapshot();
+		var cpuLoad  = snapshot.cpu.systemCpuLoad ?: -1;
+
+		res.json( {
+			"heapUsed" : snapshot.memory.heapUsed,
+			"heapMax"  : snapshot.memory.heapMax > 0 ? snapshot.memory.heapMax : snapshot.memory.heapCommitted,
+			"diskUsed" : snapshot.disk.totalSpace - snapshot.disk.freeSpace,
+			"diskTotal": snapshot.disk.totalSpace,
+			"cpuLoad"  : cpuLoad >= 0 ? cpuLoad : javacast( "null", "" ),
+			"uptimeMs" : snapshot.jvm.uptimeMs
+		} );
+	}
+
+	// ?limit=10 — the Insights page asks for longer lists than the dashboard.
+	private function listLimit( req, required numeric fallback ){
+		var requested = req.query.limit ?: "";
+		return isNumeric( requested ) && requested >= 1 && requested <= 20 ? int( requested ) : arguments.fallback;
+	}
+
+	private function loadOrNull( required loader ){
+		try {
+			return arguments.loader();
+		} catch ( any e ){
+			println( "[error] dashboard card failed: " & e.message );
+			return javacast( "null", "" );
+		}
+	}
+
+}
