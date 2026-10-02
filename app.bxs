@@ -92,7 +92,7 @@ app.use( requestLogger.middleware() )
 app.use(
 	boxExpressJSON(),
 	boxExpressUrlencoded(),
-	// 30 days, matches the old app's session timeout. Keep boxlang.json's
+	// 30 days, matches the old app's session timeout. Keep .boxlang.json's
 	// sessionCache defaultTimeout/defaultLastAccessTimeout at this same
 	// figure (JSON can't hold a comment pointing back here) — this maxAge
 	// only overrides the cache entry's TTL per request, not its idle
@@ -179,7 +179,7 @@ if ( app.getSetting( "env" ) == "production" ){
 // installed never touches it. Mounted ahead of the page routes: its /u/:name
 // and /post/:id routes answer only requests asking for ActivityPub JSON and
 // redirect or next() everything else. The module's Ap* tables live in chron
-// (db/migrations/0017), set as its datasource in boxlang.json (modules.
+// (db/migrations/0017), set as its datasource in .boxlang.json (modules.
 // bxactivitypub.settings). The sweep (ActivityPubSweep.bx) is what sends
 // posts, edits and deletions; it stays off until ACTIVITYPUB_SINCE, its
 // cutoff, is set, so switching federation on never backfills old posts by

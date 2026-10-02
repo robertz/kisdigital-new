@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
-# BoxLang doesn't auto-load .env (that was CommandBox's job in the old ColdBox
-# app) — export it into the process environment ourselves before boxlang.json's
-# ${env.X} substitutions and getSystemSetting() calls need it.
-set -a
-source "$(dirname "$0")/.env"
-set +a
-exec boxlang --bx-config "$(dirname "$0")/boxlang.json" "$(dirname "$0")/app.bxs"
+# BoxLang (1.18+) picks up both .boxlang.json and .env from the directory it's
+# run in, so all this has to do is start from the project root rather than
+# wherever it was called from.
+cd "$(dirname "$0")"
+exec boxlang app.bxs
