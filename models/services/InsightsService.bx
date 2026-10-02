@@ -13,6 +13,10 @@
  * GoatCounter's client-side pageview beacon gave for free by construction
  * (it only ever fired from a real browser rendering a real public page).
  *
+ * The page view count is narrower still (_pageViewFilter()): only pages a
+ * reader can open, answered with a 200. Feeds, the sitemap, fediverse
+ * endpoints, redirects and files are requests, not views.
+ *
  * Completed days are read from RequestLogDaily, a per-day summary built in
  * the background (see db/migrations/0023_request_log_daily_summaries.sql);
  * only today is counted from raw RequestLog rows. That keeps each card's
@@ -34,7 +38,7 @@ class {
 
 	/**
 	 * Broken/removed links and bad referrers, the exact opposite of the page
-	 * views count (which excludes 404s via _excluding404() as noise) — a 404
+	 * views count (which only counts pages that loaded) — a 404
 	 * isn't noise on its own, it's the whole signal: the one thing every
 	 * other "top pages"-style card can't show.
 	 *
@@ -110,7 +114,7 @@ class {
 	}
 
 	/**
-	 * Site-wide daily page views (visitor traffic, excluding 404s) for the
+	 * Site-wide daily page views (see _pageViewFilter()) for the
 	 * Insights chart — the full-site equivalent of
 	 * PostService.getDailyViewTotals(), which only counts post-page views.
 	 * Completed days come from RequestLogDaily; today is still accumulating,
@@ -128,7 +132,7 @@ class {
 		var rows = queryExecute(
 			"SELECT log_date, hits
 			FROM RequestLogDaily
-			WHERE kind = 'views' AND log_date >= :fromDate AND log_date < :todayDate",
+			WHERE kind = 'pageviews' AND log_date >= :fromDate AND log_date < :todayDate",
 			params,
 			{ returnType: "array" }
 		);
@@ -141,7 +145,7 @@ class {
 			"SELECT COUNT(*) AS total
 			FROM RequestLog
 			WHERE " & _visitorFilter() & "
-				AND " & _excluding404(),
+				AND " & _pageViewFilter(),
 			params,
 			{ returnType: "array" }
 		)[ 1 ].total;
@@ -178,7 +182,7 @@ class {
 	 * Summarizes every completed day in the last `daysBack` days that
 	 * RequestLogDaily doesn't have yet. Safe to run from several places at
 	 * once: each row is an upsert, and a day only counts as done once its
-	 * 'views' row (written last) exists.
+	 * 'pageviews' row (written last) exists.
 	 *
 	 * @param {numeric} daysBack - How many completed days back to check.
 	 * @return {numeric} The number of days built.
@@ -189,7 +193,7 @@ class {
 
 		var built = queryExecute(
 			"SELECT log_date FROM RequestLogDaily
-			WHERE kind = 'views' AND log_date >= :fromDate AND log_date < :todayDate",
+			WHERE kind = 'pageviews' AND log_date >= :fromDate AND log_date < :todayDate",
 			{
 				"fromDate" : { value: fromDate,      cfsqltype: "cf_sql_date" },
 				"todayDate": { value: todayMidnight, cfsqltype: "cf_sql_date" }
@@ -319,7 +323,7 @@ class {
 		}
 	}
 
-	// Summarizes one completed day. The 'views' row goes last: it's what marks
+	// Summarizes one completed day. The 'pageviews' row goes last: it's what marks
 	// the day as done, so a build interrupted halfway is simply redone.
 	private function _buildDailySummary( required date dayMidnight ){
 		var params = {
@@ -360,10 +364,10 @@ class {
 
 		queryExecute(
 			"INSERT INTO RequestLogDaily ( log_date, kind, name, hits )
-			SELECT :logDate, 'views', '', COUNT(*)
+			SELECT :logDate, 'pageviews', '', COUNT(*)
 			FROM RequestLog
 			WHERE " & _visitorFilter() & "
-				AND " & _excluding404() & "
+				AND " & _pageViewFilter() & "
 			ON DUPLICATE KEY UPDATE hits = VALUES(hits)",
 			params
 		);
@@ -395,14 +399,24 @@ class {
 			ELSE LOWER( SUBSTRING_INDEX( SUBSTRING_INDEX( SUBSTRING_INDEX( SUBSTRING_INDEX( referrer, '://', -1 ), '/', 1 ), '?', 1 ), ':', 1 ) ) END )";
 	}
 
-	// NULL-safe on purpose: status_code is NULL for any row logged before
-	// boxlang-express's getStatusCode() existed (see RequestLogger.bx), and
-	// "status_code <> 404" alone would silently exclude every one of those
-	// too — SQL's three-valued logic treats NULL <> 404 as unknown, not
-	// true, so a plain inequality drops NULL rows from the WHERE clause
-	// along with the real 404s.
-	private function _excluding404(){
-		return "( status_code IS NULL OR status_code <> 404 )";
+	// A page view: a page a reader can open, answered with a 200. Listed by
+	// route rather than by what to leave out, because the log also holds
+	// feeds, the sitemap, fediverse endpoints and hashed asset files (whose
+	// /assets/dist prefix is gone by the time they're logged). The extension
+	// check drops the files the static games under /games/ load. A NULL
+	// status is a row logged before status codes were captured.
+	private function _pageViewFilter(){
+		return "
+			( status_code IS NULL OR status_code = 200 )
+			AND (
+				path IN ( '/', '/about', '/posts', '/projects', '/search', '/games', '/games/', '/privacy', '/terms' )
+				OR path LIKE '/posts/%'
+				OR path LIKE '/tag/%'
+				OR path LIKE '/projects/%'
+				OR path LIKE '/games/%'
+			)
+			AND path NOT REGEXP '[.](js|mjs|css|map|json|xml|txt|png|jpe?g|gif|webp|svg|ico|woff2?|ttf|wasm|mp3|ogg|wav)$'
+		";
 	}
 
 	// Params for a read over the last `daysBack` completed days (from
