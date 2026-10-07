@@ -97,6 +97,15 @@
 			</div>
 			<a href="/projects" class="section-head__more">All projects <i class="bi bi-chevron-right" aria-hidden="true"></i></a>
 		</div>
+		<a href="https://feedhouse.app" class="project-callout">
+			<img src="/assets/images/feedhouse-icon.svg" alt="" class="project-callout__icon" width="64" height="64">
+			<span class="project-callout__body">
+				<span class="post-kicker">New</span>
+				<span class="project-callout__title">Feedhouse</span>
+				<span class="project-callout__text">A feed reader in the spirit of Google Reader. You pick the sources, it shows what's new in the order it was published, and nothing ranks your feed for you. RSS, YouTube, podcasts, Mastodon and Bluesky, with read later, highlights and full-text search. Built on BoxLang and BoxExpress.</span>
+			</span>
+			<span class="project-callout__cta">Visit feedhouse.app <i class="bi bi-arrow-up-right" aria-hidden="true"></i></span>
+		</a>
 		<div class="tile-grid">
 			<bx:loop array="#data.projects#" item="project">
 				<bx:include template="../partials/projectTile.bxm">
