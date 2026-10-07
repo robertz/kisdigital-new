@@ -42,12 +42,15 @@ class {
 	 * isn't noise on its own, it's the whole signal: the one thing every
 	 * other "top pages"-style card can't show.
 	 *
+	 * Scanner probes are left out (see _notAProbe()): they'd otherwise fill
+	 * the whole list and bury the links worth fixing.
+	 *
 	 * @return {array} of { path, count }, highest first.
 	 */
 	function getTop404s( numeric daysBack = 30, numeric limit = 10 ){
 		var days  = arguments.daysBack;
 		var limit = arguments.limit;
-		return _cached( "insights:top404s:" & days & ":" & limit, 300, () => {
+		return _cached( "insights:top404s:v2:" & days & ":" & limit, 300, () => {
 			_ensureDailySummaries( days );
 			var params = _windowParams( days );
 			params[ "lim" ] = { value: limit, cfsqltype: "cf_sql_integer" };
@@ -64,6 +67,7 @@ class {
 					WHERE " & _visitorFilter() & "
 						AND status_code = 404
 				) t
+				WHERE " & _notAProbe( "t.name" ) & "
 				GROUP BY t.name
 				ORDER BY count DESC
 				LIMIT :lim",
@@ -397,6 +401,20 @@ class {
 	private function _referrerHostExpr(){
 		return "COALESCE( referrer_host, CASE WHEN referrer = '' THEN ''
 			ELSE LOWER( SUBSTRING_INDEX( SUBSTRING_INDEX( SUBSTRING_INDEX( SUBSTRING_INDEX( referrer, '://', -1 ), '/', 1 ), '?', 1 ), ':', 1 ) ) END )";
+	}
+
+	// False for the paths vulnerability scanners try on every site: dotfiles
+	// such as /.env and /.git/config (but not /.well-known/), WordPress and
+	// phpMyAdmin locations, and script, config and archive files this site
+	// has never served. They arrive with browser-like user agents, so the bot
+	// filter doesn't catch them.
+	private function _notAProbe( required string column ){
+		var name = arguments.column;
+		return "NOT (
+			( " & name & " REGEXP '/[.]' AND " & name & " NOT LIKE '/.well-known/%' )
+			OR " & name & " REGEXP '(^|/)(wp|wordpress|wp-[a-z]+|phpmyadmin|pma|cgi-bin|vendor|administrator)(/|$)'
+			OR " & name & " REGEXP '[.](php[0-9]?|aspx?|jsp|cgi|sql|bak|old|zip|tar|gz|tgz|rar|7z|ya?ml|ini|conf|config|log|pem|key|env)$'
+		)";
 	}
 
 	// A page view: a page a reader can open, answered with a 200. Listed by
