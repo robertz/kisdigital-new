@@ -46,6 +46,7 @@ import { ImagePicker, defaultUploadPath } from "../../shared/ImagePicker";
 import { Page } from "../../shared/Page";
 import { StatusBadge } from "../../shared/StatusBadge";
 import { ButtonLink, IconButtonLink } from "../../shared/links";
+import { fromLocalInput, localZoneLabel, toLocalInput } from "../../shared/dates";
 import { uploadImage } from "../../shared/media";
 import { HistoryDrawer } from "./HistoryDrawer";
 import { MarkdownEditor, type MarkdownEditorHandle } from "./MarkdownEditor";
@@ -84,15 +85,16 @@ function toDraft(post: Post | null): Draft {
 		description: post?.description ?? "",
 		body: post?.body ?? "",
 		status: post?.status ?? "draft",
-		publishDate: post?.publishDate ?? "",
+		publishDate: toLocalInput(post?.publishDate ?? ""),
 		featured: post?.featured ?? false,
 		coverImage: post?.coverImage ?? "",
 		tags: post?.tags ?? [],
 	};
 }
 
+// The editor holds the publish date in local time; the server keeps UTC.
 function toInput(draft: Draft): PostInput {
-	return draft;
+	return { ...draft, publishDate: fromLocalInput(draft.publishDate) };
 }
 
 function slugify(value: string): string {
@@ -219,11 +221,12 @@ function PostEditor({ post }: { post: Post | null }) {
 			// The server fills in a blank slug and a blank publish date. Those
 			// two are taken from its answer, unless they were edited again
 			// while the save was in flight.
-			setSynced({ ...submitted, slug: result.slug, publishDate: result.publishDate });
+			const publishDate = toLocalInput(result.publishDate);
+			setSynced({ ...submitted, slug: result.slug, publishDate });
 			setDraft((current) => ({
 				...current,
 				slug: current.slug === submitted.slug ? result.slug : current.slug,
-				publishDate: current.publishDate === submitted.publishDate ? result.publishDate : current.publishDate,
+				publishDate: current.publishDate === submitted.publishDate ? publishDate : current.publishDate,
 			}));
 			setSlugLocked(true);
 			setSaved(result);
@@ -673,7 +676,7 @@ function PostEditor({ post }: { post: Post | null }) {
 										type="datetime-local"
 										label="Publish date"
 										value={draft.publishDate}
-										helperText="A future date with Published status schedules the post. It stays hidden from visitors, RSS and the sitemap until then."
+										helperText={`In your time zone, ${localZoneLabel()}. A future date with Published status schedules the post. It stays hidden from visitors, RSS and the sitemap until then.`}
 										slotProps={{ inputLabel: { shrink: true } }}
 										onChange={(e) => update({ publishDate: e.target.value })}
 									/>

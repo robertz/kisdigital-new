@@ -51,7 +51,7 @@ class {
 				return {
 					"id"         : row.id,
 					"title"      : row.title,
-					"publishDate": dateTimeFormat( row.publish_date, "yyyy-mm-dd'T'HH:nn" )
+					"publishDate": dateTimeFormat( row.publish_date, "yyyy-mm-dd'T'HH:nn:ss'Z'" )
 				};
 			} )
 		} );

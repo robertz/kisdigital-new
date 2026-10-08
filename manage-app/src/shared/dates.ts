@@ -1,21 +1,47 @@
-// Publish dates travel as the server's own wall-clock time ("2026-10-02T14:30",
-// the same value a datetime-local input holds), so they're shown as written
-// rather than shifted into the browser's timezone.
-function parseWallClock(value: string): Date | null {
-	const match = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?/.exec(value);
-	if (!match) return null;
-	return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), Number(match[4] ?? 0), Number(match[5] ?? 0));
+// Publish dates travel as UTC ("2026-10-12T13:00:00Z") and are shown in the
+// browser's own time zone.
+function parseUtc(value: string): Date | null {
+	if (!value) return null;
+	const date = new Date(value);
+	return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function pad(value: number): string {
+	return String(value).padStart(2, "0");
+}
+
+/** A UTC publish date as a datetime-local input's value, in local time. */
+export function toLocalInput(utcIso: string): string {
+	const date = parseUtc(utcIso);
+	if (!date) return "";
+	return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+/** A datetime-local input's value (local time) as UTC, for the server. */
+export function fromLocalInput(local: string): string {
+	if (!local) return "";
+	const date = new Date(local);
+	return Number.isNaN(date.getTime()) ? "" : date.toISOString();
+}
+
+/** The browser's time zone, e.g. "America/New_York (EDT)". */
+export function localZoneLabel(): string {
+	const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+	const short = new Intl.DateTimeFormat("en-US", { timeZoneName: "short" })
+		.formatToParts(new Date())
+		.find((part) => part.type === "timeZoneName")?.value;
+	return short && short !== zone ? `${zone} (${short})` : zone;
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 export function formatLocalDate(value: string): string {
-	const date = parseWallClock(value);
+	const date = parseUtc(value);
 	return date ? `${date.getDate()} ${MONTHS[date.getMonth()]} ${date.getFullYear()}` : "—";
 }
 
 export function formatLocalDateTime(value: string): string {
-	const date = parseWallClock(value);
+	const date = parseUtc(value);
 	if (!date) return "";
 	const day = date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 	const time = date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
