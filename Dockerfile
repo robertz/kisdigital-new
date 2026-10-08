@@ -125,6 +125,10 @@ EXPOSE 3005
 # multi-core hosts with room to spare) and a bounded max heap keeps the JVM
 # from growing to fill however much RAM the instance happens to have.
 #
+# user.timezone=UTC: publish dates are stored as UTC and compared against
+# MySQL's NOW(), so the JVM's clock has to be UTC too. The base image already
+# is, but this doesn't leave it to the image.
+#
 # ActiveProcessorCount=1: this instance is provisioned as apps-s-1vcpu-1gb
 # (see .do/app.yaml), but Runtime.availableProcessors() has been observed
 # reporting 8 — the host's full core count, not this container's actual
@@ -142,6 +146,6 @@ EXPOSE 3005
 # from the container's own memory limit (no heap-space exception, no stack
 # trace, the process just disappears). Capping it turns that into a normal,
 # loud `OutOfMemoryError: Direct buffer memory` instead.
-ENV JAVA_OPTS="-Xmx600m -Xms128m -XX:+UseSerialGC -XX:ActiveProcessorCount=1 -XX:MaxDirectMemorySize=64m"
+ENV JAVA_OPTS="-Duser.timezone=UTC -Xmx600m -Xms128m -XX:+UseSerialGC -XX:ActiveProcessorCount=1 -XX:MaxDirectMemorySize=64m"
 
 CMD ["boxlang", "app.bxs"]

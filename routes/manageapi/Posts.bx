@@ -44,23 +44,30 @@ class {
 		} );
 	}
 
-	// GET /manage/api/posts/calendar?month=2026-10 — what publishes in a
-	// month, plus the drafts that could be scheduled into it.
+	// GET /manage/api/posts/calendar?month=2026-10&from=…&to=… — what
+	// publishes in a month, plus the drafts that could be scheduled into it.
+	// from and to are the month's bounds in the viewer's time zone, as UTC;
+	// without them the month is taken as a UTC month.
 	function calendar( req, res ){
 		var month = trim( req.query.month ?: "" );
 		if ( !reFind( "^\d{4}-(0[1-9]|1[0-2])$", month ) ){
 			month = dateFormat( now(), "yyyy-mm" );
 		}
-		var monthStart = createDate( val( left( month, 4 ) ), val( right( month, 2 ) ), 1 );
+		var rangeStart = parseUtc( req.query.from ?: "" );
+		var rangeEnd   = parseUtc( req.query.to ?: "" );
+		if ( isNull( rangeStart ) || isNull( rangeEnd ) || rangeEnd <= rangeStart || dateDiff( "d", rangeStart, rangeEnd ) > 32 ){
+			rangeStart = createDate( val( left( month, 4 ) ), val( right( month, 2 ) ), 1 );
+			rangeEnd   = dateAdd( "m", 1, rangeStart );
+		}
 
 		res.json( {
 			"month" : month,
-			"posts" : variables.postService.getCalendarPosts( monthStart, dateAdd( "m", 1, monthStart ) ).map( ( row ) => {
+			"posts" : variables.postService.getCalendarPosts( rangeStart, rangeEnd ).map( ( row ) => {
 				return {
 					"id"         : row.id,
 					"title"      : row.title,
 					"status"     : row.status,
-					"publishDate": dateTimeFormat( row.publish_date, "yyyy-mm-dd'T'HH:nn" ),
+					"publishDate": utcIso( row.publish_date ),
 					"isScheduled": row.status == "published" && row.publish_date > now()
 				};
 			} ),
@@ -70,17 +77,17 @@ class {
 		} );
 	}
 
-	// POST /manage/api/posts/:id/schedule — body: { date: "2026-10-12" }.
-	// Moves a scheduled post to another day at the same time, or schedules a
-	// draft for 9:00 that day. A live post is refused: its publish date is
-	// part of its public address.
+	// POST /manage/api/posts/:id/schedule — body: { publishDate: UTC ISO }.
+	// The calendar works out the time (the post's own time of day, or 9:00
+	// for a draft, in the viewer's time zone). A live post is refused: its
+	// publish date is part of its public address.
 	function schedulePost( req, res ){
 		var post = loadEditablePost( req, res );
 		if ( isNull( post ) ) return;
 
-		var payload = isStruct( req.body ?: "" ) ? req.body : {};
-		var day     = trim( payload.date ?: "" );
-		if ( !reFind( "^\d{4}-\d{2}-\d{2}$", day ) || !isDate( day ) ){
+		var payload     = isStruct( req.body ?: "" ) ? req.body : {};
+		var publishDate = parseUtc( payload.publishDate ?: "" );
+		if ( isNull( publishDate ) ){
 			res.status( 422 ).json( { "error": "Choose a day to schedule this for." } );
 			return;
 		}
@@ -89,13 +96,6 @@ class {
 			return;
 		}
 
-		var current     = post.getPublishDate();
-		var publishDate = createDateTime(
-			val( listGetAt( day, 1, "-" ) ), val( listGetAt( day, 2, "-" ) ), val( listGetAt( day, 3, "-" ) ),
-			post.getIsScheduled() ? hour( current ) : 9,
-			post.getIsScheduled() ? minute( current ) : 0,
-			0
-		);
 		if ( publishDate <= now() ){
 			res.status( 422 ).json( { "error": "That time has already passed. Pick a later day, or publish it from the editor." } );
 			return;
@@ -198,6 +198,12 @@ class {
 			if ( isSimpleValue( tag ) && len( trim( tag ) ) ) postTags.append( trim( tag ) );
 		}
 		var postStatus = lCase( trim( payload.status ?: "draft" ) );
+		var rawDate    = trim( payload.publishDate ?: "" );
+		var publishAt  = parseUtc( rawDate );
+		if ( len( rawDate ) && isNull( publishAt ) ){
+			res.status( 422 ).json( { "error": "The publish date isn't a valid date." } );
+			return;
+		}
 
 		var bean = new models.PostBean();
 		bean.setId(          postId );
@@ -208,7 +214,7 @@ class {
 		bean.setBody(        payload.body ?: "" );
 		bean.setStatus(      listFind( "draft,published,archived", postStatus ) ? postStatus : "draft" );
 		bean.setFeatured(    isBoolean( payload.featured ?: false ) && payload.featured );
-		bean.setPublishDate( payload.publishDate ?: "" );
+		bean.setPublishDate( isNull( publishAt ) ? "" : publishAt );
 		bean.setTags(        postTags );
 
 		var saved = variables.postService.savePost( bean );
@@ -291,6 +297,27 @@ class {
 		return post;
 	}
 
+	/**
+	 * A publish date from the editor or the calendar: an ISO-8601 time with
+	 * an offset or a Z ("2026-10-12T13:00:00.000Z"). Returns null for
+	 * anything else. Stored as UTC, which is this server's own zone (see
+	 * -Duser.timezone in the Dockerfile and start.sh), so it compares directly
+	 * against MySQL's NOW().
+	 */
+	private function parseUtc( required string text ){
+		if ( !len( trim( arguments.text ) ) ) return;
+		try {
+			var instant = createObject( "java", "java.time.OffsetDateTime" ).parse( trim( arguments.text ) ).toInstant();
+			return createObject( "java", "java.util.Date" ).from( instant );
+		} catch ( any e ) {
+			return;
+		}
+	}
+
+	private function utcIso( required date value ){
+		return dateTimeFormat( arguments.value, "yyyy-mm-dd'T'HH:nn:ss'Z'" );
+	}
+
 	// A post that has never been published is stored with a placeholder date
 	// at the start of 1970 (see PostService.savePost()), which isn't a date
 	// anyone chose.
@@ -307,9 +334,7 @@ class {
 			"slug"       : arguments.post.getSlug(),
 			"status"     : arguments.post.getStatus(),
 			"featured"   : arguments.post.getFeatured() ? true : false,
-			// Server wall-clock time in the shape a datetime-local input uses,
-			// the same value the editor sends back on save.
-			"publishDate": hasPublishDate( arguments.post ) ? dateTimeFormat( publishDate, "yyyy-mm-dd'T'HH:nn" ) : "",
+				"publishDate": hasPublishDate( arguments.post ) ? utcIso( publishDate ) : "",
 			"isScheduled": arguments.post.getIsScheduled() ? true : false,
 			"postUrl"    : len( arguments.post.getSlug() ) ? arguments.post.getPostUrl() : "",
 			"tags"       : arguments.post.getTags(),

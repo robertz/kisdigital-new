@@ -21,6 +21,7 @@ import { ConfirmDialog } from "../../shared/ConfirmDialog";
 import { Page, PageHeader } from "../../shared/Page";
 import { ButtonLink, TextLink } from "../../shared/links";
 import { PostsTabs } from "./PostsTabs";
+import { toLocalInput } from "../../shared/dates";
 import { postsApi, type CalendarPost } from "./api";
 
 const route = getRouteApi("/posts/calendar");
@@ -29,8 +30,9 @@ const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 interface Dragged {
 	id: string;
 	title: string;
-	// The day it's on now; absent for a draft.
+	// The day it's on now and when it publishes; absent for a draft.
 	from?: string;
+	publishDate?: string;
 }
 
 function pad(n: number): string {
@@ -47,8 +49,15 @@ function shift(month: string, by: number): string {
 }
 
 function timeOf(publishDate: string): string {
-	const [hours, minutes] = publishDate.slice(11, 16).split(":").map(Number);
-	return new Date(2000, 0, 1, hours, minutes).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+	return new Date(publishDate).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+}
+
+// The new publish date for a post dropped on a day: a scheduled post keeps
+// its time of day, and a draft goes out at 9:00, both in local time.
+function publishDateFor(item: Dragged, day: string): string {
+	const [y, m, d] = day.split("-").map(Number);
+	const current = item.publishDate ? new Date(item.publishDate) : null;
+	return new Date(y, m - 1, d, current ? current.getHours() : 9, current ? current.getMinutes() : 0).toISOString();
 }
 
 function chipColor(post: CalendarPost): "info" | "success" | "default" {
@@ -99,10 +108,16 @@ export function CalendarPage() {
 	const [overDay, setOverDay] = useState<string | null>(null);
 	const [pending, setPending] = useState<{ item: Dragged; day: string } | null>(null);
 
-	const calendar = useQuery({ queryKey: ["calendar", month], queryFn: () => postsApi.calendar(month), placeholderData: keepPreviousData });
+	const [year, monthNumber] = month.split("-").map(Number);
+	const calendar = useQuery({
+		queryKey: ["calendar", month],
+		queryFn: () =>
+			postsApi.calendar(month, new Date(year, monthNumber - 1, 1).toISOString(), new Date(year, monthNumber, 1).toISOString()),
+		placeholderData: keepPreviousData,
+	});
 
 	const schedule = useMutation({
-		mutationFn: ({ id, day }: { id: string; day: string }) => postsApi.schedule(id, day),
+		mutationFn: ({ item, day }: { item: Dragged; day: string }) => postsApi.schedule(item.id, publishDateFor(item, day)),
 		onSettled: () => {
 			setPending(null);
 			queryClient.invalidateQueries({ queryKey: ["calendar"] });
@@ -111,7 +126,6 @@ export function CalendarPage() {
 		},
 	});
 
-	const [year, monthNumber] = month.split("-").map(Number);
 	const first = new Date(year, monthNumber - 1, 1);
 	const daysInMonth = new Date(year, monthNumber, 0).getDate();
 	const todayKey = `${monthOf(today)}-${pad(today.getDate())}`;
@@ -119,7 +133,7 @@ export function CalendarPage() {
 
 	const byDay = new Map<string, CalendarPost[]>();
 	for (const post of calendar.data?.posts ?? []) {
-		const key = post.publishDate.slice(0, 10);
+		const key = toLocalInput(post.publishDate).slice(0, 10);
 		byDay.set(key, [...(byDay.get(key) ?? []), post]);
 	}
 
@@ -246,7 +260,7 @@ export function CalendarPage() {
 													<PostChip
 														key={post.id}
 														post={post}
-														onDragStart={post.isScheduled ? (e) => startDrag(e, { id: post.id, title: post.title, from: day }) : undefined}
+														onDragStart={post.isScheduled ? (e) => startDrag(e, { id: post.id, title: post.title, from: day, publishDate: post.publishDate }) : undefined}
 													/>
 												))}
 											</Stack>
@@ -334,7 +348,7 @@ export function CalendarPage() {
 				confirmColor="primary"
 				busy={schedule.isPending}
 				onClose={() => setPending(null)}
-				onConfirm={() => pending && schedule.mutate({ id: pending.item.id, day: pending.day })}
+				onConfirm={() => pending && schedule.mutate({ item: pending.item, day: pending.day })}
 			>
 				{pending?.item.from
 					? `"${pending.item.title}" will go live on ${pending ? dayLabel(pending.day) : ""} instead, at the same time of day.`

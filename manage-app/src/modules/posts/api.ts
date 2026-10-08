@@ -90,9 +90,11 @@ export const postsApi = {
 	tags: () => api.get<{ tags: string[] }>("/manage/api/tags").then((r) => r.tags),
 	search: (text: string) =>
 		api.get<{ posts: { id: string; title: string; status: string }[] }>(`/manage/api/posts/search?q=${encodeURIComponent(text)}`).then((r) => r.posts),
-	calendar: (month: string) => api.get<CalendarMonth>(`/manage/api/posts/calendar?month=${month}`),
-	schedule: (id: string, date: string) =>
-		api.post<{ post: PostSummary }>(`/manage/api/posts/${encodeURIComponent(id)}/schedule`, { date }).then((r) => r.post),
+	// from/to are the month's bounds in the browser's time zone, as UTC.
+	calendar: (month: string, from: string, to: string) =>
+		api.get<CalendarMonth>(`/manage/api/posts/calendar?month=${month}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
+	schedule: (id: string, publishDate: string) =>
+		api.post<{ post: PostSummary }>(`/manage/api/posts/${encodeURIComponent(id)}/schedule`, { publishDate }).then((r) => r.post),
 	// Keeps unsaved work on the server without changing the post. Resolves
 	// false when the server has nowhere to keep it.
 	autosave: (id: string, input: PostInput) =>
