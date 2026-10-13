@@ -24,7 +24,18 @@ class {
 		// actual POST /comments validation happens in routes/Comments.bx's
 		// own router, but req.csrfToken() has to come from a boxExpressCsrf()
 		// mounted on whichever router renders the form in the first place.
-		this.router.use( boxExpressCsrf() );
+		//
+		// The form is only shown to a signed-in reader, whose session already
+		// holds something. For anyone else the token is skipped: minting one
+		// would put it in a new session and store a row for every visitor.
+		var csrf = boxExpressCsrf();
+		this.router.use( ( req, res, next ) => {
+			if ( req.session.isEmpty() && listFindNoCase( "GET,HEAD", req.method ) ){
+				req.csrfToken = () => "";
+				return next();
+			}
+			return csrf( req, res, next );
+		} );
 
 		this.router.get( "/posts", ( req, res ) => index( req, res ) );
 		this.router.get( "/search", ( req, res ) => search( req, res ) );

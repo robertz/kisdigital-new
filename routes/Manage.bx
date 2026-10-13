@@ -18,7 +18,7 @@ class {
 		// handler below is wrapped in a closure that calls the method through
 		// this lexically-captured scope instead.
 		this.router = boxExpressRouter();
-		this.router.use( boxExpressCsrf() );
+		this.router.use( "/manage", boxExpressCsrf() );
 
 		this.router.get( "/manage/login", ( req, res ) => showLogin( req, res ) );
 		this.router.post( "/manage/login", boxExpressRateLimit( { windowMs: 15 * 60000, max: 5 } ), ( req, res ) => doLogin( req, res ) );
