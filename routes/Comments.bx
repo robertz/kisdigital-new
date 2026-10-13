@@ -28,7 +28,10 @@ class {
 		var requireCommenter = ( req, res, next ) => _requireCommenter( req, res, next );
 
 		this.router = boxExpressRouter();
-		this.router.use( boxExpressCsrf() );
+		// Scoped to /comments: unscoped, it would run for every request that
+		// reaches this router (tags, feeds, projects, 404s…) and mint a token
+		// into a new session each time.
+		this.router.use( "/comments", boxExpressCsrf() );
 
 		this.router.post(
 			"/comments",

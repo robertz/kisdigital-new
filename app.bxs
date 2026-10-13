@@ -97,13 +97,17 @@ servedOverHttps = getSystemSetting( "ENV", "production" ) == "production"
 app.use(
 	boxExpressJSON(),
 	boxExpressUrlencoded(),
-	// 30 days, matches the old app's session timeout. Keep .boxlang.json's
-	// sessionCache defaultTimeout/defaultLastAccessTimeout at this same
-	// figure (JSON can't hold a comment pointing back here) — this maxAge
-	// only overrides the cache entry's TTL per request, not its idle
-	// timeout, so a shorter defaultLastAccessTimeout there silently evicts
-	// idle sessions well before the cookie itself expires.
-	boxExpressSession( { store: boxExpressCacheStore("sessionCache"), maxAge: 30 * 24 * 60 * 60, secure: servedOverHttps } ),
+	// A day since the last request. Keep .boxlang.json's sessionCache
+	// defaultTimeout/defaultLastAccessTimeout at this same figure (JSON can't
+	// hold a comment pointing back here) — this maxAge only overrides the
+	// cache entry's TTL per request, not its idle timeout, so a shorter
+	// defaultLastAccessTimeout there silently evicts idle sessions well
+	// before the cookie itself expires.
+	//
+	// saveUninitialized: false stores a session, and sends its cookie, only
+	// once something is put in it, so a reader or crawler that never signs in
+	// leaves no row behind (see the CSRF note in routes/Posts.bx).
+	boxExpressSession( { store: boxExpressCacheStore("sessionCache"), maxAge: 24 * 60 * 60, saveUninitialized: false, secure: servedOverHttps } ),
 	// HSTS covers this host only: other kisdigital.com subdomains aren't
 	// this app's to promise HTTPS for.
 	boxExpressHelmet( { referrerPolicy: "strict-origin-when-cross-origin", hsts: servedOverHttps ? "max-age=15552000" : false } )

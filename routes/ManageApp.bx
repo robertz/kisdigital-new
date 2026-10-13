@@ -31,7 +31,9 @@ class {
 		var admin = ( req, res, next ) => requireApiAdmin( req, res, next );
 
 		this.router = boxExpressRouter();
-		this.router.use( boxExpressCsrf() );
+		// Scoped to /manage, or every request that falls through to this
+		// router (a 404 included) would get a token and a stored session.
+		this.router.use( "/manage", boxExpressCsrf() );
 
 		// Client-side routes. Each needs an entry here so a reload or a
 		// pasted link lands on the app shell instead of a 404.
