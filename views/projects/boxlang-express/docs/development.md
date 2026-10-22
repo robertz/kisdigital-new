@@ -61,7 +61,7 @@ boxlang run-tests.bxs     # every time after that
 | `tests/specs/BoxExpressIntegrationSpec.bx` | Spins up a real app on `localhost:4321` and hits it with real HTTP requests, exercising `Request`/`Response`/`BodyParsers`/`StaticFiles`/`render()` together, plus a concurrency check |
 | `tests/specs/BifsSpec.bx` | The same idea, built entirely through the global BIFs on `localhost:4322`, to make sure the friendly entry points work, not just the underlying classes |
 | `tests/specs/UndertowAdapterSpec.bx` | Regression coverage for the Undertow wiring, including reading a request body from Undertow's own I/O thread and confirming each request runs on its own virtual thread |
-| `tests/specs/ProcessLifecycleSpec.bx` | Behaviors that need a real OS process boundary: a clean exit on a port conflict, a real `SIGTERM` releasing the socket, and `reloadOnChange` actually replacing the running process |
+| `tests/specs/ProcessLifecycleSpec.bx` | Behaviors that need a real OS process boundary: a clean exit on a port conflict, a real `SIGTERM` releasing the socket, and the `reloadOnChange` supervisor restarting its child server, recovering from a crash, and stopping on `SIGTERM` |
 
 `tests/fixtures/` holds a static file and a `.bxm` view the integration specs serve and render.
 

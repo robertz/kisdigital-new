@@ -34,6 +34,8 @@ app.get( "/visit-count", ( req, res ) => {
 
 `req.session` is a plain struct — read and write it directly. It's saved automatically (no explicit `req.session.save()` call), persisted server-side and keyed by `req.sessionID`, which is also readable directly for logging or debugging.
 
+A changed session is written to the store just before the response is sent (in `res.onBeforeSend()`), so the client's next request finds it even with a database-backed store — fetching a CSRF token and immediately POSTing a form no longer races the write. A change made after the response has gone out is written once the request finishes.
+
 ## Ending a session
 
 ```bxs
