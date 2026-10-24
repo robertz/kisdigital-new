@@ -1,0 +1,294 @@
+/**
+ * Receives webmentions (https://www.w3.org/TR/webmention/): another site
+ * telling us one of its pages links to one of our posts.
+ *
+ * receive() is all POST /webmention does: check the request, queue the
+ * (source, target) pair in the Webmention table and answer 202. Fetching the
+ * source happens later, in processQueue() (scheduled from app.bxs), so a slow or
+ * hostile source never ties up a request, and sending the same pair again just
+ * queues it again. That's also how updates and deletions arrive: the source is
+ * re-fetched, and if it's gone (404/410) or no longer links to the post, what it
+ * left here is removed.
+ *
+ * A verified mention becomes, by its microformats (Microformats.bx):
+ *   - reply or mention: a comment on the post (CommentService), held for approval
+ *     until its site is trusted. Trust is keyed per site, not per claimed author,
+ *     since anyone can put anyone's name and URL in their h-card; Bridgy is the
+ *     exception, as it vouches for the author it names on each network.
+ *   - like, repost, bookmark: counted only (reactionCounts()), shown beside the
+ *     fediverse's likes and boosts.
+ */
+class {
+
+	// Hosts that relay posts from other networks and set the real author.
+	variables.RELAY_HOSTS = [ "brid.gy", "brid-gy.appspot.com" ];
+
+	variables.MAX_QUEUED   = 1000;
+	variables.MAX_ATTEMPTS = 3;
+	// Longer replies are shown as an excerpt linking to the original.
+	variables.MAX_TEXT     = 1000;
+
+	function init( required string siteUrl, required postService, required commentService, required http, required microformats ){
+		variables.siteUrl        = reReplace( arguments.siteUrl, "/+$", "" );
+		variables.siteHost       = lCase( reReplace( variables.siteUrl, "^https?://([^/:]+).*$", "\1" ) );
+		variables.postService    = arguments.postService;
+		variables.commentService = arguments.commentService;
+		variables.http           = arguments.http;
+		variables.mf             = arguments.microformats;
+		return this;
+	}
+
+	string function endpointUrl(){
+		return variables.siteUrl & "/webmention";
+	}
+
+	/**
+	 * Validates a webmention request and queues it.
+	 *
+	 * @return {struct} { status (202, 400 or 503), message }
+	 */
+	struct function receive( required string source, required string target ){
+		var check = checkRequest( arguments.source, arguments.target );
+		if ( !check.ok ){
+			return { "status": 400, "message": check.message };
+		}
+		var queued = queryExecute( "SELECT COUNT(*) AS cnt FROM Webmention WHERE status = 'queued'", {}, { returnType: "array" } )[ 1 ].cnt;
+		if ( queued >= variables.MAX_QUEUED ){
+			return { "status": 503, "message": "Too many webmentions waiting; try again later." };
+		}
+		queryExecute(
+			"INSERT INTO Webmention (id, pair_hash, source, target, post_id, status)
+			VALUES (:id, :hash, :source, :target, :post_id, 'queued')
+			ON DUPLICATE KEY UPDATE status = 'queued', attempts = 0, error = NULL, post_id = VALUES(post_id), received = CURRENT_TIMESTAMP(3)",
+			{
+				"id"      : { value: lCase( createGUID() ),                                                 sqltype: "varchar" },
+				"hash"    : { value: lCase( hash( check.source & " " & check.target, "SHA-256" ) ),         sqltype: "varchar" },
+				"source"  : { value: check.source,                                                          sqltype: "varchar" },
+				"target"  : { value: check.target,                                                          sqltype: "varchar" },
+				"post_id" : { value: check.postId,                                                          sqltype: "varchar" }
+			}
+		);
+		return { "status": 202, "message": "Accepted; it will be checked shortly." };
+	}
+
+	/**
+	 * The request-level checks, no database writes: both http(s) URLs, different
+	 * pages, and the target is a public post here.
+	 *
+	 * @return {struct} { ok, message } and, when ok, { source, target, postId }
+	 */
+	struct function checkRequest( required string source, required string target ){
+		var sourceUrl = trim( arguments.source );
+		var targetUrl = trim( arguments.target );
+		if ( !len( sourceUrl ) || !len( targetUrl ) ){
+			return { "ok": false, "message": "source and target are both required." };
+		}
+		if ( len( sourceUrl ) > 512 || len( targetUrl ) > 512 ){
+			return { "ok": false, "message": "URL too long." };
+		}
+		if ( !reFindNoCase( "^https?://[^/\s]+", sourceUrl ) || !reFindNoCase( "^https?://[^/\s]+", targetUrl ) ){
+			return { "ok": false, "message": "source and target must be http(s) URLs." };
+		}
+		if ( variables.mf.normalizeUrl( sourceUrl ) == variables.mf.normalizeUrl( targetUrl ) ){
+			return { "ok": false, "message": "source and target are the same page." };
+		}
+		var parts = reFindNoCase( "^https?://([^/:?##]+)(?::\d+)?(/[^?##]*)", targetUrl, 1, true );
+		if ( parts.pos[ 1 ] == 0 ){
+			return { "ok": false, "message": "target is not a post on this site." };
+		}
+		var host = lCase( mid( targetUrl, parts.pos[ 2 ], parts.len[ 2 ] ) );
+		var path = reReplace( mid( targetUrl, parts.pos[ 3 ], parts.len[ 3 ] ), "/+$", "" );
+		if ( host != variables.siteHost && host != "www." & variables.siteHost ){
+			return { "ok": false, "message": "target is not on this site." };
+		}
+		var slug = reFind( "^/posts/\d{4}/\d{2}/([^/]+)$", path, 1, true );
+		if ( slug.pos[ 1 ] == 0 ){
+			return { "ok": false, "message": "target is not a post on this site." };
+		}
+		var post = variables.postService.getPostBySlug( urlDecode( mid( path, slug.pos[ 2 ], slug.len[ 2 ] ) ), true );
+		if ( !post.exists() || post.getPostUrl() != path ){
+			return { "ok": false, "message": "target is not a post on this site." };
+		}
+		return { "ok": true, "message": "", "source": sourceUrl, "target": targetUrl, "postId": post.getId() };
+	}
+
+	/**
+	 * Verifies up to `limit` queued webmentions, oldest first.
+	 *
+	 * @return {struct} A count per outcome, for logging.
+	 */
+	struct function processQueue( numeric limit = 20 ){
+		var counts = { "verified": 0, "invalid": 0, "deleted": 0, "retry": 0 };
+		var rows = queryExecute(
+			"SELECT id, source, target, post_id, status, type, comment_id, verified, attempts
+			FROM Webmention WHERE status = 'queued' ORDER BY received LIMIT :lim",
+			{ "lim": { value: arguments.limit, sqltype: "integer" } },
+			{ returnType: "array" }
+		);
+		for ( var row in rows ){
+			var outcome = "";
+			try {
+				outcome = verify( row );
+			} catch ( any e ){
+				outcome = retryOrFail( row, e.message );
+			}
+			counts[ outcome ]++;
+		}
+		if ( counts.verified + counts.invalid + counts.deleted + counts.retry > 0 ){
+			writeLog( text = "received: #jsonSerialize( counts )#", type = "information", log = "webmention" );
+		}
+		return counts;
+	}
+
+	/**
+	 * Verified likes and reposts of a post (bookmarks count as likes).
+	 */
+	struct function reactionCounts( required string postId ){
+		var counts = { "likes": 0, "reposts": 0 };
+		var rows = queryExecute(
+			"SELECT type, COUNT(*) AS cnt FROM Webmention
+			WHERE post_id = :post_id AND status = 'verified' AND type IN ('like', 'repost', 'bookmark')
+			GROUP BY type",
+			{ "post_id": { value: arguments.postId, sqltype: "varchar" } },
+			{ returnType: "array" }
+		);
+		for ( var row in rows ){
+			counts[ row.type == "repost" ? "reposts" : "likes" ] += row.cnt;
+		}
+		return counts;
+	}
+
+	/**
+	 * What a verified mention stores as a comment: who (keyed for trust), where,
+	 * and the content as untrusted HTML.
+	 */
+	struct function toMention( required struct parsed, required string source ){
+		var sourceHost = hostOf( arguments.source );
+		var authorUrl  = arguments.parsed.authorUrl;
+		var authorHost = hostOf( authorUrl );
+		var vouched    = len( authorUrl ) && ( authorHost == sourceHost || variables.RELAY_HOSTS.findNoCase( sourceHost ) );
+		var origin     = reReplace( arguments.source, "^(https?://[^/?##]+).*$", "\1" );
+		var name       = len( arguments.parsed.authorName ) ? arguments.parsed.authorName : sourceHost;
+
+		var html = "";
+		if ( arguments.parsed.type == "reply" && len( arguments.parsed.contentHtml ) && len( arguments.parsed.contentText ) <= variables.MAX_TEXT ){
+			html = arguments.parsed.contentHtml;
+		} else {
+			var text = len( arguments.parsed.contentText ) ? arguments.parsed.contentText
+				: len( arguments.parsed.summary ) ? arguments.parsed.summary
+				: arguments.parsed.name;
+			if ( len( text ) > 280 ){
+				text = trim( left( text, 280 ) ) & "…";
+			}
+			var lead = arguments.parsed.type == "reply" ? "" : "Mentioned this post: ";
+			html = "<p>" & encodeForHTML( lead & text ) & "</p>";
+		}
+
+		return {
+			"actorUrl"     : vouched ? authorUrl : origin,
+			"authorName"   : name,
+			"authorHandle" : len( authorHost ) ? authorHost : sourceHost,
+			"authorUrl"    : len( authorUrl ) ? authorUrl : origin,
+			"url"          : reFindNoCase( "^https?://", arguments.parsed.url ) ? arguments.parsed.url : arguments.source,
+			"html"         : html,
+			"published"    : isDate( arguments.parsed.published ) ? arguments.parsed.published : now()
+		};
+	}
+
+	private string function verify( required struct row ){
+		var response = variables.http.get( arguments.row.source );
+		if ( response.status >= 500 || response.status == 429 ){
+			return retryOrFail( arguments.row, "Source answered #response.status#" );
+		}
+		if ( response.status == 404 || response.status == 410 ){
+			return removed( arguments.row, "Source is gone (#response.status#)" );
+		}
+		if ( response.status < 200 || response.status >= 300 ){
+			return removed( arguments.row, "Source answered #response.status#" );
+		}
+
+		var parsed = {};
+		if ( !len( response.contentType ) || reFind( "html|xml", response.contentType ) ){
+			parsed = variables.mf.parseResponse( response.bytes, response.url, arguments.row.target );
+		} else if ( reFind( "^text/|json", response.contentType ) ){
+			var text = charsetEncode( response.bytes, "utf-8" );
+			parsed = { "linksToTarget": text.find( arguments.row.target ) > 0, "type": "mention", "url": arguments.row.source,
+				"authorName": "", "authorUrl": "", "name": "", "summary": "", "contentHtml": "", "contentText": "", "published": "" };
+		} else {
+			return removed( arguments.row, "Source isn't HTML or text" );
+		}
+		if ( !parsed.linksToTarget ){
+			return removed( arguments.row, "Source doesn't link to the post" );
+		}
+
+		var mention   = toMention( parsed, arguments.row.source );
+		var commentId = arguments.row.comment_id ?: "";
+		if ( listFind( "reply,mention", parsed.type ) ){
+			if ( !len( commentId ) || !variables.commentService.updateWebmentionComment( commentId, mention ) ){
+				commentId = variables.commentService.createWebmentionComment( arguments.row.post_id, mention );
+			}
+		} else if ( len( commentId ) ){
+			variables.commentService.deleteRemoteComment( commentId );
+		}
+
+		queryExecute(
+			"UPDATE Webmention
+			SET status = 'verified', type = :type, author_name = :name, author_url = :author_url, comment_id = :comment_id,
+				error = NULL, attempts = 0, verified = CURRENT_TIMESTAMP(3)
+			WHERE id = :id",
+			{
+				"id"         : { value: arguments.row.id,                      sqltype: "varchar" },
+				"type"       : { value: parsed.type,                           sqltype: "varchar" },
+				"name"       : { value: left( mention.authorName, 255 ),       sqltype: "varchar" },
+				"author_url" : { value: left( mention.authorUrl, 512 ),        sqltype: "varchar" },
+				"comment_id" : { value: commentId,                             sqltype: "varchar", null: !len( commentId ) }
+			}
+		);
+		return "verified";
+	}
+
+	// The source no longer supports this mention. One that was showing is taken down.
+	private string function removed( required struct row, required string reason ){
+		var wasVerified = isDate( arguments.row.verified ?: "" );
+		if ( len( arguments.row.comment_id ?: "" ) ){
+			variables.commentService.deleteRemoteComment( arguments.row.comment_id );
+		}
+		queryExecute(
+			"UPDATE Webmention SET status = :status, error = :error WHERE id = :id",
+			{
+				"id"     : { value: arguments.row.id,                          sqltype: "varchar" },
+				"status" : { value: wasVerified ? "deleted" : "invalid",       sqltype: "varchar" },
+				"error"  : { value: left( arguments.reason, 255 ),             sqltype: "varchar" }
+			}
+		);
+		return wasVerified ? "deleted" : "invalid";
+	}
+
+	// A fetch that might work later stays queued, up to MAX_ATTEMPTS.
+	private string function retryOrFail( required struct row, required string reason ){
+		if ( arguments.row.attempts + 1 >= variables.MAX_ATTEMPTS ){
+			queryExecute(
+				"UPDATE Webmention SET status = :status, attempts = attempts + 1, error = :error WHERE id = :id",
+				{
+					"id"     : { value: arguments.row.id,                                          sqltype: "varchar" },
+					"status" : { value: isDate( arguments.row.verified ?: "" ) ? "verified" : "invalid", sqltype: "varchar" },
+					"error"  : { value: left( arguments.reason, 255 ),                             sqltype: "varchar" }
+				}
+			);
+			return "invalid";
+		}
+		queryExecute(
+			"UPDATE Webmention SET attempts = attempts + 1, error = :error, received = CURRENT_TIMESTAMP(3) WHERE id = :id",
+			{
+				"id"    : { value: arguments.row.id,                sqltype: "varchar" },
+				"error" : { value: left( arguments.reason, 255 ),   sqltype: "varchar" }
+			}
+		);
+		return "retry";
+	}
+
+	private string function hostOf( required string address ){
+		return lCase( reReplace( arguments.address, "^https?://(?:[^@/]*@)?([^/:?##]+).*$|^.*$", "\1" ) );
+	}
+
+}

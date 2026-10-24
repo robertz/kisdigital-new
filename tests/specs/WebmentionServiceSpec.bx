@@ -1,0 +1,96 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "WebmentionService", function(){
+
+			beforeEach( function(){
+				// Only checkRequest()'s last step looks a post up; a stub keeps it off the database.
+				var postStub = {
+					getPostBySlug: ( slug, publishedOnly ) => {
+						return {
+							exists     : () => slug == "hello",
+							getPostUrl : () => "/posts/2026/10/hello",
+							getId      : () => "post-1"
+						}
+					}
+				}
+				variables.service = new models.services.WebmentionService(
+					"https://kisdigital.com",
+					postStub,
+					{},
+					new models.util.SafeHttp(),
+					new models.util.Microformats()
+				)
+			} )
+
+			describe( "checkRequest()", function(){
+
+				it( "accepts a post on this site, with or without www and a trailing slash", function(){
+					var ok = service.checkRequest( "https://jane.example/n/1", "https://kisdigital.com/posts/2026/10/hello" )
+					expect( ok.ok ).toBeTrue()
+					expect( ok.postId ).toBe( "post-1" )
+					expect( service.checkRequest( "https://jane.example/n/1", "https://www.kisdigital.com/posts/2026/10/hello/" ).ok ).toBeTrue()
+				} )
+
+				it( "rejects missing, non-http and identical URLs", function(){
+					expect( service.checkRequest( "", "https://kisdigital.com/posts/2026/10/hello" ).ok ).toBeFalse()
+					expect( service.checkRequest( "ftp://x.example/a", "https://kisdigital.com/posts/2026/10/hello" ).ok ).toBeFalse()
+					expect( service.checkRequest( "https://kisdigital.com/posts/2026/10/hello", "https://kisdigital.com/posts/2026/10/hello/" ).ok ).toBeFalse()
+				} )
+
+				it( "rejects targets that aren't a post here", function(){
+					expect( service.checkRequest( "https://a.example/", "https://other.example/posts/2026/10/hello" ).ok ).toBeFalse()
+					expect( service.checkRequest( "https://a.example/", "https://kisdigital.com/about" ).ok ).toBeFalse()
+					expect( service.checkRequest( "https://a.example/", "https://kisdigital.com/posts/2026/10/missing" ).ok ).toBeFalse()
+					// Right slug under the wrong date isn't the post's address.
+					expect( service.checkRequest( "https://a.example/", "https://kisdigital.com/posts/2025/01/hello" ).ok ).toBeFalse()
+				} )
+
+			} )
+
+			describe( "toMention()", function(){
+
+				var parsed = ( overrides = {} ) => {
+					var base = { linksToTarget: true, type: "reply", url: "https://jane.example/n/1", authorName: "Jane",
+						authorUrl: "https://jane.example/", name: "", summary: "", contentHtml: "<p>hi</p>", contentText: "hi", published: "" }
+					return base.append( overrides )
+				}
+
+				it( "trusts the claimed author only when they're on the source's own site", function(){
+					var own = service.toMention( parsed(), "https://jane.example/n/1" )
+					expect( own.actorUrl ).toBe( "https://jane.example/" )
+					expect( own.authorHandle ).toBe( "jane.example" )
+					expect( own.html ).toBe( "<p>hi</p>" )
+					var claimed = service.toMention( parsed( { authorUrl: "https://famous.example/" } ), "https://spam.example/p" )
+					expect( claimed.actorUrl ).toBe( "https://spam.example" )
+				} )
+
+				it( "takes Bridgy's word for the author", function(){
+					var bridged = service.toMention( parsed( { authorUrl: "https://bsky.app/profile/jane.bsky.social" } ), "https://brid.gy/comment/bluesky/x/y" )
+					expect( bridged.actorUrl ).toBe( "https://bsky.app/profile/jane.bsky.social" )
+				} )
+
+				it( "turns a mention into an escaped excerpt", function(){
+					var m = service.toMention( parsed( { type: "mention", contentHtml: "<p>long</p>", contentText: "read <this>" } ), "https://a.example/p" )
+					expect( m.html ).toBe( "<p>" & encodeForHTML( "Mentioned this post: read <this>" ) & "</p>" )
+				} )
+
+				it( "shortens a very long reply to a plain-text excerpt", function(){
+					var m = service.toMention( parsed( { contentText: repeatString( "word ", 400 ) } ), "https://jane.example/n/1" )
+					expect( m.html ).notToInclude( "<p>hi</p>" )
+					expect( len( m.html ) ).toBeLT( 400 )
+				} )
+
+				it( "falls back to the source host for a nameless author, and now for a missing date", function(){
+					var m = service.toMention( parsed( { authorName: "", authorUrl: "" } ), "https://quiet.example/p" )
+					expect( m.authorName ).toBe( "quiet.example" )
+					expect( m.authorUrl ).toBe( "https://quiet.example" )
+					expect( isDate( m.published ) ).toBeTrue()
+				} )
+
+			} )
+
+		} )
+	}
+
+}

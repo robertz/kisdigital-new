@@ -10,14 +10,17 @@ class {
 	variables.commentService = "";
 
 	// activityPub is bx-activitypub's facade, or null when federation is off (app.bxs);
-	// it only supplies like/boost counts for the post page.
-	function init( required postService, required postRenderer, required siteDefaults, required commentService, any activityPub ){
+	// it only supplies like/boost counts for the post page. webmentionService is
+	// null when webmentions are off; with it, post pages advertise the endpoint and
+	// count the web's likes and reposts too.
+	function init( required postService, required postRenderer, required siteDefaults, required commentService, any activityPub, any webmentionService ){
 		variables.postService    = arguments.postService;
 		variables.postRenderer   = arguments.postRenderer;
 		variables.siteDefaults   = arguments.siteDefaults;
 		variables.botDetector    = new models.util.BotDetector();
 		variables.commentService = arguments.commentService;
 		variables.activityPub    = arguments.activityPub ?: javacast( "null", "" );
+		variables.webmentionService = arguments.webmentionService ?: javacast( "null", "" );
 
 		this.router = boxExpressRouter();
 		// Needed so show() can render a comment form's CSRF field — the
@@ -131,6 +134,11 @@ class {
 
 		var flash = flashConsume( req );
 
+		var webmentionEndpoint = isNull( variables.webmentionService ) ? "" : variables.webmentionService.endpointUrl();
+		if ( len( webmentionEndpoint ) ){
+			res.set( "Link", "<#webmentionEndpoint#>; rel=""webmention""" );
+		}
+
 		res.render( "posts/show", {
 			pageTitle     : post.getTitle(),
 			canonicalUrl  : canonicalUrl,
@@ -149,6 +157,8 @@ class {
 			commentThread : variables.commentService.getCommentThread( post.getId() ),
 			commentCount  : variables.commentService.getCommentCount( post.getId() ),
 			reactions     : _reactionCounts( post.getId() ),
+			webmentionEndpoint : webmentionEndpoint,
+			siteHomeUrl   : variables.siteDefaults.canonicalUrl( "/" ),
 			commentError  : flash.commentError ?: "",
 			commentNotice : flash.commentNotice ?: "",
 			currentUser   : _currentUser( req ),
@@ -217,17 +227,29 @@ class {
 		} );
 	}
 
-	// Likes and boosts from the fediverse. Never lets a federation problem break the page.
+	// Likes and boosts from the fediverse, plus likes and reposts sent by
+	// webmention (counted as boosts). Never lets either break the page.
 	private struct function _reactionCounts( required string postId ){
-		if ( isNull( variables.activityPub ) ){
-			return { "likes": 0, "boosts": 0 };
+		var counts = { "likes": 0, "boosts": 0 };
+		if ( !isNull( variables.activityPub ) ){
+			try {
+				var fediverse = variables.activityPub.reactionCounts( "post", arguments.postId );
+				counts.likes  += fediverse.likes;
+				counts.boosts += fediverse.boosts;
+			} catch ( any e ){
+				println( "[activitypub] reaction counts failed for #arguments.postId#: #e.message#" );
+			}
 		}
-		try {
-			return variables.activityPub.reactionCounts( "post", arguments.postId );
-		} catch ( any e ){
-			println( "[activitypub] reaction counts failed for #arguments.postId#: #e.message#" );
-			return { "likes": 0, "boosts": 0 };
+		if ( !isNull( variables.webmentionService ) ){
+			try {
+				var web = variables.webmentionService.reactionCounts( arguments.postId );
+				counts.likes  += web.likes;
+				counts.boosts += web.reposts;
+			} catch ( any e ){
+				println( "[webmention] reaction counts failed for #arguments.postId#: #e.message#" );
+			}
 		}
+		return counts;
 	}
 
 }

@@ -1,0 +1,173 @@
+/**
+ * Sends webmentions: tells each page a post links to that it was linked, the
+ * same way other sites tell us (WebmentionService.bx). Scheduled from app.bxs,
+ * like ActivityPubSweep, and off unless WEBMENTION_SEND_SINCE is set: posts
+ * published before that date never send on their own, so turning this on
+ * doesn't ping every page the archive ever linked to.
+ *
+ * WebmentionSendState remembers, per post, the version last sent and the links
+ * it named. A run handles
+ *   - public posts that are new or changed since then: every link in the body,
+ *     plus any the last version had and this one dropped (their pages re-check
+ *     and find the link gone);
+ *   - posts that were sent but are no longer public, or no longer exist: each
+ *     page they named is told once, so it can take the mention down.
+ *
+ * Only links in the post body count, not the site's navigation or share
+ * buttons, and never links to this site. A page with no endpoint is skipped. A
+ * network error or 5xx leaves the post to be tried again on the next run, up to
+ * MAX_ATTEMPTS; receivers treat a repeat as an update, so resending is harmless.
+ */
+class {
+
+	variables.MAX_ATTEMPTS = 3;
+	variables.MAX_LINKS    = 50;
+
+	function init( required string siteUrl, required date since, required postService, required postRenderer, required http, required microformats ){
+		variables.siteUrl      = reReplace( arguments.siteUrl, "/+$", "" );
+		variables.siteHost     = authorityOf( variables.siteUrl );
+		variables.since        = arguments.since;
+		variables.postService  = arguments.postService;
+		variables.postRenderer = arguments.postRenderer;
+		variables.http         = arguments.http;
+		variables.mf           = arguments.microformats;
+		return this;
+	}
+
+	/**
+	 * Handles up to `limit` posts. Returns a count per send outcome, for logging.
+	 */
+	struct function run( numeric limit = 5 ){
+		var counts = { "sent": 0, "none": 0, "rejected": 0, "failed": 0 };
+		var rows = queryExecute(
+			"SELECT P.id, P.last_updated, S.post_id AS state_id, S.links, S.attempts, S.source_url,
+				(P.status = 'published' AND P.publish_date <= NOW()) AS is_public
+			FROM Post P
+			LEFT JOIN WebmentionSendState S ON S.post_id = P.id
+			WHERE ( P.status = 'published' AND P.publish_date <= NOW() AND P.publish_date >= :since
+					AND ( S.post_id IS NULL OR NOT ( S.post_updated <=> P.last_updated ) ) )
+				OR ( S.post_id IS NOT NULL AND NOT ( P.status = 'published' AND P.publish_date <= NOW() ) AND S.links <> '[]' )
+			ORDER BY P.last_updated
+			LIMIT :lim",
+			{
+				"since" : { value: variables.since,   sqltype: "timestamp" },
+				"lim"   : { value: arguments.limit,   sqltype: "integer" }
+			},
+			{ returnType: "array" }
+		);
+		for ( var row in rows ){
+			try {
+				syncPost( row, counts );
+			} catch ( any e ){
+				writeLog( text = "send: post #row.id# failed: #e.message#", type = "error", log = "webmention" );
+			}
+		}
+
+		var gone = queryExecute(
+			"SELECT S.post_id, S.source_url, S.links
+			FROM WebmentionSendState S
+			LEFT JOIN Post P ON P.id = S.post_id
+			WHERE P.id IS NULL
+			LIMIT :lim",
+			{ "lim": { value: arguments.limit, sqltype: "integer" } },
+			{ returnType: "array" }
+		);
+		for ( var row in gone ){
+			for ( var target in jsonDeserialize( row.links ) ){
+				counts[ send( row.source_url, target ) ]++;
+			}
+			queryExecute( "DELETE FROM WebmentionSendState WHERE post_id = :id", { "id": { value: row.post_id, sqltype: "varchar" } } );
+		}
+
+		if ( counts.sent + counts.rejected + counts.failed > 0 ){
+			writeLog( text = "sent: #jsonSerialize( counts )#", type = "information", log = "webmention" );
+		}
+		return counts;
+	}
+
+	/**
+	 * The external links in a post body, as webmention targets.
+	 */
+	array function targetsFor( required string bodyHtml ){
+		var targets = [];
+		for ( var link in variables.mf.links( arguments.bodyHtml, variables.siteUrl ) ){
+			var host = authorityOf( link );
+			if ( host != variables.siteHost && host != "www." & variables.siteHost ){
+				targets.append( link );
+			}
+			if ( targets.len() == variables.MAX_LINKS ) break;
+		}
+		return targets;
+	}
+
+	/**
+	 * Notifies one target: discover its endpoint, then POST source and target.
+	 *
+	 * @return {string} sent, none (no endpoint, or not a public page), rejected
+	 *         (the endpoint said no) or failed (worth retrying).
+	 */
+	string function send( required string source, required string target ){
+		try {
+			var page = variables.http.get( arguments.target );
+			if ( page.status >= 500 || page.status == 429 ) return "failed";
+			if ( page.status >= 400 ) return "none";
+			var html     = reFind( "html|xml", page.contentType ) || !len( page.contentType ) ? page.bytes : "";
+			var endpoint = variables.mf.discoverEndpoint( page.links, html, page.url );
+			if ( !len( endpoint ) ) return "none";
+			var status = variables.http.postForm( endpoint, { "source": arguments.source, "target": arguments.target } );
+		} catch ( SafeHttp.Blocked e ){
+			return "none";
+		} catch ( SafeHttp.Failed e ){
+			return "failed";
+		}
+		if ( status >= 200 && status < 300 ) return "sent";
+		if ( status >= 500 || status == 429 ) return "failed";
+		writeLog( text = "send: #arguments.target# rejected the webmention (#status#)", type = "warning", log = "webmention" );
+		return "rejected";
+	}
+
+	// host[:port], lower-cased, so another port on localhost isn't mistaken for this site.
+	private string function authorityOf( required string address ){
+		return lCase( reReplace( arguments.address, "^https?://(?:[^@/]*@)?([^/?##]+).*$", "\1" ) );
+	}
+
+	private void function syncPost( required struct row, required struct counts ){
+		var previous = len( arguments.row.links ?: "" ) ? jsonDeserialize( arguments.row.links ) : [];
+		var current  = [];
+		var source   = arguments.row.source_url ?: "";
+		if ( arguments.row.is_public ){
+			var post = variables.postService.getPostById( arguments.row.id );
+			source  = variables.siteUrl & post.getPostUrl();
+			current = targetsFor( variables.postRenderer.render( post.getBody() ) );
+		}
+
+		var targets = duplicate( current );
+		for ( var link in previous ){
+			if ( !targets.findNoCase( link ) ) targets.append( link );
+		}
+		var failed = false;
+		for ( var target in targets ){
+			var outcome = send( source, target );
+			arguments.counts[ outcome ]++;
+			failed = failed || outcome == "failed";
+		}
+
+		var attempts = val( arguments.row.attempts ?: 0 ) + 1;
+		var retry    = failed && attempts < variables.MAX_ATTEMPTS;
+		queryExecute(
+			"INSERT INTO WebmentionSendState (post_id, source_url, post_updated, links, attempts, last_run)
+			VALUES (:id, :source, :updated, :links, :attempts, NOW())
+			ON DUPLICATE KEY UPDATE source_url = VALUES(source_url), post_updated = VALUES(post_updated),
+				links = VALUES(links), attempts = VALUES(attempts), last_run = NOW()",
+			{
+				"id"       : { value: arguments.row.id,                                   sqltype: "varchar" },
+				"source"   : { value: source,                                             sqltype: "varchar" },
+				// A post left to retry keeps its old version, so the next run picks it up again.
+				"updated"  : { value: arguments.row.last_updated,                         sqltype: "timestamp", null: retry || !isDate( arguments.row.last_updated ?: "" ) },
+				"links"    : { value: jsonSerialize( retry ? targets : current ),         sqltype: "longvarchar" },
+				"attempts" : { value: retry ? attempts : 0,                               sqltype: "integer" }
+			}
+		);
+	}
+
+}

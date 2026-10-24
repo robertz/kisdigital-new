@@ -229,10 +229,53 @@ if ( getSystemSetting( "ACTIVITYPUB_ENABLED", "false" ) == "true" ){
 	}
 }
 
+// ── Webmention ───────────────────────────────────────────────────────────
+// Receives webmentions at POST /webmention (routes/Webmention.bx), checked in
+// the background by WebmentionService: replies and mentions become comments
+// (moderated like fediverse replies), likes and reposts are counted. Off
+// unless WEBMENTION_ENABLED=true, since it needs db/migrations/0027. Sending
+// (WebmentionSender) is off until WEBMENTION_SEND_SINCE is set to a date, its
+// cutoff, for the same reason as ACTIVITYPUB_SINCE: switching it on never
+// pings every page the archive links to. In development, fetches may reach
+// localhost; in production only public addresses (see SafeHttp.bx).
+if ( getSystemSetting( "WEBMENTION_ENABLED", "false" ) == "true" ){
+	webmentionHttp = new models.util.SafeHttp(
+		allowPrivateHosts = app.getSetting( "env" ) == "development",
+		userAgent         = "KISDigital Webmention (+#siteDefaults.canonicalUrl( "/" )#)"
+	)
+	microformats      = new models.util.Microformats()
+	webmentionService = new models.services.WebmentionService(
+		getSystemSetting( "SITEURL", "https://kisdigital.com" ),
+		postService,
+		commentService,
+		webmentionHttp,
+		microformats
+	)
+	app.schedule( 60 * 1000, () => webmentionService.processQueue(), { name: "webmention-receive" } )
+
+	webmentionSince = getSystemSetting( "WEBMENTION_SEND_SINCE", "" )
+	if ( isDate( webmentionSince ) ){
+		webmentionSender = new models.services.WebmentionSender(
+			getSystemSetting( "SITEURL", "https://kisdigital.com" ),
+			parseDateTime( webmentionSince ),
+			postService,
+			postRenderer,
+			webmentionHttp,
+			microformats
+		)
+		app.schedule( 5 * 60 * 1000, () => webmentionSender.run(), { name: "webmention-send" } )
+	} else {
+		println( "[webmention] WEBMENTION_SEND_SINCE is not set to a date; receiving only, nothing is sent" )
+	}
+}
+
 // ── Routes ───────────────────────────────────────────────────────────────
+if ( !isNull( variables.webmentionService ) ){
+	app.use( new routes.Webmention( webmentionService ).router )
+}
 app.use( new routes.Auth( authService, googleOAuthClient ).router )
 app.use( new routes.Main( postService, authorService, siteDefaults ).router )
-app.use( new routes.Posts( postService, postRenderer, siteDefaults, commentService, variables.activityPub ?: javacast( "null", "" ) ).router )
+app.use( new routes.Posts( postService, postRenderer, siteDefaults, commentService, variables.activityPub ?: javacast( "null", "" ), variables.webmentionService ?: javacast( "null", "" ) ).router )
 app.use( new routes.Comments( commentService ).router )
 app.use( new routes.Tags( postService, siteDefaults ).router )
 app.use( new routes.Feeds( sitemapService ).router )

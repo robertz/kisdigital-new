@@ -1,0 +1,135 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "Microformats", function(){
+
+			beforeEach( function(){
+				variables.mf     = new models.util.Microformats()
+				variables.target = "https://kisdigital.com/posts/2026/10/hello"
+			} )
+
+			describe( "parseResponse()", function(){
+
+				it( "reads a reply: type, author h-card, content and published date", function(){
+					var html = '<html><body><article class="h-entry">
+						<a class="p-author h-card" href="https://jane.example/"><img class="u-photo" src="/me.jpg"> <span class="p-name">Jane Doe</span></a>
+						<p>In reply to <a class="u-in-reply-to" href="https://kisdigital.com/posts/2026/10/hello/">Hello</a></p>
+						<div class="e-content"><p>Great post, <strong>thanks</strong>!</p></div>
+						<a class="u-url" href="/notes/1"><time class="dt-published" datetime="2026-10-20T12:30:00Z">Oct 20</time></a>
+					</article></body></html>'
+					var r = mf.parseResponse( html, "https://jane.example/notes/1", target )
+					expect( r.linksToTarget ).toBeTrue()
+					expect( r.type ).toBe( "reply" )
+					expect( r.authorName ).toBe( "Jane Doe" )
+					expect( r.authorUrl ).toBe( "https://jane.example/" )
+					expect( r.contentHtml ).toBe( "<p>Great post, <strong>thanks</strong>!</p>" )
+					expect( r.contentText ).toBe( "Great post, thanks!" )
+					expect( r.url ).toBe( "https://jane.example/notes/1" )
+					expect( dateTimeFormat( r.published, "yyyy-mm-dd HH:nn", "UTC" ) ).toBe( "2026-10-20 12:30" )
+				} )
+
+				it( "reads likes and reposts, including an h-cite in-reply-to", function(){
+					var like = mf.parseResponse( '<div class="h-entry"><a class="u-like-of" href="#target#">liked</a></div>', "https://a.example/l", target )
+					expect( like.type ).toBe( "like" )
+					var repost = mf.parseResponse( '<div class="h-entry"><a class="u-repost-of" href="#target#">x</a></div>', "https://a.example/r", target )
+					expect( repost.type ).toBe( "repost" )
+					var cite = mf.parseResponse( '<div class="h-entry"><div class="u-in-reply-to h-cite"><a class="u-url" href="#target#">Hello</a></div><p class="e-content">yes</p></div>', "https://a.example/c", target )
+					expect( cite.type ).toBe( "reply" )
+				} )
+
+				it( "doesn't take a nested h-cite's properties as the entry's own", function(){
+					var r = mf.parseResponse( '<div class="h-entry"><div class="u-in-reply-to h-cite"><span class="p-author">Rob</span><a class="u-url" href="#target#">x</a><div class="e-content">quoted</div></div><span class="p-author">Ann</span><div class="e-content">mine</div></div>', "https://a.example/c", target )
+					expect( r.authorName ).toBe( "Ann" )
+					expect( r.contentText ).toBe( "mine" )
+				} )
+
+				it( "is a plain mention when the link isn't a typed property", function(){
+					var r = mf.parseResponse( '<div class="h-entry"><p class="p-name">My week</p><div class="e-content">read <a href="#target#">this</a></div></div>', "https://a.example/w", target )
+					expect( r.type ).toBe( "mention" )
+					expect( r.name ).toBe( "My week" )
+				} )
+
+				it( "uses the h-entry that links to the target on a page with several", function(){
+					var r = mf.parseResponse( '<div class="h-entry"><div class="e-content">other</div></div><div class="h-entry"><a class="u-in-reply-to" href="#target#">x</a><div class="e-content">this one</div></div>', "https://a.example/feed", target )
+					expect( r.type ).toBe( "reply" )
+					expect( r.contentText ).toBe( "this one" )
+				} )
+
+				it( "reports no link when the page doesn't link to the target", function(){
+					var r = mf.parseResponse( '<div class="h-entry"><a class="u-in-reply-to" href="https://kisdigital.com/posts/2026/10/other">x</a></div>', "https://a.example/x", target )
+					expect( r.linksToTarget ).toBeFalse()
+				} )
+
+				it( "finds a relative link and reads bytes", function(){
+					var html = '<html><head><meta charset="utf-8"></head><body><a href="/posts/2026/10/hello">café</a></body></html>'
+					var r = mf.parseResponse( charsetDecode( html, "utf-8" ), "https://kisdigital.com/elsewhere", target )
+					expect( r.linksToTarget ).toBeTrue()
+					expect( r.type ).toBe( "mention" )
+				} )
+
+			} )
+
+			describe( "discoverEndpoint()", function(){
+
+				it( "prefers the Link header, resolving it against the page", function(){
+					expect( mf.discoverEndpoint( [ '<https://x.example/other>; rel="me", </wm>; rel="webmention"' ], '<link rel="webmention" href="/html">', "https://x.example/post" ) ).toBe( "https://x.example/wm" )
+					expect( mf.discoverEndpoint( [ '</wm2>; rel=webmention' ], "", "https://x.example/post" ) ).toBe( "https://x.example/wm2" )
+				} )
+
+				it( "falls back to the first <link> or <a> in the page, with an empty href meaning the page", function(){
+					expect( mf.discoverEndpoint( [], '<head><link rel="stylesheet" href="/s.css"><link rel="Webmention other" href="/endpoint"></head>', "https://x.example/p" ) ).toBe( "https://x.example/endpoint" )
+					expect( mf.discoverEndpoint( [], '<a rel="webmention" href="">here</a>', "https://x.example/p?q=1" ) ).toBe( "https://x.example/p?q=1" )
+					expect( mf.discoverEndpoint( [ '</x>; rel="nofollow"' ], "<p>none</p>", "https://x.example/p" ) ).toBe( "" )
+				} )
+
+			} )
+
+			describe( "links()", function(){
+
+				it( "returns absolute http(s) links once each, without fragments", function(){
+					var found = mf.links( '<p><a href="https://a.example/1##top">a</a> <a href="/local">b</a> <a href="mailto:x@y">c</a> <a href="https://a.example/1">d</a></p>', "https://kisdigital.com" )
+					expect( found ).toBe( [ "https://a.example/1", "https://kisdigital.com/local" ] )
+				} )
+
+			} )
+
+			describe( "normalizeUrl()", function(){
+
+				it( "ignores scheme/host case, fragments and trailing slashes, but not path case", function(){
+					expect( mf.normalizeUrl( "HTTPS://KisDigital.com/posts/A/##c" ) ).toBe( "https://kisdigital.com/posts/A" )
+					expect( mf.normalizeUrl( "https://kisdigital.com" ) ).toBe( "https://kisdigital.com" )
+				} )
+
+			} )
+
+		} )
+
+		describe( "SafeHttp", function(){
+
+			beforeEach( function(){
+				variables.http = new models.util.SafeHttp()
+				variables.inet = createObject( "java", "java.net.InetAddress" )
+			} )
+
+			it( "treats loopback, private, link-local, CGNAT and unique-local addresses as not public", function(){
+				for ( var ip in [ "127.0.0.1", "10.1.2.3", "172.16.0.1", "192.168.1.1", "169.254.169.254", "100.64.0.1", "0.0.0.0", "::1", "fd00::1", "fe80::1" ] ){
+					expect( http.isPublicAddress( inet.getByName( ip ) ) ).toBeFalse( ip )
+				}
+			} )
+
+			it( "treats ordinary internet addresses as public", function(){
+				for ( var ip in [ "93.184.216.34", "1.1.1.1", "100.128.0.1", "2606:4700::1111" ] ){
+					expect( http.isPublicAddress( inet.getByName( ip ) ) ).toBeTrue( ip )
+				}
+			} )
+
+			it( "refuses non-http(s) and private URLs before connecting", function(){
+				expect( () => http.get( "file:///etc/passwd" ) ).toThrow( "SafeHttp.Blocked" )
+				expect( () => http.get( "http://127.0.0.1:3005/health" ) ).toThrow( "SafeHttp.Blocked" )
+				expect( () => http.postForm( "http://localhost/webmention", { source: "a" } ) ).toThrow( "SafeHttp.Blocked" )
+			} )
+
+		} )
+	}
+
+}

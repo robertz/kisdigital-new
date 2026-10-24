@@ -26,6 +26,10 @@
 <link rel="canonical" href="#encodeForHTMLAttribute( data.canonicalUrl )#">
 </bx:if>
 
+<bx:if len( data.webmentionEndpoint ?: "" )>
+<link rel="webmention" href="#encodeForHTMLAttribute( data.webmentionEndpoint )#">
+</bx:if>
+
 <bx:if structKeyExists( data, "meta" )>
 	<bx:loop collection="#data.meta#" item="metaName">
 		<bx:if len( trim( data.meta[ metaName ] ) )>

@@ -32,6 +32,7 @@ class {
 					"postUrl"    : comment.postUrl,
 					"isReply"    : comment.isReply ? true : false,
 					"isRemote"   : comment.isRemote ? true : false,
+					"remoteSource": comment.remoteSource,
 					"authorName" : comment.authorName ?: "",
 					"authorEmail": comment.authorEmail ?: "",
 					"remoteUrl"  : comment.remoteUrl,

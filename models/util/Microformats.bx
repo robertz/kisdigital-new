@@ -1,0 +1,240 @@
+/**
+ * Just enough microformats2 (https://microformats.org/wiki/microformats2) to
+ * read a webmention's source page: does it link to the target, what kind of
+ * response is it (reply, like, repost, bookmark or plain mention), who wrote
+ * it, what it says and when. Not a full mf2 parser — no implied properties
+ * beyond a name, no value-class pattern, no backcompat classes — which covers
+ * what blogs, Bridgy and the usual IndieWeb tools publish.
+ *
+ * Also finds a page's webmention endpoint, for sending.
+ */
+class {
+
+	// A response's type comes from the first of these that points at the target.
+	variables.TYPE_PROPERTIES = [
+		{ prop: "u-in-reply-to", type: "reply" },
+		{ prop: "u-repost-of",   type: "repost" },
+		{ prop: "u-like-of",     type: "like" },
+		{ prop: "u-bookmark-of", type: "bookmark" }
+	];
+
+	/**
+	 * @param {any}    html      - The page, as a string or as bytes (bytes let jsoup
+	 *        honour the page's own <meta charset>).
+	 * @param {string} sourceUrl - The page's URL, for resolving relative links.
+	 * @param {string} targetUrl - The URL it should link to.
+	 * @return {struct} { linksToTarget, type, url, authorName, authorUrl, name,
+	 *         summary, contentHtml, contentText, published (date or "") }
+	 */
+	struct function parseResponse( required any html, required string sourceUrl, required string targetUrl ){
+		var doc    = parse( arguments.html, arguments.sourceUrl );
+		var target = normalizeUrl( arguments.targetUrl );
+		var result = {
+			"linksToTarget" : false,
+			"type"          : "mention",
+			"url"           : arguments.sourceUrl,
+			"authorName"    : "",
+			"authorUrl"     : "",
+			"name"          : trim( doc.title() ),
+			"summary"       : "",
+			"contentHtml"   : "",
+			"contentText"   : "",
+			"published"     : ""
+		};
+
+		for ( var el in doc.select( "[href], [src]" ) ){
+			if ( normalizeUrl( el.absUrl( el.hasAttr( "href" ) ? "href" : "src" ) ) == target ){
+				result.linksToTarget = true;
+				break;
+			}
+		}
+		if ( !result.linksToTarget ){
+			return result;
+		}
+
+		var entry = pickEntry( doc, target );
+		if ( isNull( entry ) ){
+			return result;
+		}
+
+		for ( var typeProp in variables.TYPE_PROPERTIES ){
+			for ( var el in properties( entry, typeProp.prop ) ){
+				if ( normalizeUrl( urlValue( el ) ) == target ){
+					result.type = typeProp.type;
+					break;
+				}
+			}
+			if ( result.type != "mention" ){
+				break;
+			}
+		}
+
+		var entryUrls = properties( entry, "u-url" );
+		if ( entryUrls.len() && len( urlValue( entryUrls[ 1 ] ) ) ){
+			result.url = urlValue( entryUrls[ 1 ] );
+		}
+
+		var names = properties( entry, "p-name" );
+		result.name = names.len() ? collapse( names[ 1 ].text() ) : "";
+		var summaries = properties( entry, "p-summary" );
+		result.summary = summaries.len() ? collapse( summaries[ 1 ].text() ) : "";
+
+		var contents = properties( entry, "e-content" );
+		if ( contents.len() ){
+			result.contentHtml = trim( contents[ 1 ].html() );
+			result.contentText = collapse( contents[ 1 ].text() );
+		}
+
+		var published = properties( entry, "dt-published" );
+		if ( published.len() ){
+			result.published = parseDate( published[ 1 ].hasAttr( "datetime" ) ? published[ 1 ].attr( "datetime" ) : published[ 1 ].text() );
+		}
+
+		var authors = properties( entry, "p-author" );
+		if ( authors.len() ){
+			var author = authors[ 1 ];
+			if ( isRoot( author ) ){
+				var cardNames = properties( author, "p-name" );
+				var cardUrls  = properties( author, "u-url" );
+				result.authorName = cardNames.len() ? collapse( cardNames[ 1 ].text() ) : collapse( author.text() );
+				result.authorUrl  = cardUrls.len() ? urlValue( cardUrls[ 1 ] ) : ( author.tagName() == "a" ? author.absUrl( "href" ) : "" );
+			} else {
+				result.authorName = collapse( author.text() );
+				result.authorUrl  = author.tagName() == "a" ? author.absUrl( "href" ) : "";
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * The page's webmention endpoint: a Link header with rel="webmention" first,
+	 * then the first <link> or <a> with that rel. An empty href means the page
+	 * itself. Returns "" when there's none.
+	 *
+	 * @param {array} linkHeaders - The response's Link header values.
+	 */
+	string function discoverEndpoint( required array linkHeaders, required any html, required string pageUrl ){
+		var base = createObject( "java", "java.net.URI" ).create( arguments.pageUrl );
+		for ( var header in arguments.linkHeaders ){
+			for ( var part in reMatch( "<[^>]*>[^,<]*", header ) ){
+				if ( reFindNoCase( "rel\s*=\s*(""[^""]*\bwebmention\b[^""]*""|webmention\b)", part ) ){
+					return base.resolve( trim( reReplace( part, "^<([^>]*)>.*$", "\1" ) ) ).toString();
+				}
+			}
+		}
+		var doc = parse( arguments.html, arguments.pageUrl );
+		var found = doc.select( "link[rel~=(?i)(^|\s)webmention(\s|$)][href], a[rel~=(?i)(^|\s)webmention(\s|$)][href]" );
+		if ( !found.size() ){
+			return "";
+		}
+		var el = found.get( 0 );
+		return len( trim( el.attr( "href" ) ) ) ? el.absUrl( "href" ) : arguments.pageUrl;
+	}
+
+	/**
+	 * Every absolute http(s) link in an HTML fragment, without fragments, in order, once each.
+	 */
+	array function links( required string html, required string baseUrl ){
+		var found = [];
+		for ( var el in parse( arguments.html, arguments.baseUrl ).select( "a[href]" ) ){
+			var href = reReplace( el.absUrl( "href" ), "##.*$", "" );
+			if ( reFindNoCase( "^https?://", href ) && !found.findNoCase( href ) ){
+				found.append( href );
+			}
+		}
+		return found;
+	}
+
+	/**
+	 * For comparing URLs: lower-case scheme and host, no fragment, no trailing slash.
+	 */
+	string function normalizeUrl( required string address ){
+		var value = reReplace( trim( arguments.address ), "##.*$", "" );
+		var parts = reFind( "^([a-zA-Z][a-zA-Z0-9+.-]*://[^/?]*)(.*)$", value, 1, true );
+		if ( parts.pos[ 1 ] == 0 ){
+			return value;
+		}
+		var rest = mid( value, parts.pos[ 3 ], parts.len[ 3 ] );
+		return lCase( mid( value, parts.pos[ 2 ], parts.len[ 2 ] ) ) & reReplace( rest, "/+$", "" );
+	}
+
+	private any function parse( required any html, required string baseUrl ){
+		var jsoup = createObject( "java", "org.jsoup.Jsoup", "bx-jsoup" );
+		if ( isSimpleValue( arguments.html ) ){
+			return jsoup.parse( arguments.html, arguments.baseUrl );
+		}
+		return jsoup.parse( createObject( "java", "java.io.ByteArrayInputStream" ).init( arguments.html ), javacast( "null", "" ), arguments.baseUrl );
+	}
+
+	// The h-entry that responds to the target: the first one containing a link to
+	// it, else the first one on the page.
+	private any function pickEntry( required any doc, required string target ){
+		var entries = arguments.doc.select( ".h-entry" );
+		for ( var entry in entries ){
+			for ( var el in entry.select( "[href], [src]" ) ){
+				if ( normalizeUrl( el.absUrl( el.hasAttr( "href" ) ? "href" : "src" ) ) == arguments.target ){
+					return entry;
+				}
+			}
+		}
+		return entries.size() ? entries.get( 0 ) : javacast( "null", "" );
+	}
+
+	// Elements carrying class `prop` within `root`, not looking inside nested
+	// microformats (though a nested one can itself be the property).
+	private array function properties( required any root, required string prop ){
+		var found = [];
+		collect( arguments.root, arguments.prop, found );
+		return found;
+	}
+
+	private void function collect( required any el, required string prop, required array found ){
+		for ( var child in arguments.el.children() ){
+			if ( child.hasClass( arguments.prop ) ){
+				arguments.found.append( child );
+			}
+			if ( !isRoot( child ) ){
+				collect( child, arguments.prop, arguments.found );
+			}
+		}
+	}
+
+	private boolean function isRoot( required any el ){
+		for ( var className in arguments.el.classNames() ){
+			if ( reFind( "^h-[a-z]", className ) ){
+				return true;
+			}
+		}
+		return false;
+	}
+
+	// A u-* property's URL: href/src, or a nested microformat's own u-url.
+	private string function urlValue( required any el ){
+		if ( arguments.el.hasAttr( "href" ) ){
+			return arguments.el.absUrl( "href" );
+		}
+		if ( arguments.el.hasAttr( "src" ) ){
+			return arguments.el.absUrl( "src" );
+		}
+		if ( isRoot( arguments.el ) ){
+			var urls = properties( arguments.el, "u-url" );
+			return urls.len() ? urlValue( urls[ 1 ] ) : "";
+		}
+		return trim( arguments.el.text() );
+	}
+
+	private string function collapse( required string text ){
+		return trim( reReplace( arguments.text, "\s+", " ", "all" ) );
+	}
+
+	private any function parseDate( required string value ){
+		try {
+			var instant = createObject( "java", "java.time.OffsetDateTime" ).parse( trim( arguments.value ) ).toInstant();
+			return createObject( "java", "java.util.Date" ).from( instant );
+		} catch ( any e ){
+			return isDate( arguments.value ) ? parseDateTime( arguments.value ) : "";
+		}
+	}
+
+}

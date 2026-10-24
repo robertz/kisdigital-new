@@ -1,0 +1,151 @@
+/**
+ * Outbound HTTP for URLs someone else chose: a webmention's source page, a
+ * linked page's webmention endpoint. Anyone can make this server fetch those,
+ * so every hop (redirects included) must resolve to a public address — never
+ * localhost, the private network, link-local (cloud metadata at
+ * 169.254.169.254) or the like. allowPrivateHosts turns that off for local
+ * development, where test pages are on localhost.
+ *
+ * The check resolves the host itself and HttpClient resolves it again when it
+ * connects, so a DNS answer that changes in between (rebinding) can slip past.
+ * Closing that needs connecting to the checked address directly, which
+ * HttpClient doesn't offer; the cap on what a fetch returns limits the damage.
+ *
+ * Responses are read up to maxBytes and no further, and redirects are followed
+ * by hand (at most 5) so each hop is checked.
+ */
+class {
+
+	function init( boolean allowPrivateHosts = false, numeric timeoutMs = 10000, numeric maxBytes = 1048576, string userAgent = "KISDigital Webmention" ){
+		variables.allowPrivateHosts = arguments.allowPrivateHosts;
+		variables.timeoutMs         = arguments.timeoutMs;
+		variables.maxBytes          = arguments.maxBytes;
+		variables.userAgent         = arguments.userAgent;
+		variables.client = createObject( "java", "java.net.http.HttpClient" ).newBuilder()
+			.followRedirects( createObject( "java", "java.net.http.HttpClient$Redirect" ).NEVER )
+			.connectTimeout( createObject( "java", "java.time.Duration" ).ofMillis( arguments.timeoutMs ) )
+			.build();
+		return this;
+	}
+
+	/**
+	 * @return {struct} { status, url (after redirects), contentType, links (Link
+	 *         header values), bytes (at most maxBytes) }
+	 * @throws {SafeHttp.Blocked} for a URL that isn't public http(s).
+	 * @throws {SafeHttp.Failed} for a network error or too many redirects.
+	 */
+	struct function get( required string address, string accept = "text/html, application/xhtml+xml;q=0.9, */*;q=0.1" ){
+		var current = arguments.address;
+		for ( var hop = 0; hop <= 5; hop++ ){
+			var uri      = checkUrl( current );
+			var httpRequest = createObject( "java", "java.net.http.HttpRequest" ).newBuilder( uri )
+				.timeout( createObject( "java", "java.time.Duration" ).ofMillis( variables.timeoutMs ) )
+				.header( "User-Agent", variables.userAgent )
+				.header( "Accept", arguments.accept )
+				.GET()
+				.build();
+			var response = send( httpRequest );
+			var status   = response.statusCode();
+			var location = response.headers().firstValue( "location" ).orElse( "" );
+			if ( listFind( "301,302,303,307,308", status ) && len( location ) ){
+				response.body().close();
+				current = uri.resolve( location.replace( " ", "%20", "all" ) ).toString();
+				continue;
+			}
+			var stream = response.body();
+			try {
+				var bytes = stream.readNBytes( variables.maxBytes );
+			} finally {
+				stream.close();
+			}
+			var links = [];
+			for ( var link in response.headers().allValues( "link" ) ){
+				links.append( link );
+			}
+			return {
+				"status"      : status,
+				"url"         : uri.toString(),
+				"contentType" : lCase( response.headers().firstValue( "content-type" ).orElse( "" ) ),
+				"links"       : links,
+				"bytes"       : bytes
+			};
+		}
+		throw( type = "SafeHttp.Failed", message = "Too many redirects" );
+	}
+
+	/**
+	 * POSTs fields form-encoded. Redirects aren't followed.
+	 *
+	 * @return {numeric} The response status.
+	 */
+	numeric function postForm( required string address, required struct fields ){
+		var uri        = checkUrl( arguments.address );
+		var formFields = arguments.fields;
+		var body       = formFields.keyArray().map( ( key ) => encodeForURL( key ) & "=" & encodeForURL( formFields[ key ] ) ).toList( "&" );
+		var httpRequest = createObject( "java", "java.net.http.HttpRequest" ).newBuilder( uri )
+			.timeout( createObject( "java", "java.time.Duration" ).ofMillis( variables.timeoutMs ) )
+			.header( "User-Agent", variables.userAgent )
+			.header( "Content-Type", "application/x-www-form-urlencoded" )
+			.POST( createObject( "java", "java.net.http.HttpRequest$BodyPublishers" ).ofString( body ) )
+			.build();
+		var response = send( httpRequest );
+		response.body().close();
+		return response.statusCode();
+	}
+
+	/**
+	 * Whether an address is on the public internet.
+	 */
+	boolean function isPublicAddress( required any address ){
+		if ( arguments.address.isAnyLocalAddress() || arguments.address.isLoopbackAddress()
+			|| arguments.address.isLinkLocalAddress() || arguments.address.isSiteLocalAddress()
+			|| arguments.address.isMulticastAddress() ){
+			return false;
+		}
+		var raw = arguments.address.getAddress();
+		var b0  = bitAnd( raw[ 1 ], 255 );
+		var b1  = bitAnd( raw[ 2 ], 255 );
+		if ( raw.len() == 4 ){
+			// 0/8, 100.64/10 (carrier-grade NAT), 192.0.0/24, 198.18/15 (benchmarking), 240/4 (reserved)
+			return !( b0 == 0 || ( b0 == 100 && b1 >= 64 && b1 <= 127 ) || ( b0 == 192 && b1 == 0 && bitAnd( raw[ 3 ], 255 ) == 0 )
+				|| ( b0 == 198 && ( b1 == 18 || b1 == 19 ) ) || b0 >= 240 );
+		}
+		// fc00::/7 (unique local)
+		return bitAnd( b0, 254 ) != 252;
+	}
+
+	private any function checkUrl( required string address ){
+		try {
+			var uri = createObject( "java", "java.net.URI" ).create( trim( arguments.address ) );
+		} catch ( any e ){
+			throw( type = "SafeHttp.Blocked", message = "Not a valid URL" );
+		}
+		var scheme = lCase( uri.getScheme() ?: "" );
+		var host   = uri.getHost() ?: "";
+		if ( !listFind( "http,https", scheme ) || !len( host ) ){
+			throw( type = "SafeHttp.Blocked", message = "Not an http(s) URL" );
+		}
+		if ( !variables.allowPrivateHosts ){
+			try {
+				var addresses = createObject( "java", "java.net.InetAddress" ).getAllByName( host );
+			} catch ( any e ){
+				throw( type = "SafeHttp.Failed", message = "Can't resolve #host#" );
+			}
+			for ( var address in addresses ){
+				if ( !isPublicAddress( address ) ){
+					throw( type = "SafeHttp.Blocked", message = "#host# isn't a public address" );
+				}
+			}
+		}
+		return uri;
+	}
+
+	private any function send( required any httpRequest ){
+		try {
+			return variables.client.send( arguments.httpRequest, createObject( "java", "java.net.http.HttpResponse$BodyHandlers" ).ofInputStream() );
+		} catch ( any e ){
+			throw( type = "SafeHttp.Failed", message = e.message );
+		}
+	}
+
+}

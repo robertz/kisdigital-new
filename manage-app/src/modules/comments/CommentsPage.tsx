@@ -30,6 +30,7 @@ interface Comment {
 	postUrl: string;
 	isReply: boolean;
 	isRemote: boolean;
+	remoteSource: "" | "activitypub" | "webmention";
 	authorName: string;
 	authorEmail: string;
 	remoteUrl: string;
@@ -61,7 +62,7 @@ function CommentRow({ comment, onApprove, onDelete, busy }: { comment: Comment; 
 					{comment.isPending && <Chip size="small" color="warning" variant="outlined" label="Pending" />}
 					{comment.isDeleted && <Chip size="small" variant="outlined" label="Deleted" />}
 					{comment.isRemote && (
-						<Tooltip title="Reply from the fediverse">
+						<Tooltip title={comment.remoteSource === "webmention" ? "Webmention from another site" : "Reply from the fediverse"}>
 							<Public fontSize="small" color="action" />
 						</Tooltip>
 					)}
@@ -102,7 +103,9 @@ function CommentRow({ comment, onApprove, onDelete, busy }: { comment: Comment; 
 					<Tooltip
 						title={
 							comment.isRemote
-								? "Approve (and trust this account from now on)"
+								? comment.remoteSource === "webmention"
+									? "Approve (and trust this site from now on)"
+									: "Approve (and trust this account from now on)"
 								: "Approve (and send it to the fediverse as the blog)"
 						}
 					>
@@ -175,7 +178,8 @@ function Comments() {
 			<Alert severity="info" sx={{ mb: 2 }}>
 				Replies from the fediverse wait as pending until you approve one from that account; after that, the account's
 				replies publish immediately. Replies by anyone else in a fediverse thread also wait here, and go out to the
-				fediverse as the blog's account once approved.
+				fediverse as the blog's account once approved. Webmentions (replies and mentions from other sites) work the same
+				way, trusted per site.
 			</Alert>
 
 			<Stack spacing={2} sx={{ mb: 2 }}>

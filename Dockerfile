@@ -83,7 +83,7 @@ RUN rm -rf /app/* /app/.[!.]*
 # BOXLANG_MODULES also maps onto the "modules" key directly ("not a JSON
 # Object, ignoring it"). Both are only needed by install-bx-module below, and
 # ARGs are visible to RUN without reaching the running container.
-ARG BOXLANG_MODULES=boxlang-express,bx-mysql,bx-markdown,bx-password-encrypt,bx-esapi,bx-compat-cfml,bx-activitypub
+ARG BOXLANG_MODULES=boxlang-express,bx-mysql,bx-markdown,bx-password-encrypt,bx-esapi,bx-compat-cfml,bx-activitypub,bx-jsoup
 
 # install-bx-module always resolves "latest" from ForgeBox, but this RUN
 # line's own content never changes — so both local Docker and DigitalOcean
@@ -95,7 +95,7 @@ ARG BOXLANG_MODULES=boxlang-express,bx-mysql,bx-markdown,bx-password-encrypt,bx-
 # that cache — change it any time a module needs a guaranteed fresh pull
 # (e.g. right after publishing a fix to ForgeBox), not just when chasing a
 # stale build.
-ARG MODULE_CACHE_BUST=2026-10-02-boxlang-express-0.2.20
+ARG MODULE_CACHE_BUST=2026-10-24-bx-jsoup
 RUN install-bx-module "$BOXLANG_MODULES" --local
 
 # BoxLang picks up .boxlang.json from the directory it's run in (WORKDIR

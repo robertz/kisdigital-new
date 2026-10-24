@@ -1,0 +1,30 @@
+/**
+ * POST /webmention — this site's webmention endpoint, advertised on every post
+ * page (a Link header and <link rel="webmention">, see routes/Posts.bx). Only
+ * checks and queues the request; WebmentionService.processQueue() fetches the
+ * source later. No CSRF token: other sites call this, by design.
+ */
+class {
+
+	function init( required webmentionService ){
+		variables.webmentionService = arguments.webmentionService;
+
+		this.router = boxExpressRouter();
+		this.router.post(
+			"/webmention",
+			boxExpressRateLimit( { windowMs: 15 * 60000, max: 60 } ),
+			( req, res ) => receive( req, res )
+		);
+		this.router.get( "/webmention", ( req, res ) => {
+			res.type( "text/plain" ).send( "This is a webmention endpoint (https://www.w3.org/TR/webmention/). POST source and target to it." );
+		} );
+
+		return this;
+	}
+
+	function receive( req, res ){
+		var result = variables.webmentionService.receive( req.body.source ?: "", req.body.target ?: "" );
+		res.status( result.status ).type( "text/plain" ).send( result.message );
+	}
+
+}

@@ -20,6 +20,11 @@
  * basic formatting and links (rel="nofollow") survive; scripts, event handlers,
  * styles and images don't. See db/migrations/0019_add_remote_comments.sql.
  *
+ * Webmentions (WebmentionService.bx) that reply to or mention a post land here
+ * too, as remote comments with remote_source = 'webmention'. They get the same
+ * moderation, but they aren't fediverse threads: replies under them aren't held
+ * or sent out as @blog.
+ *
  * Local replies in a thread with a fediverse commenter go back out to the
  * fediverse as the blog's account (bx-activitypub's syncComment(), wired up
  * with holdFediverseReplies() and onChange() in app.bxs). Because they go out
@@ -35,7 +40,7 @@ class {
 
 	// Columns every thread node needs (see _toNode()); remote_* are NULL for local comments.
 	variables.NODE_COLUMNS = "C.id, C.parent_id, C.user_id, C.body, C.status, C.created,
-		C.remote_actor_url, C.remote_name, C.remote_handle, C.remote_profile_url, C.remote_url,
+		C.remote_source, C.remote_actor_url, C.remote_name, C.remote_handle, C.remote_profile_url, C.remote_url,
 		C.remote_summary, C.remote_sensitive, C.remote_attachment_count,
 		U.display_name, U.avatar_label, U.avatar_url";
 
@@ -301,6 +306,7 @@ class {
 				C.body,
 				C.status,
 				C.created,
+				C.remote_source,
 				C.remote_actor_url,
 				C.remote_name,
 				C.remote_handle,
@@ -335,6 +341,7 @@ class {
 						: "/posts/#encodeForURL( row.post_slug )#",
 					"isReply"    : len( row.parent_id ?: "" ) > 0,
 					"isRemote"   : len( row.remote_actor_url ?: "" ) > 0,
+					"remoteSource": row.remote_source ?: "",
 					"authorName" : len( row.remote_actor_url ?: "" ) ? _remoteDisplayName( row ) : row.display_name,
 					// A remote author's handle stands where a local one's email does.
 					"authorEmail": len( row.remote_actor_url ?: "" ) ? ( row.remote_handle ?: "" ) : ( row.email ?: "" ),
@@ -372,10 +379,10 @@ class {
 		var newId  = lCase( createGUID() );
 		var status = isTrustedRemoteAuthor( arguments.reply.author.actorUrl ) ? "visible" : "pending";
 		queryExecute(
-			"INSERT INTO Comment (id, post_id, parent_id, user_id, remote_actor_url, remote_name, remote_handle,
+			"INSERT INTO Comment (id, post_id, parent_id, user_id, remote_source, remote_actor_url, remote_name, remote_handle,
 				remote_profile_url, remote_object_url, remote_url, remote_summary, remote_sensitive,
 				remote_attachment_count, body, status, created)
-			VALUES (:id, :post_id, :parent_id, NULL, :actor, :name, :handle, :profile, :object, :url, :summary,
+			VALUES (:id, :post_id, :parent_id, NULL, 'activitypub', :actor, :name, :handle, :profile, :object, :url, :summary,
 				:sensitive, :attachments, :body, :status, :created)",
 			{
 				"id"          : { value: newId,                                       sqltype: "varchar" },
@@ -396,6 +403,70 @@ class {
 			}
 		);
 		return newId;
+	}
+
+	// ── Webmentions (see WebmentionService.bx) ───────────────────────────────
+
+	/**
+	 * Stores a verified webmention reply or mention as a top-level comment,
+	 * held for approval unless its site is already trusted (see
+	 * isTrustedRemoteAuthor(); actorUrl is the site's key, not a fediverse actor).
+	 *
+	 * @param {struct} mention - { actorUrl, authorName, authorHandle, authorUrl,
+	 *        url, html (untrusted), published }
+	 * @return {string} The new comment's id.
+	 */
+	function createWebmentionComment( required string postId, required struct mention ){
+		var newId = lCase( createGUID() );
+		queryExecute(
+			"INSERT INTO Comment (id, post_id, parent_id, user_id, remote_source, remote_actor_url, remote_name,
+				remote_handle, remote_profile_url, remote_url, body, status, created)
+			VALUES (:id, :post_id, NULL, NULL, 'webmention', :actor, :name, :handle, :profile, :url, :body, :status, :created)",
+			{
+				"id"      : { value: newId,                                           sqltype: "varchar" },
+				"post_id" : { value: arguments.postId,                                sqltype: "varchar" },
+				"actor"   : { value: left( arguments.mention.actorUrl, 512 ),         sqltype: "varchar" },
+				"name"    : { value: left( arguments.mention.authorName, 255 ),       sqltype: "varchar" },
+				"handle"  : { value: left( arguments.mention.authorHandle, 255 ),     sqltype: "varchar" },
+				"profile" : { value: left( arguments.mention.authorUrl, 512 ),        sqltype: "varchar" },
+				"url"     : { value: left( arguments.mention.url, 512 ),              sqltype: "varchar" },
+				"body"    : { value: sanitizeRemoteHtml( arguments.mention.html ),    sqltype: "longvarchar" },
+				"status"  : { value: isTrustedRemoteAuthor( arguments.mention.actorUrl ) ? "visible" : "pending", sqltype: "varchar" },
+				"created" : { value: arguments.mention.published,                     sqltype: "timestamp" }
+			}
+		);
+		return newId;
+	}
+
+	/**
+	 * A re-sent webmention whose page changed. Its status is unchanged, unless it
+	 * had been removed (the page went away and came back): then it's moderated
+	 * again like a new one.
+	 *
+	 * @return {boolean} False if the comment no longer exists.
+	 */
+	boolean function updateWebmentionComment( required string commentId, required struct mention ){
+		var exists = queryExecute(
+			"SELECT 1 FROM Comment WHERE id = :id AND remote_source = 'webmention'",
+			{ "id": { value: arguments.commentId, sqltype: "varchar" } }
+		).recordCount > 0;
+		if ( !exists ) return false;
+		queryExecute(
+			"UPDATE Comment
+			SET body = :body, remote_name = :name, remote_handle = :handle, remote_profile_url = :profile, remote_url = :url,
+				status = CASE WHEN status = 'deleted' THEN :revived ELSE status END
+			WHERE id = :id AND remote_source = 'webmention'",
+			{
+				"id"      : { value: arguments.commentId,                          sqltype: "varchar" },
+				"body"    : { value: sanitizeRemoteHtml( arguments.mention.html ), sqltype: "longvarchar" },
+				"name"    : { value: left( arguments.mention.authorName, 255 ),    sqltype: "varchar" },
+				"handle"  : { value: left( arguments.mention.authorHandle, 255 ),  sqltype: "varchar" },
+				"profile" : { value: left( arguments.mention.authorUrl, 512 ),     sqltype: "varchar" },
+				"url"     : { value: left( arguments.mention.url, 512 ),           sqltype: "varchar" },
+				"revived" : { value: isTrustedRemoteAuthor( arguments.mention.actorUrl ) ? "visible" : "pending", sqltype: "varchar" }
+			}
+		);
+		return true;
 	}
 
 	/**
@@ -472,12 +543,12 @@ class {
 		var currentId = arguments.commentId;
 		while ( len( currentId ) ){
 			var rows = queryExecute(
-				"SELECT parent_id, remote_actor_url FROM Comment WHERE id = :id LIMIT 1",
+				"SELECT parent_id, remote_source FROM Comment WHERE id = :id LIMIT 1",
 				{ "id": { value: currentId, sqltype: "varchar" } },
 				{ returnType: "array" }
 			);
 			if ( !rows.len() ) return false;
-			if ( len( rows[ 1 ].remote_actor_url ?: "" ) ) return true;
+			if ( ( rows[ 1 ].remote_source ?: "" ) == "activitypub" ) return true;
 			currentId = rows[ 1 ].parent_id ?: "";
 		}
 		return false;
@@ -566,6 +637,7 @@ class {
 			"isPending"        : arguments.row.status == "pending",
 			"created"          : arguments.row.created,
 			"isRemote"         : isRemote,
+			"remoteSource"     : arguments.row.remote_source ?: "",
 			"remoteHandle"     : arguments.row.remote_handle ?: "",
 			"remoteProfileUrl" : arguments.row.remote_profile_url ?: "",
 			"remoteUrl"        : arguments.row.remote_url ?: "",

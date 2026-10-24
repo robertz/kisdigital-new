@@ -32,22 +32,25 @@
 
 			<!--- Main content --->
 			<div class="col-lg-8">
-				<article class="c-post">
+				<!--- Microformats (h-entry, h-card) so other sites can read this post when
+				      it's linked to or replied to by webmention. --->
+				<article class="c-post h-entry">
+					<data class="u-url" value="#encodeForHTMLAttribute( data.canonicalUrl )#"></data>
 
 					<header class="c-post__header">
 
 						<bx:if data.post.getTags().len()>
 						<div class="c-post__kickers">
 							<bx:loop array="#data.post.getHeadlineTags()#" item="tag">
-								<a href="/tag/#encodeForURL( tag )#" class="post-kicker">#encodeForHTML( tag )#</a>
+								<a href="/tag/#encodeForURL( tag )#" class="post-kicker p-category">#encodeForHTML( tag )#</a>
 							</bx:loop>
 						</div>
 						</bx:if>
 
-						<h1 class="c-post__title">#encodeForHTML( data.post.getTitle() )#</h1>
+						<h1 class="c-post__title p-name">#encodeForHTML( data.post.getTitle() )#</h1>
 
 						<bx:if len( data.post.getDescription() )>
-						<p class="c-post__description">#encodeForHTML( data.post.getDescription() )#</p>
+						<p class="c-post__description p-summary">#encodeForHTML( data.post.getDescription() )#</p>
 						</bx:if>
 
 						<div class="c-post__meta">
@@ -59,11 +62,11 @@
 										#encodeForHTML( data.post.getAuthorInitials() )#
 									</div>
 								</bx:if>
-								<span>#encodeForHTML( data.post.getAuthorName() )#</span>
+								<span class="p-author h-card"><span class="p-name">#encodeForHTML( data.post.getAuthorName() )#</span><data class="u-url" value="#encodeForHTMLAttribute( data.siteHomeUrl )#"></data></span>
 								<span class="c-post__meta-sep">&middot;</span>
 							</bx:if>
 							<bx:if len( data.post.getPublishDate() )>
-								<span>#dateFormat( data.post.getPublishDate(), "MMMM D, YYYY" )#</span>
+								<time class="dt-published" datetime="#encodeForHTMLAttribute( dateTimeFormat( data.post.getPublishDate(), "yyyy-mm-dd'T'HH:nn:ss'Z'" ) )#">#dateFormat( data.post.getPublishDate(), "MMMM D, YYYY" )#</time>
 								<span class="c-post__meta-sep">&middot;</span>
 							</bx:if>
 							<span>#data.post.getReadingTime()# min read</span>
@@ -74,11 +77,11 @@
 							<!--- Likes and boosts from the fediverse (bx-activitypub); shown only when there are some. --->
 							<bx:if data.reactions.likes gt 0>
 								<span class="c-post__meta-sep">&middot;</span>
-								<span title="Likes from the fediverse">#data.reactions.likes# #data.reactions.likes == 1 ? "like" : "likes"#</span>
+								<span title="Likes from the fediverse and other sites">#data.reactions.likes# #data.reactions.likes == 1 ? "like" : "likes"#</span>
 							</bx:if>
 							<bx:if data.reactions.boosts gt 0>
 								<span class="c-post__meta-sep">&middot;</span>
-								<span title="Boosts from the fediverse">#data.reactions.boosts# #data.reactions.boosts == 1 ? "boost" : "boosts"#</span>
+								<span title="Boosts from the fediverse and reposts from other sites">#data.reactions.boosts# #data.reactions.boosts == 1 ? "boost" : "boosts"#</span>
 							</bx:if>
 						</div>
 
@@ -124,7 +127,7 @@
 						</div>
 					</div>
 
-					<div class="c-post__body">
+					<div class="c-post__body e-content">
 						#data.postBodyHtml#
 					</div>
 
