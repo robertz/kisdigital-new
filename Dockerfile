@@ -81,9 +81,10 @@ EXPOSE 3005
 # - sun.net.inetaddr.ttl=30: a looked-up address is kept 30 seconds, so the
 #   address SafeHttp checks is the one it connects to (models/util/SafeHttp.bx).
 ENV JAVA_OPTS="-Duser.timezone=UTC -Xmx600m -Xms128m -XX:+UseSerialGC -XX:ActiveProcessorCount=1 -XX:MaxDirectMemorySize=64m -XX:+ExitOnOutOfMemoryError -Dsun.net.inetaddr.ttl=30"
-# The boxlang launcher adds -XX:TieredStopAtLevel=1 for scripts; a long-running
-# server wants full C2 compilation, and the last flag wins.
-ENV BOXLANG_OPTS="-XX:TieredStopAtLevel=4"
+# No BOXLANG_OPTS="-XX:TieredStopAtLevel=4" as dt-next has: it's a BOXLANG_*
+# variable, so BoxLang drops .boxlang.json's "modules" block and bx-activitypub
+# fails at startup. The launcher appends its TieredStopAtLevel=1 after
+# JAVA_OPTS, so the flag can't go there either.
 
 CMD ["boxlang", "app.bxs"]
 
