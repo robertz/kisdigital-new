@@ -1,16 +1,24 @@
-# WARNING on secrets: R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, and R2_SECRET_ACCESS_KEY
-# are deliberately NOT declared below. GitHub-triggered deploys (deploy_on_push)
-# re-sync the live spec from this file on every push — a SECRET key declared
-# here with a placeholder value gets individually re-encrypted as that literal
-# placeholder each time, which then shadows the real value if one was also set
-# as an app-level (not service-level) env var in the dashboard. That's exactly
-# what happened once already: the dashboard-set real R2 credentials were
-# silently overridden back to "EDIT_IN_UI" by the next `git push`. Set those
-# three at the APP level (Settings > App-Level Environment Variables, not the
-# service's own env vars) in the DO dashboard instead — app-level env vars are
-# inherited by every service and aren't touched by this file's service.envs
-# list. Everything else here is safe to keep declaring, including the
-# ${amos.*} database bindings, since App Platform populates those itself.
+# This file is a record of the app's spec, not what deploys it. A push to main
+# (deploy_on_push) deploys the new code under the spec App Platform already
+# has; it does not apply changes made here. Confirmed 2026-10-24: a push that
+# added WEBMENTION_* here deployed without them.
+#
+# To change the live spec, edit it in the dashboard or apply it with doctl,
+# and mirror the change here. Don't apply this file as-is: the live spec also
+# holds secrets that aren't declared here (the R2 credentials, Google OAuth
+# and GoatCounter keys), and applying this file would delete them. Start from
+# the live spec instead, which returns secrets encrypted so they survive being
+# sent back:
+#
+#   doctl apps spec get <app-id> > spec.yaml
+#   (edit spec.yaml)
+#   doctl apps update <app-id> --spec spec.yaml
+#
+# Keep secrets out of this file. A SECRET declared here with a placeholder
+# value, once applied, replaces the real value with the placeholder; that has
+# happened once already, setting the R2 credentials to "EDIT_IN_UI". The
+# ${amos.*} database bindings are safe to declare, since App Platform fills
+# those in itself.
 name: kisdigital
 region: nyc
 
