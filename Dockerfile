@@ -1,16 +1,17 @@
+# Same shape as dt-next's Dockerfile. App Platform builds the last stage, so
+# the test stage sits in the middle and the app is rebuilt from it at the end.
+
 # ── Assets ───────────────────────────────────────────────────────────────
-# esbuild bundles + hashes CSS/JS into public/assets/dist/, and Vite builds the
-# /manage React app into public/assets/dist/manage/ (gitignored, so both have
-# to be produced here rather than assumed present in the build context).
-FROM node:20-alpine AS assets
+# esbuild bundles and hashes CSS/JS into public/assets/dist/, and Vite builds
+# /manage into public/assets/dist/manage/. Both are gitignored, so they're
+# built here. Vite 8 needs Node 20.19+ or 22.
+FROM node:22-alpine AS assets
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY esbuild.config.mjs ./
 COPY scripts scripts
-# views/ and models/ are scanned (not shipped) by scripts/build-icons.mjs
-# to find which bi-* icon classes are actually used — see that script's
-# own comment.
+# scanned, not shipped: scripts/build-icons.mjs keeps only the bi-* icons in use
 COPY views views
 COPY models models
 COPY public/assets/css public/assets/css
@@ -20,91 +21,32 @@ COPY manage-app manage-app
 RUN npm run build
 
 # ── Runtime ──────────────────────────────────────────────────────────────
-# ortussolutions/boxlang:cli, not commandbox:boxlang — this app runs its own
-# com.sun.net.httpserver.HttpServer via app.listen() rather than under
-# Runwar/CommandBox's server model, so it only ever needed the bare `boxlang`
-# CLI. commandbox:boxlang was used previously purely to get CommandBox's
-# `box install` for fetching modules from ForgeBox — boxlang:cli's own
-# install-bx-module does the same job natively (see below), so CommandBox
-# isn't needed at all. Same Ubuntu 24.04 base as commandbox:boxlang, at
-# roughly a third of the image size (611MB vs 1.53GB before any app layers).
-#
-# Was pinned to a digest (v1.16.0+57) after v1.17.0+58 broke every res.render()
-# call with "The template path [...] could not be found" — turned out to be
-# intentional BoxLang 1.17.0 hardening (it stopped resolving an absolute
-# `include` path unless it's backed by a registered mapping; confirmed by an
-# Ortus maintainer, see ortus-boxlang/BoxLang#610), not a BoxLang bug. The
-# real fix belonged in boxlang-express itself — app.set("views", dir) now
-# registers that mapping (and clears the request context's stale config
-# cache so the mapping actually takes effect) — released as boxlang-express
-# 0.2.3, verified end-to-end against BoxLang 1.17.0+58. Safe to float again.
-FROM ortussolutions/boxlang:cli
+# The bare BoxLang CLI: BoxExpress runs its own HTTP server. Pinned so a
+# rebuild never changes BoxLang underneath; bump it deliberately. 1.18.0+ is
+# required: that's when BoxLang started finding .boxlang.json in the working
+# directory, which is where the datasource, caches and module settings live.
+FROM ortussolutions/boxlang:cli-1.19.0 AS app
 
 ENV APP_DIR=/app
 WORKDIR $APP_DIR
 
-# install-bx-module looks for its helper scripts relative to BOXLANG_INSTALL_HOME
-# (or BVM_HOME) — the image ships them at /usr/local/boxlang/scripts/helpers/
-# but doesn't set either variable itself, so install-bx-module fails with
-# "Helper scripts not found" until this is set. ARG, not ENV, like
-# BOXLANG_MODULES below: see the note there.
+# install-bx-module finds its helper scripts through this. ARG, not ENV: any
+# BOXLANG_* variable present at runtime makes BoxLang drop the config file's
+# "modules" block, and bx-activitypub then starts with no datasource.
 ARG BOXLANG_INSTALL_HOME=/usr/local/boxlang
 
-# The base image bakes a sample site into /app (403.html, index.bxm, a logo)
-# — clear it so nothing shadows this app's own files or confuses BoxLang's
-# config/module resolution.
+# The base image ships a sample site in /app.
 RUN rm -rf /app/* /app/.[!.]*
 
-# install-bx-module resolves every module here natively against ForgeBox,
-# installing straight into boxlang_modules/ with no relocate step needed
-# (unlike box install, which only ever placed a "boxlang-modules"-typed
-# package into CommandBox's own serverHome). bx-compat-cfml supplies classic
-# CF-style dateFormat()/dateTimeFormat() mask translation (e.g. "mmm d,
-# yyyy", "h:nn tt") — without it, masks fall through to raw java.time
-# pattern semantics, where lowercase m means minute (not month), there's no
-# am/pm letter, and uppercase D/Y mean day-of-year/week-based-year —
-# silently wrong output, not an error, for most masks used across the app
-# (post dates, RSS/sitemap timestamps).
-#
-# boxlang-express used to need special-case handling here: its ForgeBox
-# listing's downloadURL was a CommandBox-style GitHub-shorthand string
-# ("owner/repo#tag") that install-bx-module couldn't expand. Now that it's
-# published as a real ForgeBox-hosted release (downloadURL: "forgeboxStorage",
-# confirmed via `curl https://forgebox.io/api/v1/entry/boxlang-express`),
-# it resolves the same as everything else — no special-casing needed.
-# bx-activitypub installs as boxlang_modules/bx-activitypub; the app references it as
-# bxModules.bxactivitypub (its declared moduleName), which is also what the local-dev
-# symlink boxlang_modules/bxactivitypub resolves to. Inert unless ACTIVITYPUB_ENABLED=true.
-#
-# ARG, not ENV: with any BOXLANG_* environment variable set at runtime,
-# BoxLang (1.17.3 and 1.17.6, at least) drops the "modules" block from
-# the project's config file, so every module loses its settings there —
-# bx-activitypub then has no datasource and the app fails at startup.
-# BOXLANG_MODULES also maps onto the "modules" key directly ("not a JSON
-# Object, ignoring it"). Both are only needed by install-bx-module below, and
-# ARGs are visible to RUN without reaching the running container.
+# bx-compat-cfml gives dateFormat()/dateTimeFormat() their CF mask meanings
+# ("mmm d, yyyy", "h:nn tt"); without it the masks silently become java.time
+# patterns. bx-activitypub's moduleName is bxactivitypub.
 ARG BOXLANG_MODULES=boxlang-express,bx-mysql,bx-markdown,bx-password-encrypt,bx-esapi,bx-compat-cfml,bx-activitypub,bx-jsoup
-
-# install-bx-module always resolves "latest" from ForgeBox, but this RUN
-# line's own content never changes — so both local Docker and DigitalOcean
-# App Platform's Kaniko-based builder treat it as cache-eligible and happily
-# reuse a stale layer, silently keeping an old module version around even
-# after a fresh ForgeBox publish (confirmed directly: DO's build log showed
-# "Using caching version of cmd: RUN install-bx-module..." on a
-# --force-rebuild deploy). Bumping this ARG's value is what actually busts
-# that cache — change it any time a module needs a guaranteed fresh pull
-# (e.g. right after publishing a fix to ForgeBox), not just when chasing a
-# stale build.
+# install-bx-module always takes the latest from ForgeBox, but this line never
+# changes, so Docker and App Platform's Kaniko builder reuse the cached layer.
+# Change this to force a fresh pull, e.g. right after publishing a module fix.
 ARG MODULE_CACHE_BUST=2026-10-24-bx-jsoup
 RUN install-bx-module "$BOXLANG_MODULES" --local
-
-# BoxLang picks up .boxlang.json from the directory it's run in (WORKDIR
-# above), which is what gives the app its datasource, caches and module
-# settings. That discovery arrived in 1.18.0, and the base image tag floats,
-# so an older cached base would start the app with no config at all. This
-# stops the build instead, which leaves the previous deployment running.
-RUN boxlang --version | grep -Eq 'v(1\.(1[8-9]|[2-9][0-9])|[2-9][0-9]*)\.' \
-	|| ( echo "BoxLang 1.18.0 or newer is required for .boxlang.json discovery" && boxlang --version && exit 1 )
 
 COPY app.bxs .boxlang.json ./
 COPY views/ views/
@@ -113,39 +55,61 @@ COPY models/ models/
 COPY public/ public/
 COPY --from=assets /app/public/assets/dist public/assets/dist
 
+# An ordinary user, not root. BoxLang keeps its home (compiled classes, caches,
+# logs) in ~/.boxlang, so the image's copy moves with it.
+RUN useradd --system --create-home --home-dir /home/app --shell /usr/sbin/nologin app \
+	&& cp -a /root/.boxlang /home/app/.boxlang \
+	&& chown -R app:app /home/app /app
+USER app
+# the base image sets HOME=/root, where the launcher keeps its startup cache
+ENV HOME=/home/app
+
+ENV PORT=3005
 EXPOSE 3005
 
-# The `boxlang` launcher (a standard Gradle-generated start script) appends
-# $JAVA_OPTS to its own default JVM flags (-XX:TieredStopAtLevel=1
-# -Xshare:auto -XX:SharedArchiveFile=...) rather than replacing them — this
-# doesn't disable the AppCDS shared archive or JIT tiering it sets up.
-# Capped heap + SerialGC: this runs on a small, single-container instance
-# (DigitalOcean App Platform's basic tier), where SerialGC's single-threaded,
-# lower-overhead collection is a better fit than the default (G1, tuned for
-# multi-core hosts with room to spare) and a bounded max heap keeps the JVM
-# from growing to fill however much RAM the instance happens to have.
-#
-# user.timezone=UTC: publish dates are stored as UTC and compared against
-# MySQL's NOW(), so the JVM's clock has to be UTC too. The base image already
-# is, but this doesn't leave it to the image.
-#
-# ActiveProcessorCount=1: this instance is provisioned as apps-s-1vcpu-1gb
-# (see .do/app.yaml), but Runtime.availableProcessors() has been observed
-# reporting 8 — the host's full core count, not this container's actual
-# allocation. Pinning it avoids any 8-core-assuming thread pool over-
-# provisioning against a single real core — this matters even more since
-# boxlang-express moved to Undertow (see its own commit history): XNIO
-# sizes its I/O thread pool from this same availableProcessors() call.
-# SerialGC itself is unaffected either way — it's single-threaded already.
-#
-# MaxDirectMemorySize=64m: Undertow defaults to off-heap direct ByteBuffers
-# for its buffer pool once heap exceeds ~128MB (ours does), and BoxExpress's
-# listen() never calls setDirectBuffers(false) to opt out — so that pool
-# lives entirely outside the Xmx cap above, untracked, on a container with
-# only 1GB total RAM. Left uncapped, a spike there risks a silent OOM-kill
-# from the container's own memory limit (no heap-space exception, no stack
-# trace, the process just disappears). Capping it turns that into a normal,
-# loud `OutOfMemoryError: Direct buffer memory` instead.
-ENV JAVA_OPTS="-Duser.timezone=UTC -Xmx600m -Xms128m -XX:+UseSerialGC -XX:ActiveProcessorCount=1 -XX:MaxDirectMemorySize=64m"
+# Fixed sizes, not dt-next's share of the container limit: on App Platform the
+# JVM doesn't see the instance's allocation (availableProcessors() has reported
+# the host's 8 cores on apps-s-1vcpu-1gb), so a percentage of "RAM" could be a
+# percentage of the host's.
+# - Xmx600m + SerialGC: a bounded heap and the low-overhead collector for 1 vCPU / 1GB.
+# - ActiveProcessorCount=1: Undertow sizes its I/O threads from availableProcessors().
+# - MaxDirectMemorySize=64m: Undertow's buffer pool is off-heap direct memory once
+#   the heap passes ~128MB; capped, a spike is a loud OutOfMemoryError rather
+#   than a silent OOM-kill.
+# - ExitOnOutOfMemoryError: a JVM out of memory exits and App Platform restarts it.
+# - user.timezone=UTC: publish dates are stored as UTC and compared to MySQL's NOW().
+# - sun.net.inetaddr.ttl=30: a looked-up address is kept 30 seconds, so the
+#   address SafeHttp checks is the one it connects to (models/util/SafeHttp.bx).
+ENV JAVA_OPTS="-Duser.timezone=UTC -Xmx600m -Xms128m -XX:+UseSerialGC -XX:ActiveProcessorCount=1 -XX:MaxDirectMemorySize=64m -XX:+ExitOnOutOfMemoryError -Dsun.net.inetaddr.ttl=30"
+# The boxlang launcher adds -XX:TieredStopAtLevel=1 for scripts; a long-running
+# server wants full C2 compilation, and the last flag wins.
+ENV BOXLANG_OPTS="-XX:TieredStopAtLevel=4"
 
 CMD ["boxlang", "app.bxs"]
+
+# ── Tests ────────────────────────────────────────────────────────────────
+# The specs, run in the image above: the same BoxLang and modules as
+# production, so code that needs a module production doesn't install fails
+# here rather than live. The specs touch no database, but BoxLang opens the
+# JDBC-backed caches at startup, so a reachable MySQL is still needed:
+#
+#   docker build --target test -t kisdigital:test .
+#   docker run --rm --env-file .env -e CHRON_DB_HOST=host.docker.internal \
+#     --add-host host.docker.internal:host-gateway kisdigital:test
+
+# TestBox, installed from box.json as `box install` does locally. Pinned so a
+# rebuild doesn't change CommandBox underneath.
+FROM ortussolutions/commandbox:jdk21-alpine-3.24.0 AS testbox
+WORKDIR /deps
+COPY box.json ./
+RUN box install && rm -rf testbox/tests testbox/bx/tests
+
+FROM app AS test
+COPY --from=testbox --chown=app:app /deps/testbox testbox/
+COPY --chown=app:app tests/ tests/
+COPY --chown=app:app run-tests.bxs ./
+CMD ["boxlang", "run-tests.bxs"]
+
+# ── Production ───────────────────────────────────────────────────────────
+# The last stage is what App Platform builds and deploys.
+FROM app AS production

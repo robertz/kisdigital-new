@@ -1,0 +1,88 @@
+# Production: KISDigital behind a Cloudflare Zero Trust tunnel.
+#
+# Not run from the repo. On the server, a deployment folder (e.g.
+# ~/Containers/kisdigital) holds just deploy.sh, .env and production.env;
+# deploy.sh pulls REPO_REF (main) into its src/ and runs this file from there,
+# with the deployment folder as the project directory, so src, .env and
+# production.env below are that folder's. See production/README.md.
+#
+# No ports are published. cloudflared dials out to Cloudflare, and the tunnel's
+# public hostname (set in the Zero Trust dashboard) points at http://app:3005.
+# That is also why the app may trust CF-Connecting-IP: nothing else can reach it.
+#
+# MySQL isn't started here. The app joins the network of the MySQL container
+# already running on this host (docker-mysql's do-mirror-mysql by default) and
+# reaches it by container name. MYSQL_NETWORK picks another network.
+
+name: kisdigital
+
+services:
+  app:
+    # deploy.sh's clone of the repo. The Dockerfile's "app" stage: its last
+    # stage is the same image, there only for App Platform.
+    build:
+      context: src
+      target: app
+    image: kisdigital:latest
+    restart: unless-stopped
+    # the JVM sizes its heap (75%) and threads from these (JAVA_OPTS below);
+    # without them it would size itself for the whole host
+    mem_limit: ${APP_MEMORY:-1g}
+    cpus: ${APP_CPUS:-1}
+    env_file: production.env
+    # it needs no Linux capabilities (3005 isn't a privileged port), and can't gain any
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      ENV: production
+      PORT: "3005"
+      # DO-Connecting-IP isn't set by anything here, so a client could send its own
+      TRUST_PROXY_HEADER: CF-Connecting-IP
+      # Replaces the image's App Platform settings (fixed heap, SerialGC, one
+      # processor), which are there because App Platform's JVM can't see its
+      # instance's limits. Here it can, so it sizes itself from mem_limit and cpus.
+      JAVA_OPTS: >-
+        -Duser.timezone=UTC
+        -XX:MaxRAMPercentage=75 -XX:InitialRAMPercentage=25
+        -XX:MaxDirectMemorySize=64m -XX:+ExitOnOutOfMemoryError
+        -Dsun.net.inetaddr.ttl=30
+    networks:
+      - tunnel
+      - mysql
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:3005/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      # BoxLang compiles on first start
+      start_period: 90s
+    logging: &logging
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"
+
+  cloudflared:
+    # pinned; Cloudflare stops supporting a connector about a year after its release,
+    # and the tunnel's page in Zero Trust flags it then
+    image: cloudflare/cloudflared:2026.10.1
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      # deploy.sh leaves cloudflared stopped until .env has it
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}
+    networks:
+      - tunnel
+    depends_on:
+      app:
+        condition: service_healthy
+    logging: *logging
+
+networks:
+  # just the app and cloudflared
+  tunnel: {}
+  mysql:
+    external: true
+    name: ${MYSQL_NETWORK:-docker-mysql_default}

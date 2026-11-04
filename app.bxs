@@ -136,7 +136,11 @@ app.use( boxExpressStatic( expandPath( "./public" ), { maxAge: 86400 } ) )
 // Request.bx's _resolveIp() in boxlang-express (>=0.1.16) for the check
 // itself. Neither header exists in local dev, so req.ip there stays the
 // direct connection address, which is already correct.
-app.set( "trust proxy header", [ "DO-Connecting-IP", "CF-Connecting-IP" ] )
+//
+// TRUST_PROXY_HEADER replaces the list. Behind the Cloudflare tunnel
+// (production/docker-compose.yml) nothing sets DO-Connecting-IP, so a client
+// could send its own; there it's CF-Connecting-IP alone.
+app.set( "trust proxy header", listToArray( getSystemSetting( "TRUST_PROXY_HEADER", "DO-Connecting-IP,CF-Connecting-IP" ) ) )
 
 // [M1] Legacy XSS filter hint — a no-op in modern browsers, harmless to send.
 // (Everything else from the old app's security header set is covered by helmet above.)

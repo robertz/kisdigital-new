@@ -11,3 +11,7 @@ public/assets/css/bootstrap-generated.css
 public/assets/css/icons-generated.css
 uploads/
 .DS_Store
+
+# a deployment folder made inside the checkout by mistake
+production/production.env
+production/src/

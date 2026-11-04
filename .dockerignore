@@ -1,9 +1,14 @@
 node_modules
 boxlang_modules
 testbox
-tests
+tests/results
 public/assets/dist
 .git
 .env
 .env.*
 *.log
+.claude
+.do
+.vscode
+drafts
+production
