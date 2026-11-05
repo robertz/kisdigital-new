@@ -594,13 +594,14 @@ a.follow-band__option:hover {
 /* ── Project callout (home page, above the project tiles) ── */
 
 .project-callout {
+	--callout-accent: #c2410c;
 	display: flex;
 	align-items: center;
 	gap: var(--space-5);
 	margin-bottom: var(--space-6);
 	padding: var(--space-5);
 	border: 1px solid var(--ui-border-subtle);
-	border-left: 4px solid #c2410c;
+	border-left: 4px solid var(--callout-accent);
 	border-radius: var(--ui-radius-sm);
 	background: var(--ui-surface-2);
 	color: inherit;
@@ -609,9 +610,20 @@ a.follow-band__option:hover {
 }
 
 .project-callout:hover {
-	border-color: #c2410c;
+	border-color: var(--callout-accent);
 	transform: translateY(-1px);
 }
+
+/* DismalThreads brand cyan; the darker step on a light background */
+.project-callout--dismalthreads {
+	--callout-accent: #0072a3;
+}
+
+@media (prefers-color-scheme: dark) {
+	html:not([data-theme="light"]) .project-callout--dismalthreads { --callout-accent: #1ec8ff; }
+}
+
+[data-theme="dark"] .project-callout--dismalthreads { --callout-accent: #1ec8ff; }
 
 .project-callout__icon {
 	flex: 0 0 auto;

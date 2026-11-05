@@ -106,6 +106,15 @@
 			</span>
 			<span class="project-callout__cta">Visit feedhouse.app <i class="bi bi-arrow-up-right" aria-hidden="true"></i></span>
 		</a>
+		<a href="https://dismalthreads.com" class="project-callout project-callout--dismalthreads">
+			<img src="/assets/images/dismalthreads-icon.svg" alt="" class="project-callout__icon" width="64" height="64">
+			<span class="project-callout__body">
+				<span class="post-kicker">New</span>
+				<span class="project-callout__title">DismalThreads</span>
+				<span class="project-callout__text">A community of groups, posts and threaded comments, rebuilt from bxThreads. Join public groups or ask into private ones, follow friends, and react and reply with everything updating live. Built on BoxLang and BoxExpress, with a React front end.</span>
+			</span>
+			<span class="project-callout__cta">Visit dismalthreads.com <i class="bi bi-arrow-up-right" aria-hidden="true"></i></span>
+		</a>
 		<div class="tile-grid">
 			<bx:loop array="#data.projects#" item="project">
 				<bx:include template="../partials/projectTile.bxm">
