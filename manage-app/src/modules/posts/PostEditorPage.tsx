@@ -15,6 +15,7 @@ import InputBase from "@mui/material/InputBase";
 import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
 import Skeleton from "@mui/material/Skeleton";
+import Snackbar from "@mui/material/Snackbar";
 import Stack from "@mui/material/Stack";
 import Switch from "@mui/material/Switch";
 import TextField from "@mui/material/TextField";
@@ -160,6 +161,11 @@ function PostEditor({ post }: { post: Post | null }) {
 	const [draft, setDraft] = useState(synced);
 	const [slugLocked, setSlugLocked] = useState(synced.slug.length > 0);
 	const [flash, setFlash] = useState<{ kind: "success" | "error"; text: string } | null>(null);
+	// The last success message, kept while its toast fades out.
+	const [toastText, setToastText] = useState("");
+	useEffect(() => {
+		if (flash?.kind === "success") setToastText(flash.text);
+	}, [flash]);
 	const [mode, setMode] = useState<Mode>(() => (readStored(MODE_KEY) === "markdown" ? "markdown" : "visual"));
 	// Set when the visual editor would rewrite parts of this body it can't hold.
 	const [lossy, setLossy] = useState(false);
@@ -512,8 +518,8 @@ function PostEditor({ post }: { post: Post | null }) {
 					}}
 				>
 					<Stack spacing={2} sx={{ minWidth: 0, width: "100%", maxWidth: 860, mx: "auto" }}>
-						{flash && (
-							<Alert severity={flash.kind} onClose={() => setFlash(null)}>
+						{flash?.kind === "error" && (
+							<Alert severity="error" onClose={() => setFlash(null)}>
 								{flash.text}
 							</Alert>
 						)}
@@ -698,6 +704,18 @@ function PostEditor({ post }: { post: Post | null }) {
 					{settings}
 				</Drawer>
 			)}
+
+			{/* Success shows in a corner, not above the editor, so saving doesn't move the page. */}
+			<Snackbar
+				open={flash?.kind === "success"}
+				autoHideDuration={3000}
+				onClose={(_event, reason) => reason !== "clickaway" && setFlash(null)}
+				anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+			>
+				<Alert severity="success" variant="filled" onClose={() => setFlash(null)} sx={{ boxShadow: 3 }}>
+					{toastText}
+				</Alert>
+			</Snackbar>
 
 			<ImagePicker
 				open={pickerOpen}
