@@ -25,6 +25,7 @@ export function TimeChart({
 	max,
 	reference,
 	whole = false,
+	wide = false,
 }: {
 	title: string;
 	points: TimePoint[];
@@ -40,6 +41,8 @@ export function TimeChart({
 	reference?: { value: number; label: string };
 	/** counts: ticks on whole numbers only */
 	whole?: boolean;
+	/** spans both columns of the chart grid */
+	wide?: boolean;
 }) {
 	const times = points.map((p) => p.t);
 	const values = points.map((p) => p.v);
@@ -66,7 +69,7 @@ export function TimeChart({
 	const series = [{ data: values, valueFormatter: (v: number | null) => (v === null ? "—" : format(v)), label: title }];
 
 	return (
-		<Card title={title}>
+		<Card title={title} sx={wide ? { gridColumn: "1 / -1" } : undefined}>
 			{points.length === 0 ? (
 				<Typography variant="body2" color="text.secondary">
 					Nothing recorded in this range yet.

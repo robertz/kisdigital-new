@@ -212,16 +212,26 @@ function Server() {
 						)}
 					</Box>
 
-					<Box sx={{ display: "grid", gap: 3, gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "repeat(2, minmax(0, 1fr))", xl: "repeat(3, minmax(0, 1fr))" }, alignItems: "start" }}>
+					{/* Columns rather than a grid: each card sits right under the one
+					    above, so a short card doesn't leave a gap beside a tall one. */}
+					<Box
+						sx={{
+							columnCount: { xs: 1, md: 2, xl: 3 },
+							columnGap: (theme) => theme.spacing(3),
+							"& > *": { breakInside: "avoid", mb: 3 },
+							mb: -3,
+						}}
+					>
 						<Memory s={data.server} />
 						<Cpu s={data.server} />
 						<Collection s={data.server} />
 						<Threads s={data.server} />
 						<Http s={data.server} />
 						<Runtime s={data.server} />
+						<Mysql s={data.server} />
 					</Box>
 
-					<Database s={data.server} />
+					{data.server.mysql && <LargestTables tables={data.server.mysql.tables} />}
 				</Stack>
 			)}
 		</Page>
@@ -293,6 +303,7 @@ function Charts({ history }: { history: HourRecord[] }) {
 	return (
 		<Box sx={{ display: "grid", gap: 3, gridTemplateColumns: { xs: "minmax(0, 1fr)", lg: "repeat(2, minmax(0, 1fr))" } }}>
 			<TimeChart
+				wide
 				title="Memory in use after garbage collection"
 				points={series((r) => r.oldGenAfterGc)}
 				format={bytes}
@@ -457,50 +468,53 @@ function Runtime({ s }: { s: Snapshot }) {
 	);
 }
 
-function Database({ s }: { s: Snapshot }) {
+function Mysql({ s }: { s: Snapshot }) {
 	const db = s.mysql;
 	if (!db) return <Facts title="MySQL" rows={[["Status", "MySQL didn't say (no privilege, or not MySQL)"]]} />;
 	return (
-		<Box sx={{ display: "grid", gap: 3, gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "minmax(0, 1fr) minmax(0, 1.4fr)" }, alignItems: "start" }}>
-			<Facts
-				title="MySQL"
-				rows={[
-					["Version", db.version],
-					["Up", duration(db.uptimeSeconds)],
-					["Buffer pool", `${bytes(db.bufferPoolDataBytes)} of ${bytes(db.bufferPoolBytes)} holds data`],
-					["Reads from memory", `${percent(db.hitRate, 2)}${db.recentHitRate != null ? ` · ${percent(db.recentHitRate, 2)} lately` : ""}`],
-					["Connections", `${count(db.threadsConnected)} of ${count(db.maxConnections)} (${db.threadsRunning} running)`],
-					["Queries", count(db.queries)],
-					["Slow queries", `${count(db.slowQueries)} (over ${db.longQuerySeconds} s)`],
-					["Temporary tables on disk", `${count(db.tmpDiskTables)} of ${count(db.tmpTables)}`],
-				]}
-			/>
-			<Card title="Largest tables">
-				<Table size="small">
-					<TableHead>
-						<TableRow>
-							<TableCell>Table</TableCell>
-							<TableCell align="right">Rows</TableCell>
-							<TableCell align="right">Data</TableCell>
-							<TableCell align="right">Indexes</TableCell>
+		<Facts
+			title="MySQL"
+			rows={[
+				["Version", db.version],
+				["Up", duration(db.uptimeSeconds)],
+				["Buffer pool", `${bytes(db.bufferPoolDataBytes)} of ${bytes(db.bufferPoolBytes)} holds data`],
+				["Reads from memory", `${percent(db.hitRate, 2)}${db.recentHitRate != null ? ` · ${percent(db.recentHitRate, 2)} lately` : ""}`],
+				["Connections", `${count(db.threadsConnected)} of ${count(db.maxConnections)} (${db.threadsRunning} running)`],
+				["Queries", count(db.queries)],
+				["Slow queries", `${count(db.slowQueries)} (over ${db.longQuerySeconds} s)`],
+				["Temporary tables on disk", `${count(db.tmpDiskTables)} of ${count(db.tmpTables)}`],
+			]}
+		/>
+	);
+}
+
+function LargestTables({ tables }: { tables: NonNullable<Snapshot["mysql"]>["tables"] }) {
+	return (
+		<Card title="Largest MySQL tables">
+			<Table size="small">
+				<TableHead>
+					<TableRow>
+						<TableCell>Table</TableCell>
+						<TableCell align="right">Rows</TableCell>
+						<TableCell align="right">Data</TableCell>
+						<TableCell align="right">Indexes</TableCell>
+					</TableRow>
+				</TableHead>
+				<TableBody>
+					{tables.map((t) => (
+						<TableRow key={t.name}>
+							<TableCell>{t.name}</TableCell>
+							<TableCell align="right">{count(t.rows)}</TableCell>
+							<TableCell align="right">{bytes(t.dataBytes)}</TableCell>
+							<TableCell align="right">{bytes(t.indexBytes)}</TableCell>
 						</TableRow>
-					</TableHead>
-					<TableBody>
-						{db.tables.map((t) => (
-							<TableRow key={t.name}>
-								<TableCell>{t.name}</TableCell>
-								<TableCell align="right">{count(t.rows)}</TableCell>
-								<TableCell align="right">{bytes(t.dataBytes)}</TableCell>
-								<TableCell align="right">{bytes(t.indexBytes)}</TableCell>
-							</TableRow>
-						))}
-					</TableBody>
-				</Table>
-				<Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
-					Row counts and sizes are MySQL's estimates.
-				</Typography>
-			</Card>
-		</Box>
+					))}
+				</TableBody>
+			</Table>
+			<Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
+				Row counts and sizes are MySQL's estimates.
+			</Typography>
+		</Card>
 	);
 }
 
