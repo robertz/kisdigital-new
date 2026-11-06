@@ -304,7 +304,7 @@ app.use( new routes.ManageApp(
 	getSystemSetting( "MANAGE_DEV_SERVER", "" ),
 	app.getSetting( "env" ) != "development",
 	[
-		new routes.manageapi.Dashboard( postService, commentService, insightsService, serverMonitor ),
+		new routes.manageapi.Dashboard( postService, commentService, insightsService ),
 		new routes.manageapi.Posts( postService, postRenderer, new models.services.RevisionService() ),
 		new routes.manageapi.Comments( commentService ),
 		new routes.manageapi.Media( r2Client, postService, new models.services.MediaService() ),

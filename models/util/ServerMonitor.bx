@@ -16,8 +16,9 @@
  * process only ever sees what's mounted inside its own container.
  *
  * The readings marked "since the previous reading" (recent CPU, the busiest
- * threads, MySQL's recent hit rate) compare against whatever page read last,
- * the dashboard's gauges included. Ported in part from dt-next's ServerMonitor.
+ * threads, MySQL's recent hit rate) compare against the previous reading,
+ * the System page's or the hourly record's. Ported in part from dt-next's
+ * ServerMonitor.
  */
 class {
 
@@ -45,7 +46,7 @@ class {
 
 	/**
 	 * @param {boolean} includeDatabase - Also ask MySQL about itself: a few
-	 *        queries, so only the System page asks, not the dashboard gauges.
+	 *        queries, so only the System page asks, not the hourly record.
 	 */
 	function getSnapshot( boolean includeDatabase = false ){
 		var snapshot = {

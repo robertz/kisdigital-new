@@ -8,13 +8,11 @@ class {
 	variables.postService     = "";
 	variables.commentService  = "";
 	variables.insightsService = "";
-	variables.serverMonitor   = "";
 
-	function init( required postService, required commentService, required insightsService, required serverMonitor ){
+	function init( required postService, required commentService, required insightsService ){
 		variables.postService     = arguments.postService;
 		variables.commentService  = arguments.commentService;
 		variables.insightsService = arguments.insightsService;
-		variables.serverMonitor   = arguments.serverMonitor;
 		return this;
 	}
 
@@ -23,7 +21,6 @@ class {
 		arguments.router.get( "/manage/api/dashboard/top-posts", arguments.auth, ( req, res ) => dashboardTopPosts( req, res ) );
 		arguments.router.get( "/manage/api/dashboard/traffic", arguments.admin, ( req, res ) => dashboardTraffic( req, res ) );
 		arguments.router.get( "/manage/api/dashboard/audience", arguments.admin, ( req, res ) => dashboardAudience( req, res ) );
-		arguments.router.get( "/manage/api/dashboard/system", arguments.admin, ( req, res ) => dashboardSystem( req, res ) );
 	}
 
 	// GET /manage/api/dashboard
@@ -108,22 +105,6 @@ class {
 			"searches"    : loadOrNull( () => variables.postService.getTopSearches( 30, rowLimit ).map( ( row ) => { return { "label": row.query, "count": val( row.search_count ) }; } ) ),
 			"zeroSearches": loadOrNull( () => variables.postService.getZeroResultSearches( 30, rowLimit ).map( ( row ) => { return { "label": row.query, "count": val( row.search_count ) }; } ) ),
 			"notFound"    : loadOrNull( () => variables.insightsService.getTop404s( 30, rowLimit ).map( ( row ) => { return { "label": row.path, "count": val( row.count ) }; } ) )
-		} );
-	}
-
-	// GET /manage/api/dashboard/system — the three figures the dashboard
-	// gauges show; the System page has the rest.
-	function dashboardSystem( req, res ){
-		var snapshot = variables.serverMonitor.getSnapshot();
-		var cpuLoad  = snapshot.cpu.systemCpuLoad ?: -1;
-
-		res.json( {
-			"heapUsed" : snapshot.memory.heapUsed,
-			"heapMax"  : snapshot.memory.heapMax > 0 ? snapshot.memory.heapMax : snapshot.memory.heapCommitted,
-			"diskUsed" : snapshot.disk.totalSpace - snapshot.disk.freeSpace,
-			"diskTotal": snapshot.disk.totalSpace,
-			"cpuLoad"  : cpuLoad >= 0 ? cpuLoad : javacast( "null", "" ),
-			"uptimeMs" : snapshot.jvm.uptimeMs
 		} );
 	}
 

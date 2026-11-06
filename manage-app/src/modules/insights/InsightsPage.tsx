@@ -1,9 +1,13 @@
+import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Box from "@mui/material/Box";
+import Chip from "@mui/material/Chip";
 import Link from "@mui/material/Link";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { useTheme } from "@mui/material/styles";
+import TrendingDown from "@mui/icons-material/TrendingDown";
+import TrendingUp from "@mui/icons-material/TrendingUp";
 import { LineChart } from "@mui/x-charts/LineChart";
 import { api } from "../../app/api";
 import { AdminOnly } from "../../shared/AdminOnly";
@@ -35,14 +39,34 @@ function shortDate(isoDate: string): string {
 	return new Date(year, month - 1, day).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value, extra }: { label: string; value: string; extra?: ReactNode }) {
 	return (
 		<Box>
-			<Typography sx={{ fontSize: "1.5rem", fontWeight: 700, lineHeight: 1.2 }}>{value}</Typography>
+			<Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+				<Typography sx={{ fontSize: "1.5rem", fontWeight: 700, lineHeight: 1.2 }}>{value}</Typography>
+				{extra}
+			</Stack>
 			<Typography variant="caption" color="text.secondary">
 				{label}
 			</Typography>
 		</Box>
+	);
+}
+
+/** The change against the 30 days before. */
+function Delta({ current, previous }: { current: number; previous: number }) {
+	if (previous <= 0) return null;
+	const change = Math.round(((current - previous) / previous) * 100);
+	const up = change >= 0;
+	return (
+		<Chip
+			size="small"
+			color={up ? "success" : "error"}
+			variant="outlined"
+			icon={up ? <TrendingUp /> : <TrendingDown />}
+			label={`${up ? "+" : ""}${change}%`}
+			title="Against the previous 30 days"
+		/>
 	);
 }
 
@@ -74,7 +98,11 @@ function Insights() {
 							) : (
 								<>
 									<Stack direction="row" spacing={5} sx={{ mb: 1 }}>
-										<Stat label="total views" value={data.total.toLocaleString()} />
+										<Stat
+												label="total views, against the previous 30 days"
+												value={data.total.toLocaleString()}
+												extra={<Delta current={data.total} previous={data.previousTotal} />}
+											/>
 										<Stat label="peak day" value={Math.max(...data.days.map((day) => day.views)).toLocaleString()} />
 										<Stat label="today" value={data.today.toLocaleString()} />
 									</Stack>

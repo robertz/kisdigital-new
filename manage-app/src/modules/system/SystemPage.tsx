@@ -338,7 +338,6 @@ function Memory({ s }: { s: Snapshot }) {
 		<Facts
 			title="Memory"
 			rows={[
-				["Heap used", `${bytes(m.heapUsed)} of ${bytes(m.heapMax)}`],
 				["Heap committed", bytes(m.heapCommitted)],
 				["Outside the heap", `${bytes(m.nonHeapUsed)} (${bytes(m.nonHeapCommitted)} committed)`],
 				["Direct buffers", m.direct ? `${bytes(m.direct.used)} in ${count(m.direct.buffers)}${m.direct.max ? ` of ${bytes(m.direct.max)}` : ""}` : "—"],
@@ -395,8 +394,7 @@ function Threads({ s }: { s: Snapshot }) {
 		<Facts
 			title="Threads"
 			rows={[
-				["Live", `${count(t.liveCount)} (${count(t.daemonCount)} daemon)`],
-				["Peak", count(t.peakCount)],
+				["Daemon", count(t.daemonCount)],
 				["Started since start", count(t.totalStartedCount)],
 				["Deadlocked", t.deadlocked.length ? <Box component="span" sx={{ color: "error.main" }}>{t.deadlocked.join(", ")}</Box> : "none"],
 				...t.busiest.map((b): [string, ReactNode] => [
@@ -419,7 +417,6 @@ function Http({ s }: { s: Snapshot }) {
 		<Facts
 			title="HTTP"
 			rows={[
-				["Requests", `${count(c.requestCount)} (${count(c.errorCount)} errors)`],
 				["Requests now", `${count(c.activeRequests)}, ${count(c.maxActiveRequests)} at most`],
 				["Connections now", `${count(c.activeConnections)}, ${count(c.maxActiveConnections)} at most`],
 				["Average time", c.requestCount ? ms(c.processingTimeMs / c.requestCount) : "—"],
@@ -439,7 +436,6 @@ function Runtime({ s }: { s: Snapshot }) {
 				["BoxLang", s.boxlangVersion || "—"],
 				["Java", `${s.process.javaVersion} · ${s.jvm.vmName}`],
 				["Vendor", s.jvm.vmVendor],
-				["Started", new Date(s.jvm.startedAt).toLocaleString()],
 				["Classes loaded", count(s.jvm.loadedClassCount)],
 				["OS", `${s.process.osName} ${s.process.osVersion} (${s.process.osArch})`],
 				["PID", s.process.pid ?? "—"],
