@@ -24,6 +24,7 @@ class {
 
 	variables.app      = "";
 	variables.gcCauses = "";
+	variables.requestLogger = "";
 	// { cpu, wall } nanoseconds at the previous reading, for recentLoad
 	variables.lastCpu = {};
 	// { wall, cpu: { thread id: nanoseconds } } at the previous reading
@@ -38,9 +39,10 @@ class {
 	 *        >=0.2.1). Optional so this class still works standalone (e.g.
 	 *        under test) without a real server behind it.
 	 */
-	function init( app = javacast( "null", "" ), gcCauses = javacast( "null", "" ) ){
-		variables.app      = arguments.app;
-		variables.gcCauses = arguments.gcCauses;
+	function init( app = javacast( "null", "" ), gcCauses = javacast( "null", "" ), requestLogger = javacast( "null", "" ) ){
+		variables.app           = arguments.app;
+		variables.gcCauses      = arguments.gcCauses;
+		variables.requestLogger = arguments.requestLogger;
 		return this;
 	}
 
@@ -60,7 +62,8 @@ class {
 			"threads"       : _threads(),
 			"files"         : _files(),
 			"process"       : _process(),
-			"connector"     : _connector()
+			"connector"     : _connector(),
+			"requestTiming" : isNull( variables.requestLogger ) || !isObject( variables.requestLogger ) ? javacast( "null", "" ) : variables.requestLogger.timing()
 		};
 		if ( arguments.includeDatabase ){
 			snapshot[ "mysql" ] = _mysql();
@@ -394,9 +397,9 @@ class {
 	// or the server hasn't started/has already stopped — see
 	// BoxExpress.getConnectorStatistics()'s own docblock for when that is.
 	//
-	// getProcessingTime()/getMaxProcessingTime() are nanoseconds per
-	// Undertow's own ConnectorStatistics API — converted to ms here so
-	// every duration this class returns is consistently in milliseconds.
+	// Undertow's processing times are left out: they stay 0 because
+	// boxlang-express doesn't turn on UndertowOptions.RECORD_REQUEST_START_TIME.
+	// RequestLogger's timing (requestTiming above) stands in for them.
 	private function _connector(){
 		if ( isNull( variables.app ) || !isObject( variables.app ) ){
 			return javacast( "null", "" );
@@ -415,9 +418,7 @@ class {
 			"maxActiveConnections": stats.getMaxActiveConnections(),
 			"bytesSent"           : stats.getBytesSent(),
 			"bytesReceived"       : stats.getBytesReceived(),
-			"errorCount"          : stats.getErrorCount(),
-			"processingTimeMs"    : stats.getProcessingTime() / 1000000,
-			"maxProcessingTimeMs" : stats.getMaxProcessingTime() / 1000000
+			"errorCount"          : stats.getErrorCount()
 		};
 	}
 

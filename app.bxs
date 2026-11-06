@@ -88,7 +88,7 @@ insightsService.startDailySummaries()
 // Undertow's own connector stats via `app`, and MySQL's own figures. See
 // ServerMonitor.bx. ServerHistory records them hourly (ServerHourly table,
 // db/migrations/0028) for the page's trend charts.
-serverMonitor = new models.util.ServerMonitor( app, new models.util.GcCauses() )
+serverMonitor = new models.util.ServerMonitor( app, new models.util.GcCauses(), requestLogger )
 serverHistory = new models.services.ServerHistory( serverMonitor )
 serverHistory.startHourly( app )
 

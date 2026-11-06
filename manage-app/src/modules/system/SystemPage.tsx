@@ -84,9 +84,8 @@ interface Snapshot {
 		bytesSent: number;
 		bytesReceived: number;
 		errorCount: number;
-		processingTimeMs: number;
-		maxProcessingTimeMs: number;
 	} | null;
+	requestTiming?: { requests: number; averageMs: number; slowestMs: number } | null;
 	mysql?: {
 		version: string;
 		uptimeSeconds: number;
@@ -134,7 +133,7 @@ const bytes = (n: Maybe<number>) => {
 };
 const percent = (f: Maybe<number>, digits = 0) => (f === null || f === undefined || f < 0 ? "—" : `${(f * 100).toFixed(digits)}%`);
 const count = (n: Maybe<number>) => (n === null || n === undefined ? "—" : Math.round(n).toLocaleString());
-const ms = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)} s` : `${Math.round(n)} ms`);
+const ms = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)} s` : n < 10 ? `${n.toFixed(1)} ms` : `${Math.round(n)} ms`);
 const duration = (seconds: number) => {
 	const d = Math.floor(seconds / 86400);
 	const h = Math.floor((seconds % 86400) / 3600);
@@ -430,8 +429,8 @@ function Http({ s }: { s: Snapshot }) {
 			rows={[
 				["Requests now", `${count(c.activeRequests)}, ${count(c.maxActiveRequests)} at most`],
 				["Connections now", `${count(c.activeConnections)}, ${count(c.maxActiveConnections)} at most`],
-				["Average time", c.requestCount ? ms(c.processingTimeMs / c.requestCount) : "—"],
-				["Slowest", ms(c.maxProcessingTimeMs)],
+				["Average time", s.requestTiming?.requests ? ms(s.requestTiming.averageMs) : "—"],
+				["Slowest", s.requestTiming?.requests ? ms(s.requestTiming.slowestMs) : "—"],
 				["Sent", bytes(c.bytesSent)],
 				["Received", bytes(c.bytesReceived)],
 			]}

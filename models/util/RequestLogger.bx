@@ -30,6 +30,11 @@ class {
 	variables.flushesBetweenCleanup = 360;
 	variables.flushesSinceCleanup   = 0;
 	variables.botDetector           = new models.util.BotDetector();
+	// Running request timing since start, for the System page. Undertow's own
+	// figures stay 0: boxlang-express doesn't turn on its request start times.
+	variables.timedRequests = createObject( "java", "java.util.concurrent.atomic.AtomicLong" ).init( 0 );
+	variables.totalMs       = createObject( "java", "java.util.concurrent.atomic.AtomicLong" ).init( 0 );
+	variables.slowestMs     = createObject( "java", "java.util.concurrent.atomic.AtomicLong" ).init( 0 );
 
 	function init( numeric flushIntervalSeconds = 5, numeric retentionDays = 90 ){
 		variables.flushIntervalSeconds = arguments.flushIntervalSeconds;
@@ -45,8 +50,30 @@ class {
 		return ( req, res, next ) => {
 			var startedAt = getTickCount();
 			next();
-			_enqueue( req, res, getTickCount() - startedAt );
+			var durationMs = getTickCount() - startedAt;
+			_time( durationMs );
+			_enqueue( req, res, durationMs );
 		};
+	}
+
+	/** Requests handled since start, their average and the slowest, in milliseconds. */
+	struct function timing(){
+		var requests = variables.timedRequests.get();
+		return {
+			"requests" : requests,
+			"averageMs": requests ? variables.totalMs.get() / requests : 0,
+			"slowestMs": variables.slowestMs.get()
+		};
+	}
+
+	private void function _time( required numeric durationMs ){
+		var ms = javacast( "long", arguments.durationMs );
+		variables.timedRequests.incrementAndGet();
+		variables.totalMs.addAndGet( ms );
+		var slowest = variables.slowestMs.get();
+		while ( ms > slowest && !variables.slowestMs.compareAndSet( slowest, ms ) ){
+			slowest = variables.slowestMs.get();
+		}
 	}
 
 	/**
