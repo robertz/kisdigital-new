@@ -7,6 +7,7 @@ import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
 import Divider from "@mui/material/Divider";
+import Drawer from "@mui/material/Drawer";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import IconButton from "@mui/material/IconButton";
 import InputAdornment from "@mui/material/InputAdornment";
@@ -21,7 +22,10 @@ import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
+import useMediaQuery from "@mui/material/useMediaQuery";
+import type { Theme } from "@mui/material/styles";
 import ArrowBack from "@mui/icons-material/ArrowBack";
+import Close from "@mui/icons-material/Close";
 import Code from "@mui/icons-material/Code";
 import DeleteOutline from "@mui/icons-material/DeleteOutlined";
 import FormatBold from "@mui/icons-material/FormatBold";
@@ -29,8 +33,6 @@ import FormatItalic from "@mui/icons-material/FormatItalic";
 import FormatListBulleted from "@mui/icons-material/FormatListBulleted";
 import FormatListNumbered from "@mui/icons-material/FormatListNumbered";
 import FormatQuote from "@mui/icons-material/FormatQuote";
-import Fullscreen from "@mui/icons-material/Fullscreen";
-import FullscreenExit from "@mui/icons-material/FullscreenExit";
 import HistoryOutlined from "@mui/icons-material/HistoryOutlined";
 import ImageOutlined from "@mui/icons-material/ImageOutlined";
 import InsertLink from "@mui/icons-material/InsertLink";
@@ -38,19 +40,21 @@ import OpenInNew from "@mui/icons-material/OpenInNew";
 import PhotoLibraryOutlined from "@mui/icons-material/PhotoLibraryOutlined";
 import SaveOutlined from "@mui/icons-material/SaveOutlined";
 import Title from "@mui/icons-material/Title";
+import TuneOutlined from "@mui/icons-material/TuneOutlined";
 import UploadOutlined from "@mui/icons-material/UploadOutlined";
 import { errorMessage } from "../../app/api";
 import { ConfirmDialog } from "../../shared/ConfirmDialog";
 import { ImageCropper } from "../../shared/ImageCropper";
-import { ImagePicker, defaultUploadPath } from "../../shared/ImagePicker";
+import { ImagePicker } from "../../shared/ImagePicker";
 import { Page } from "../../shared/Page";
 import { StatusBadge } from "../../shared/StatusBadge";
 import { ButtonLink, IconButtonLink } from "../../shared/links";
 import { fromLocalInput, localZoneLabel, toLocalInput } from "../../shared/dates";
-import { uploadImage } from "../../shared/media";
+import { uploadImage, uploadPath } from "../../shared/media";
 import { HistoryDrawer } from "./HistoryDrawer";
 import { MarkdownEditor, type MarkdownEditorHandle } from "./MarkdownEditor";
-import { headingOffsetsIn, linkScroll } from "./scrollSync";
+import { FormatToolbar, PostEditorContent, insertImage, usePostEditor } from "./richtext/RichTextEditor";
+import { survivesVisualEditing } from "./richtext/roundTrip";
 import { canDelete, postsApi, type Post, type PostInput, type Revision } from "./api";
 import { useLocalDraft } from "./useLocalDraft";
 
@@ -66,17 +70,11 @@ interface Draft {
 	tags: string[];
 }
 
-type Mode = "write" | "split" | "preview";
-
-const MODES: { id: Mode; label: string }[] = [
-	{ id: "write", label: "Write" },
-	{ id: "split", label: "Split" },
-	{ id: "preview", label: "Preview" },
-];
+type Mode = "visual" | "markdown" | "preview";
 
 const HEADER_HEIGHT = "var(--site-padding-top, 64px)";
-const MODE_KEY = "kisdigital:manage:editor-mode";
-const FOCUS_KEY = "kisdigital:distraction-free";
+const MODE_KEY = "kisdigital:manage:body-editor";
+const SETTINGS_KEY = "kisdigital:manage:post-settings";
 
 function toDraft(post: Post | null): Draft {
 	return {
@@ -136,69 +134,96 @@ function withUniquePastedName(file: File): File {
 	return new File([file], `pasted-${Date.now()}.${ext}`, { type: file.type });
 }
 
+function useElementHeight<T extends HTMLElement>(): [(el: T | null) => void, number] {
+	const [el, setEl] = useState<T | null>(null);
+	const [height, setHeight] = useState(0);
+	useEffect(() => {
+		if (!el) return;
+		const observer = new ResizeObserver(() => setHeight(el.offsetHeight));
+		observer.observe(el);
+		return () => observer.disconnect();
+	}, [el]);
+	return [setEl, height];
+}
+
 function PostEditor({ post }: { post: Post | null }) {
 	const navigate = useNavigate();
 	const queryClient = useQueryClient();
-	const editor = useRef<MarkdownEditorHandle>(null);
+	const markdownEditor = useRef<MarkdownEditorHandle>(null);
 	const coverFile = useRef<HTMLInputElement>(null);
 	const leaving = useRef(false);
+	const wide = useMediaQuery((theme: Theme) => theme.breakpoints.up("lg"));
+	const [setBarRef, barHeight] = useElementHeight<HTMLElement>();
 
 	const [saved, setSaved] = useState(post);
 	const [synced, setSynced] = useState(() => toDraft(post));
 	const [draft, setDraft] = useState(synced);
 	const [slugLocked, setSlugLocked] = useState(synced.slug.length > 0);
 	const [flash, setFlash] = useState<{ kind: "success" | "error"; text: string } | null>(null);
-	const [mode, setMode] = useState<Mode>(() => {
-		const stored = readStored(MODE_KEY);
-		return stored === "split" || stored === "preview" ? stored : "write";
-	});
-	const [focusMode, setFocusMode] = useState(() => readStored(FOCUS_KEY) === "1");
+	const [mode, setMode] = useState<Mode>(() => (readStored(MODE_KEY) === "markdown" ? "markdown" : "visual"));
+	// Set when the visual editor would rewrite parts of this body it can't hold.
+	const [lossy, setLossy] = useState(false);
+	// Beside the editor on a wide screen, where it stays as left; over it on a
+	// narrow one, where it starts closed.
+	const [sideOpen, setSideOpen] = useState(() => readStored(SETTINGS_KEY) !== "0");
+	const [drawerOpen, setDrawerOpen] = useState(false);
+	const settingsOpen = wide ? sideOpen : drawerOpen;
 	const [picker, setPicker] = useState<"cover" | "insert" | null>(null);
 	const [pickerOpen, setPickerOpen] = useState(false);
 	const [confirmingDelete, setConfirmingDelete] = useState(false);
 	const [croppingCover, setCroppingCover] = useState<File | null>(null);
 	const [historyOpen, setHistoryOpen] = useState(false);
 	const [serverSavedAt, setServerSavedAt] = useState<number | null>(null);
-	const [uploadStatus, setUploadStatus] = useState("");
+	const [uploads, setUploads] = useState(0);
 	const [coverStatus, setCoverStatus] = useState<{ text: string; error: boolean } | null>(null);
 
 	const local = useLocalDraft(`kisdigital:manage:post-draft:${post?.id ?? "new"}`, draft, synced);
 	const allTags = useQuery({ queryKey: ["tags"], queryFn: postsApi.tags });
 
-	const previewBody = useDebounced(draft.body, 500);
+	function update(patch: Partial<Draft>) {
+		setDraft((current) => ({ ...current, ...patch }));
+	}
+
+	async function uploadBodyImage(file: File): Promise<string> {
+		setUploads((n) => n + 1);
+		try {
+			return await uploadImage(withUniquePastedName(file), uploadPath());
+		} catch (err) {
+			setFlash({ kind: "error", text: errorMessage(err, "Image upload failed.") });
+			throw err;
+		} finally {
+			setUploads((n) => n - 1);
+		}
+	}
+
+	const editor = usePostEditor({
+		value: draft.body,
+		onChange: (body) => update({ body }),
+		placeholder: "Tell your story…",
+		upload: uploadBodyImage,
+		active: mode === "visual",
+	});
+
+	// A body the visual editor can't hold exactly opens as Markdown, once.
+	const checked = useRef(false);
+	useEffect(() => {
+		if (!editor || checked.current) return;
+		checked.current = true;
+		if (mode === "visual" && !survivesVisualEditing(editor, draft.body)) {
+			setMode("markdown");
+			setLossy(true);
+		}
+	}, [editor, mode, draft.body]);
+
+	const previewBody = useDebounced(draft.body, 400);
 	const preview = useQuery({
 		queryKey: ["preview", previewBody],
 		queryFn: () => postsApi.preview(previewBody),
-		enabled: mode !== "write",
+		enabled: mode === "preview",
 		placeholderData: keepPreviousData,
 		staleTime: Infinity,
 		gcTime: 60_000,
 	});
-
-	// Side by side, scrolling either pane brings the other to the same place.
-	const [previewPane, setPreviewPane] = useState<HTMLDivElement | null>(null);
-	const scrollLink = useRef<ReturnType<typeof linkScroll> | null>(null);
-	useEffect(() => {
-		const scroller = editor.current?.scroller();
-		if (mode !== "split" || !previewPane || !scroller) return;
-		const unlink = linkScroll(
-			{ el: scroller, headings: () => editor.current?.headingOffsets() ?? [] },
-			{ el: previewPane, headings: () => headingOffsetsIn(previewPane) },
-		);
-		scrollLink.current = unlink;
-		return () => {
-			unlink();
-			scrollLink.current = null;
-		};
-	}, [mode, previewPane]);
-	// A fresh preview can be a different height, which moves everything in it.
-	useEffect(() => {
-		scrollLink.current?.sync();
-	}, [preview.data]);
-
-	function update(patch: Partial<Draft>) {
-		setDraft((current) => ({ ...current, ...patch }));
-	}
 
 	const save = useMutation({
 		mutationFn: (submitted: Draft) =>
@@ -317,29 +342,20 @@ function PostEditor({ post }: { post: Post | null }) {
 	});
 
 	function changeMode(next: Mode) {
+		if (next === "visual" && editor) setLossy(!survivesVisualEditing(editor, draft.body));
+		if (next !== "preview") writeStored(MODE_KEY, next);
 		setMode(next);
-		writeStored(MODE_KEY, next);
 	}
 
-	function toggleFocusMode() {
-		setFocusMode((on) => {
-			writeStored(FOCUS_KEY, on ? "0" : "1");
-			return !on;
-		});
-	}
-
-	async function insertImages(files: File[]) {
-		for (const file of files) {
-			setUploadStatus("Uploading image…");
-			try {
-				const named = withUniquePastedName(file);
-				const url = await uploadImage(named, defaultUploadPath);
-				editor.current?.insertAtCursor(`![${named.name.replace(/\.[^.]+$/, "")}](${url})\n`);
-			} catch (err) {
-				setFlash({ kind: "error", text: errorMessage(err, "Image upload failed.") });
-			}
+	function toggleSettings() {
+		if (!wide) {
+			setDrawerOpen((open) => !open);
+			return;
 		}
-		setUploadStatus("");
+		setSideOpen((open) => {
+			writeStored(SETTINGS_KEY, open ? "0" : "1");
+			return !open;
+		});
 	}
 
 	// A cover is cropped to the shape the site shows it in before it's
@@ -353,10 +369,10 @@ function PostEditor({ post }: { post: Post | null }) {
 
 	async function uploadCover(file: File | undefined) {
 		if (!file) return;
-		setCoverStatus({ text: "Uploading…", error: false });
+		setCoverStatus({ text: "Uploading cover…", error: false });
 		try {
-			update({ coverImage: await uploadImage(file, defaultUploadPath) });
-			setCoverStatus({ text: "Uploaded.", error: false });
+			update({ coverImage: await uploadImage(file, uploadPath()) });
+			setCoverStatus(null);
 		} catch (err) {
 			setCoverStatus({ text: errorMessage(err, "Upload failed. Check your connection and try again."), error: true });
 		} finally {
@@ -365,11 +381,13 @@ function PostEditor({ post }: { post: Post | null }) {
 	}
 
 	function pickImage(url: string, filename: string, alt: string) {
+		const text = alt || filename.replace(/\.[^.]+$/, "");
 		if (picker === "insert") {
-			editor.current?.insertAtCursor(`![${alt || filename.replace(/\.[^.]+$/, "")}](${url})`);
+			if (mode === "visual" && editor) insertImage(editor, url, text);
+			else markdownEditor.current?.insertAtCursor(`![${text}](${url})`);
 		} else {
 			update({ coverImage: url });
-			setCoverStatus({ text: "Selected.", error: false });
+			setCoverStatus(null);
 		}
 		setPickerOpen(false);
 	}
@@ -385,7 +403,7 @@ function PostEditor({ post }: { post: Post | null }) {
 
 	let statusText = "";
 	if (save.isPending) statusText = "Saving…";
-	else if (uploadStatus) statusText = uploadStatus;
+	else if (uploads) statusText = uploads > 1 ? `Uploading ${uploads} images…` : "Uploading image…";
 	else if (local.dirty)
 		statusText = serverSavedAt
 			? "Unsaved changes, backed up to the server"
@@ -394,7 +412,24 @@ function PostEditor({ post }: { post: Post | null }) {
 				: "Unsaved changes";
 	else if (saved) statusText = "All changes saved";
 
-	const sideBySide = !focusMode;
+	const settings = (
+		<SettingsPanel
+			draft={draft}
+			saved={saved}
+			tags={allTags.data ?? []}
+			slugLocked={slugLocked}
+			deleting={remove.isPending || save.isPending}
+			onUpdate={update}
+			onSlug={(slug) => {
+				setSlugLocked(true);
+				update({ slug });
+			}}
+			onDelete={() => setConfirmingDelete(true)}
+			onClose={wide ? undefined : toggleSettings}
+		/>
+	);
+
+	const sidePadding = { xs: 2.5, sm: 5 };
 
 	return (
 		<Page flush>
@@ -406,21 +441,21 @@ function PostEditor({ post }: { post: Post | null }) {
 				}}
 			>
 				<Paper
+					ref={setBarRef}
 					square
 					component="header"
 					sx={{
 						position: "sticky",
 						top: HEADER_HEIGHT,
-						zIndex: 10,
+						zIndex: 11,
 						border: 0,
 						borderBottom: 1,
 						borderColor: "divider",
-						px: { xs: 2, sm: 3 },
-						py: 1.5,
+						px: { xs: 1.5, sm: 3 },
+						py: 1,
 						display: "flex",
 						alignItems: "center",
-						gap: 2,
-						flexWrap: "wrap",
+						gap: 1,
 					}}
 				>
 					<Tooltip title="Back to posts">
@@ -428,32 +463,28 @@ function PostEditor({ post }: { post: Post | null }) {
 							<ArrowBack />
 						</IconButtonLink>
 					</Tooltip>
-					<Box sx={{ flex: 1, minWidth: 0 }}>
-						<Typography variant="overline" color="text.secondary" sx={{ display: "block", lineHeight: 1.4 }}>
-							{saved ? "Editing post" : "New post"}
+					<Stack direction="row" spacing={1.5} sx={{ flex: 1, minWidth: 0, alignItems: "center" }}>
+						<Typography variant="subtitle2" noWrap sx={{ display: { xs: "none", sm: "block" } }}>
+							{saved ? "Edit post" : "New post"}
 						</Typography>
-						<Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-							<StatusBadge
-								status={saved?.status ?? "draft"}
-								isScheduled={saved?.isScheduled}
-								publishDate={saved?.publishDate}
-							/>
-							{saved && saved.postUrl && (
-								<Button
-									href={saved.postUrl}
-									target="_blank"
-									rel="noopener"
-									size="small"
-									endIcon={<OpenInNew sx={{ fontSize: "0.875rem !important" }} />}
-								>
-									{isLive ? "View live" : "Preview"}
-								</Button>
-							)}
-						</Stack>
-					</Box>
-					<Typography variant="caption" color="text.secondary" aria-live="polite" noWrap>
-						{statusText}
-					</Typography>
+						<StatusBadge status={saved?.status ?? "draft"} isScheduled={saved?.isScheduled} publishDate={saved?.publishDate} />
+						<Typography
+							variant="caption"
+							color="text.secondary"
+							aria-live="polite"
+							noWrap
+							sx={{ display: { xs: "none", md: "block" } }}
+						>
+							{statusText}
+						</Typography>
+					</Stack>
+					{saved?.postUrl && (
+						<Tooltip title={isLive ? "View live" : "Open preview"}>
+							<IconButton component="a" href={saved.postUrl} target="_blank" rel="noopener" aria-label={isLive ? "View live" : "Open preview"}>
+								<OpenInNew />
+							</IconButton>
+						</Tooltip>
+					)}
 					{saved && (
 						<Tooltip title="History">
 							<IconButton aria-label="History" onClick={() => setHistoryOpen(true)}>
@@ -461,302 +492,212 @@ function PostEditor({ post }: { post: Post | null }) {
 							</IconButton>
 						</Tooltip>
 					)}
-					<Tooltip title="Distraction-free mode">
-						<IconButton aria-pressed={focusMode} color={focusMode ? "primary" : "default"} onClick={toggleFocusMode}>
-							{focusMode ? <FullscreenExit /> : <Fullscreen />}
+					<Tooltip title={settingsOpen ? "Hide post settings" : "Post settings"}>
+						<IconButton aria-label="Post settings" aria-pressed={settingsOpen} color={settingsOpen ? "primary" : "default"} onClick={toggleSettings}>
+							<TuneOutlined />
 						</IconButton>
 					</Tooltip>
-					{saved && canDelete(saved) && (
-						<Button
-							color="error"
-							startIcon={<DeleteOutline />}
-							disabled={remove.isPending || save.isPending}
-							onClick={() => setConfirmingDelete(true)}
-						>
-							Delete
-						</Button>
-					)}
-					<ButtonLink to="/posts" color="inherit">
-						Cancel
-					</ButtonLink>
-					<Button type="submit" variant="contained" startIcon={<SaveOutlined />} loading={save.isPending}>
-						{saved ? "Save changes" : "Create post"}
+					<Button type="submit" variant="contained" startIcon={<SaveOutlined />} loading={save.isPending} sx={{ ml: 0.5 }}>
+						{saved ? "Save" : "Create post"}
 					</Button>
 				</Paper>
-
-				<Stack spacing={2} sx={{ px: { xs: 2, sm: 3 }, pt: flash || local.pending ? 2 : 0 }}>
-					{flash && (
-						<Alert severity={flash.kind} onClose={() => setFlash(null)}>
-							{flash.text}
-						</Alert>
-					)}
-					{local.pending && (
-						<Alert
-							severity="info"
-							action={
-								<>
-									<Button
-										color="inherit"
-										size="small"
-										onClick={() => {
-											const data = local.pending!.data;
-											setDraft({ ...synced, ...data, tags: Array.isArray(data.tags) ? data.tags : synced.tags });
-											setSlugLocked(true);
-											local.dismissPending();
-										}}
-									>
-										Restore it
-									</Button>
-									<Button color="inherit" size="small" onClick={local.discardPending}>
-										Discard
-									</Button>
-								</>
-							}
-						>
-							An unsaved draft from {new Date(local.pending.savedAt).toLocaleString()} differs from what's shown here.
-						</Alert>
-					)}
-				</Stack>
 
 				<Box
 					sx={{
 						display: "grid",
 						gap: 3,
-						p: { xs: 2, sm: 3 },
-						gridTemplateColumns: { xs: "minmax(0, 1fr)", lg: sideBySide ? "minmax(0, 1fr) 340px" : "minmax(0, 1fr)" },
-						maxWidth: sideBySide ? "none" : 1200,
-						mx: "auto",
+						p: { xs: 1.5, sm: 3 },
+						gridTemplateColumns: wide && settingsOpen ? "minmax(0, 1fr) 340px" : "minmax(0, 1fr)",
+						alignItems: "start",
 					}}
 				>
-					<Stack spacing={3} sx={{ minWidth: 0 }}>
-						<Paper sx={{ p: 2.5 }}>
-							<InputBase
-								fullWidth
-								value={draft.title}
-								placeholder="Your post title…"
-								inputProps={{ "aria-label": "Title" }}
-								sx={{ fontSize: "1.75rem", fontWeight: 700, letterSpacing: "-0.01em" }}
-								onChange={(e) =>
-									update(slugLocked ? { title: e.target.value } : { title: e.target.value, slug: slugify(e.target.value) })
+					<Stack spacing={2} sx={{ minWidth: 0, width: "100%", maxWidth: 860, mx: "auto" }}>
+						{flash && (
+							<Alert severity={flash.kind} onClose={() => setFlash(null)}>
+								{flash.text}
+							</Alert>
+						)}
+						{local.pending && (
+							<Alert
+								severity="info"
+								action={
+									<>
+										<Button
+											color="inherit"
+											size="small"
+											onClick={() => {
+												const data = local.pending!.data;
+												setDraft({ ...synced, ...data, tags: Array.isArray(data.tags) ? data.tags : synced.tags });
+												setSlugLocked(true);
+												local.dismissPending();
+											}}
+										>
+											Restore it
+										</Button>
+										<Button color="inherit" size="small" onClick={local.discardPending}>
+											Discard
+										</Button>
+									</>
 								}
-							/>
-							{sideBySide && (
-								<TextField
-									value={draft.slug}
-									placeholder="auto-generated-from-title"
-									helperText="Leave blank to auto-generate from the title."
-									sx={{ mt: 1.5 }}
-									slotProps={{
-										htmlInput: { "aria-label": "Slug", style: { fontFamily: "var(--font-mono)", fontSize: "0.875rem" } },
-										input: { startAdornment: <InputAdornment position="start">/posts/</InputAdornment> },
-									}}
-									onChange={(e) => {
-										setSlugLocked(true);
-										update({ slug: e.target.value });
-									}}
-								/>
-							)}
-						</Paper>
-
-						{sideBySide && (
-							<Panel title="Description">
-								<TextField
-									multiline
-									minRows={3}
-									value={draft.description}
-									placeholder="Short summary shown in post cards…"
-									helperText={`${draft.description.length} / 500 characters`}
-									slotProps={{ htmlInput: { maxLength: 500, "aria-label": "Description" } }}
-									onChange={(e) => update({ description: e.target.value })}
-								/>
-							</Panel>
+							>
+								An unsaved draft from {new Date(local.pending.savedAt).toLocaleString()} differs from what's shown here.
+							</Alert>
 						)}
 
-						<Panel
-							title="Body"
-							hint="Markdown"
-							action={
+						<Paper sx={{ overflow: "visible" }}>
+							<CoverBanner
+								url={draft.coverImage}
+								status={coverStatus}
+								onUpload={() => coverFile.current?.click()}
+								onChoose={() => openPicker("cover")}
+								onRemove={() => update({ coverImage: "" })}
+							/>
+							<input
+								ref={coverFile}
+								type="file"
+								accept="image/jpeg,image/png,image/webp,image/gif"
+								hidden
+								onChange={(e) => chooseCover(e.target.files?.[0])}
+							/>
+
+							<Box sx={{ px: sidePadding, pt: 3.5, pb: 2 }}>
+								<InputBase
+									fullWidth
+									multiline
+									value={draft.title}
+									placeholder="Title"
+									inputProps={{ "aria-label": "Title", maxLength: 200 }}
+									sx={{ fontSize: { xs: "1.75rem", sm: "2.25rem" }, fontWeight: 700, letterSpacing: "-0.02em", lineHeight: 1.2, p: 0 }}
+									onKeyDown={(e) => e.key === "Enter" && e.preventDefault()}
+									onChange={(e) => {
+										const title = e.target.value.replace(/\n/g, " ");
+										update(slugLocked ? { title } : { title, slug: slugify(title) });
+									}}
+								/>
+								<InputBase
+									fullWidth
+									multiline
+									value={draft.description}
+									placeholder="Add a short summary for post cards, feeds and search results…"
+									inputProps={{ "aria-label": "Summary", maxLength: 500 }}
+									sx={{ mt: 1.5, fontSize: "1.0625rem", color: "text.secondary", lineHeight: 1.5, p: 0 }}
+									onChange={(e) => update({ description: e.target.value })}
+								/>
+								{draft.description.length > 400 && (
+									<Typography variant="caption" color="text.secondary">
+										{draft.description.length} / 500
+									</Typography>
+								)}
+							</Box>
+
+							<Box
+								sx={{
+									position: "sticky",
+									top: `calc(${HEADER_HEIGHT} + ${barHeight}px)`,
+									zIndex: 10,
+									bgcolor: "background.paper",
+									borderTop: 1,
+									borderBottom: 1,
+									borderColor: "divider",
+									px: { xs: 1, sm: 3 },
+									py: 0.75,
+									display: "flex",
+									alignItems: "center",
+									gap: 1,
+									flexWrap: "wrap",
+								}}
+							>
+								<Box sx={{ flex: 1, minWidth: 0 }}>
+									{mode === "visual" && editor ? (
+										<FormatToolbar editor={editor} onInsertImage={() => openPicker("insert")} />
+									) : mode === "markdown" ? (
+										<MarkdownToolbar editor={markdownEditor} onInsertImage={() => openPicker("insert")} />
+									) : (
+										<Typography variant="body2" color="text.secondary" sx={{ px: 1 }}>
+											How the post will look, rendered by the site.
+										</Typography>
+									)}
+								</Box>
 								<ToggleButtonGroup
 									size="small"
 									exclusive
 									value={mode}
 									onChange={(_event, next: Mode | null) => next && changeMode(next)}
-									aria-label="Editor layout"
+									aria-label="Editor"
 								>
-									{MODES.map((item) => (
-										<ToggleButton key={item.id} value={item.id} sx={{ px: 1.5, py: 0.25, textTransform: "none" }}>
-											{item.label}
-										</ToggleButton>
-									))}
+									<ToggleButton value="visual" sx={{ px: 1, py: 0.25, textTransform: "none", fontSize: "0.8125rem" }}>
+										Visual
+									</ToggleButton>
+									<ToggleButton value="markdown" sx={{ px: 1, py: 0.25, textTransform: "none", fontSize: "0.8125rem" }}>
+										Markdown
+									</ToggleButton>
+									<ToggleButton value="preview" sx={{ px: 1, py: 0.25, textTransform: "none", fontSize: "0.8125rem" }}>
+										Preview
+									</ToggleButton>
 								</ToggleButtonGroup>
-							}
-						>
-							{mode !== "preview" && (
-								<Stack
-									direction="row"
-									spacing={0.25}
-									sx={{ alignItems: "center", bgcolor: "background.raised", borderRadius: 2, p: 0.5, mb: 1.5 }}
-								>
-									<ToolButton title="Bold (Ctrl/Cmd+B)" onClick={() => editor.current?.wrapSelection("**")}>
-										<FormatBold fontSize="small" />
-									</ToolButton>
-									<ToolButton title="Italic (Ctrl/Cmd+I)" onClick={() => editor.current?.wrapSelection("_")}>
-										<FormatItalic fontSize="small" />
-									</ToolButton>
-									<ToolButton title="Link (Ctrl/Cmd+K)" onClick={() => editor.current?.wrapSelection("[", "](https://)")}>
-										<InsertLink fontSize="small" />
-									</ToolButton>
-									<Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
-									<ToolButton title="Heading" onClick={() => editor.current?.prefixLines("## ")}>
-										<Title fontSize="small" />
-									</ToolButton>
-									<ToolButton title="Code" onClick={() => editor.current?.wrapSelection("`")}>
-										<Code fontSize="small" />
-									</ToolButton>
-									<ToolButton title="Quote" onClick={() => editor.current?.prefixLines("> ")}>
-										<FormatQuote fontSize="small" />
-									</ToolButton>
-									<Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
-									<ToolButton title="Bulleted list" onClick={() => editor.current?.prefixLines("- ")}>
-										<FormatListBulleted fontSize="small" />
-									</ToolButton>
-									<ToolButton title="Numbered list" onClick={() => editor.current?.prefixLines("", true)}>
-										<FormatListNumbered fontSize="small" />
-									</ToolButton>
-									<Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
-									<ToolButton title="Insert image" onClick={() => openPicker("insert")}>
-										<ImageOutlined fontSize="small" />
-									</ToolButton>
-								</Stack>
+							</Box>
+
+							{lossy && mode !== "preview" && (
+								<Alert severity={mode === "visual" ? "warning" : "info"} square sx={{ borderBottom: 1, borderColor: "divider" }}>
+									{mode === "visual"
+										? "This post has Markdown the visual editor can't reproduce exactly, such as raw HTML or blank <br> lines. Editing it here rewrites those parts; check Preview before saving."
+										: "This post has Markdown the visual editor can't reproduce exactly, such as raw HTML or blank <br> lines, so it opened as Markdown."}
+								</Alert>
 							)}
 
-							<div className={`c-post-editor__panes c-post-editor__panes--${mode}${focusMode ? " is-focus" : ""}`}>
-								<div className="c-post-editor__pane" hidden={mode === "preview"}>
+							<Box sx={{ px: sidePadding, py: 3, minHeight: 420 }}>
+								<Box hidden={mode !== "visual"}>{editor && <PostEditorContent editor={editor} />}</Box>
+								{mode === "markdown" && (
 									<MarkdownEditor
-										ref={editor}
+										ref={markdownEditor}
 										value={draft.body}
 										placeholder="Write your post in Markdown…"
 										onChange={(body) => update({ body })}
-										onImageFiles={insertImages}
+										onImageFiles={async (files) => {
+											for (const file of files) {
+												const url = await uploadBodyImage(file).catch(() => "");
+												const named = withUniquePastedName(file);
+												if (url) markdownEditor.current?.insertAtCursor(`![${named.name.replace(/\.[^.]+$/, "")}](${url})\n`);
+											}
+										}}
 									/>
-								</div>
-								{mode !== "write" && (
-									<div ref={setPreviewPane} className="c-post-editor__preview c-post__body">
-										{preview.isError ? (
-											<Alert severity="error">{errorMessage(preview.error, "Preview failed to load.")}</Alert>
-										) : preview.data ? (
-											<div dangerouslySetInnerHTML={{ __html: preview.data }} />
-										) : (
-											<Typography color="text.secondary">
-												{preview.isFetching ? "Loading preview…" : "Nothing to preview yet."}
-											</Typography>
-										)}
-									</div>
 								)}
-							</div>
+								{mode === "preview" &&
+									(preview.isError ? (
+										<Alert severity="error">{errorMessage(preview.error, "Preview failed to load.")}</Alert>
+									) : preview.data ? (
+										<div className="c-post__body" dangerouslySetInnerHTML={{ __html: preview.data }} />
+									) : (
+										<Typography color="text.secondary">{preview.isFetching ? "Loading preview…" : "Nothing to preview yet."}</Typography>
+									))}
+							</Box>
 
-							<Stack direction="row" spacing={2} useFlexGap sx={{ flexWrap: "wrap", mt: 1.5, color: "text.secondary" }}>
+							<Stack
+								direction="row"
+								spacing={2}
+								useFlexGap
+								sx={{ flexWrap: "wrap", px: sidePadding, py: 1.5, borderTop: 1, borderColor: "divider", color: "text.secondary" }}
+							>
 								<Typography variant="caption">{words.toLocaleString()} words</Typography>
 								<Typography variant="caption">{readingMinutes} min read</Typography>
-								<Typography variant="caption">Paste or drop an image to upload it</Typography>
+								<Typography variant="caption" sx={{ ml: { sm: "auto" } }}>
+									Paste or drop images to upload them to {uploadPath()}
+								</Typography>
 							</Stack>
-						</Panel>
+						</Paper>
 					</Stack>
 
-					{sideBySide && (
-						<Stack spacing={3} sx={{ minWidth: 0 }}>
-							<Panel title="Publish">
-								<Stack spacing={2}>
-									<TextField select label="Status" value={draft.status} onChange={(e) => update({ status: e.target.value })}>
-										<MenuItem value="draft">Draft</MenuItem>
-										<MenuItem value="published">Published</MenuItem>
-										<MenuItem value="archived">Archived</MenuItem>
-									</TextField>
-									<TextField
-										type="datetime-local"
-										label="Publish date"
-										value={draft.publishDate}
-										helperText={`In your time zone, ${localZoneLabel()}. A future date with Published status schedules the post. It stays hidden from visitors, RSS and the sitemap until then.`}
-										slotProps={{ inputLabel: { shrink: true } }}
-										onChange={(e) => update({ publishDate: e.target.value })}
-									/>
-									<FormControlLabel
-										control={<Switch checked={draft.featured} onChange={(e) => update({ featured: e.target.checked })} />}
-										label="Feature this post"
-									/>
-									{saved?.authorName && (
-										<Typography variant="body2" color="text.secondary">
-											Author: <strong>{saved.authorName}</strong>
-										</Typography>
-									)}
-								</Stack>
-							</Panel>
-
-							<Panel title="Cover image">
-								<Stack spacing={1.5}>
-									{draft.coverImage && (
-										<Box
-											component="img"
-											src={draft.coverImage}
-											alt="Cover preview"
-											sx={{ width: "100%", borderRadius: 2, border: 1, borderColor: "divider", display: "block" }}
-										/>
-									)}
-									<TextField
-										type="url"
-										value={draft.coverImage}
-										placeholder="https://…"
-										helperText="Paste a full image URL, or upload one below."
-										slotProps={{ htmlInput: { "aria-label": "Cover image URL" } }}
-										onChange={(e) => update({ coverImage: e.target.value })}
-									/>
-									<input
-										ref={coverFile}
-										type="file"
-										accept="image/jpeg,image/png,image/webp,image/gif"
-										hidden
-										onChange={(e) => chooseCover(e.target.files?.[0])}
-									/>
-									<Stack direction="row" spacing={1}>
-										<Button variant="outlined" size="small" startIcon={<UploadOutlined />} onClick={() => coverFile.current?.click()}>
-											Upload
-										</Button>
-										<Button variant="outlined" size="small" startIcon={<PhotoLibraryOutlined />} onClick={() => openPicker("cover")}>
-											Choose existing
-										</Button>
-									</Stack>
-									{coverStatus && (
-										<Typography variant="caption" color={coverStatus.error ? "error" : "text.secondary"}>
-											{coverStatus.text}
-										</Typography>
-									)}
-								</Stack>
-							</Panel>
-
-							<Panel title="Tags">
-								<Autocomplete
-									multiple
-									freeSolo
-									autoSelect
-									size="small"
-									options={allTags.data ?? []}
-									value={draft.tags}
-									onChange={(_event, next) => update({ tags: next.map((tag) => tag.trim()).filter(Boolean) })}
-									renderValue={(value, getItemProps) =>
-										value.map((tag, index) => {
-											const { key, ...itemProps } = getItemProps({ index });
-											return <Chip key={key} label={tag} size="small" {...itemProps} />;
-										})
-									}
-									renderInput={(params) => (
-										<TextField {...params} placeholder="Add a tag" helperText="Pick an existing tag or type a new one and press Enter." />
-									)}
-								/>
-							</Panel>
-						</Stack>
+					{wide && settingsOpen && (
+						<Box sx={{ position: "sticky", top: `calc(${HEADER_HEIGHT} + ${barHeight}px + 24px)`, minWidth: 0 }}>{settings}</Box>
 					)}
 				</Box>
 			</Box>
+
+			{!wide && (
+				<Drawer anchor="right" open={settingsOpen} onClose={toggleSettings} slotProps={{ paper: { sx: { width: 360, maxWidth: "100vw" } } }}>
+					{settings}
+				</Drawer>
+			)}
 
 			<ImagePicker
 				open={pickerOpen}
@@ -794,34 +735,251 @@ function PostEditor({ post }: { post: Post | null }) {
 	);
 }
 
-function Panel({ title, hint, action, children }: { title: string; hint?: string; action?: ReactNode; children: ReactNode }) {
-	return (
-		<Paper sx={{ p: 2.5 }}>
-			<Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between", mb: 2 }}>
-				<Stack direction="row" spacing={1} sx={{ alignItems: "baseline" }}>
-					<Typography variant="h3" component="h2">
-						{title}
+function CoverBanner({
+	url,
+	status,
+	onUpload,
+	onChoose,
+	onRemove,
+}: {
+	url: string;
+	status: { text: string; error: boolean } | null;
+	onUpload: () => void;
+	onChoose: () => void;
+	onRemove: () => void;
+}) {
+	const actions = (
+		<>
+			<Button size="small" variant={url ? "contained" : "text"} color={url ? "inherit" : "primary"} startIcon={<UploadOutlined />} onClick={onUpload}>
+				{url ? "Replace" : "Upload a cover"}
+			</Button>
+			<Button size="small" variant={url ? "contained" : "text"} color={url ? "inherit" : "primary"} startIcon={<PhotoLibraryOutlined />} onClick={onChoose}>
+				{url ? "Library" : "Choose from library"}
+			</Button>
+			{url && (
+				<Button size="small" variant="contained" color="inherit" startIcon={<Close />} onClick={onRemove}>
+					Remove
+				</Button>
+			)}
+		</>
+	);
+
+	if (!url) {
+		return (
+			<Stack
+				direction="row"
+				spacing={1}
+				useFlexGap
+				sx={{
+					alignItems: "center",
+					flexWrap: "wrap",
+					px: { xs: 2, sm: 4.5 },
+					pt: 2,
+					color: "text.secondary",
+				}}
+			>
+				<ImageOutlined fontSize="small" />
+				{actions}
+				{status && (
+					<Typography variant="caption" color={status.error ? "error" : "text.secondary"}>
+						{status.text}
 					</Typography>
-					{hint && (
-						<Typography variant="caption" color="text.secondary">
-							{hint}
-						</Typography>
-					)}
-				</Stack>
-				{action}
+				)}
 			</Stack>
-			{children}
+		);
+	}
+
+	return (
+		<Box
+			sx={{
+				position: "relative",
+				aspectRatio: "21 / 9",
+				maxHeight: 360,
+				width: "100%",
+				borderTopLeftRadius: "inherit",
+				borderTopRightRadius: "inherit",
+				overflow: "hidden",
+				bgcolor: "background.raised",
+				backgroundImage: `url("${url.replace(/"/g, "%22")}")`,
+				backgroundSize: "cover",
+				backgroundPosition: "center",
+				"& .c-cover-actions": { opacity: { md: 0 }, transition: "opacity 120ms ease" },
+				"&:hover .c-cover-actions, &:focus-within .c-cover-actions": { opacity: 1 },
+			}}
+			role="img"
+			aria-label="Cover image"
+		>
+			<Stack
+				className="c-cover-actions"
+				direction="row"
+				spacing={1}
+				sx={{ position: "absolute", right: 12, bottom: 12, "& .MuiButton-root": { bgcolor: "rgba(255,255,255,0.92)", color: "#111" } }}
+			>
+				{actions}
+			</Stack>
+			{status && (
+				<Typography
+					variant="caption"
+					sx={{ position: "absolute", left: 12, bottom: 12, px: 1, py: 0.25, borderRadius: 1, bgcolor: "rgba(0,0,0,0.6)", color: status.error ? "#fca5a5" : "#fff" }}
+				>
+					{status.text}
+				</Typography>
+			)}
+		</Box>
+	);
+}
+
+function MarkdownToolbar({ editor, onInsertImage }: { editor: React.RefObject<MarkdownEditorHandle | null>; onInsertImage: () => void }) {
+	const tool = (title: string, run: () => void, icon: ReactNode) => (
+		<Tooltip title={title}>
+			<IconButton size="small" aria-label={title} onClick={run} sx={{ borderRadius: 1.5 }}>
+				{icon}
+			</IconButton>
+		</Tooltip>
+	);
+	const sep = <Divider orientation="vertical" flexItem sx={{ mx: 0.5, my: 0.5 }} />;
+	return (
+		<Stack direction="row" spacing={0.25} useFlexGap sx={{ alignItems: "center", flexWrap: "wrap" }} role="toolbar" aria-label="Markdown">
+			{tool("Heading", () => editor.current?.prefixLines("## "), <Title fontSize="small" />)}
+			{sep}
+			{tool("Bold (Ctrl/Cmd+B)", () => editor.current?.wrapSelection("**"), <FormatBold fontSize="small" />)}
+			{tool("Italic (Ctrl/Cmd+I)", () => editor.current?.wrapSelection("_"), <FormatItalic fontSize="small" />)}
+			{tool("Code", () => editor.current?.wrapSelection("`"), <Code fontSize="small" />)}
+			{tool("Link (Ctrl/Cmd+K)", () => editor.current?.wrapSelection("[", "](https://)"), <InsertLink fontSize="small" />)}
+			{sep}
+			{tool("Bulleted list", () => editor.current?.prefixLines("- "), <FormatListBulleted fontSize="small" />)}
+			{tool("Numbered list", () => editor.current?.prefixLines("", true), <FormatListNumbered fontSize="small" />)}
+			{tool("Quote", () => editor.current?.prefixLines("> "), <FormatQuote fontSize="small" />)}
+			{sep}
+			{tool("Image", onInsertImage, <ImageOutlined fontSize="small" />)}
+		</Stack>
+	);
+}
+
+function SettingsPanel({
+	draft,
+	saved,
+	tags,
+	slugLocked,
+	deleting,
+	onUpdate,
+	onSlug,
+	onDelete,
+	onClose,
+}: {
+	draft: Draft;
+	saved: Post | null;
+	tags: string[];
+	slugLocked: boolean;
+	deleting: boolean;
+	onUpdate: (patch: Partial<Draft>) => void;
+	onSlug: (slug: string) => void;
+	onDelete: () => void;
+	onClose?: () => void;
+}) {
+	return (
+		<Paper sx={{ border: onClose ? 0 : undefined, borderRadius: onClose ? 0 : undefined, minHeight: onClose ? "100%" : undefined }}>
+			<Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between", px: 2.5, pt: 2, pb: 1 }}>
+				<Typography variant="h3" component="h2">
+					Post settings
+				</Typography>
+				{onClose && (
+					<IconButton aria-label="Close settings" size="small" onClick={onClose}>
+						<Close />
+					</IconButton>
+				)}
+			</Stack>
+
+			<Section title="Publishing">
+				<TextField select size="small" label="Status" value={draft.status} onChange={(e) => onUpdate({ status: e.target.value })}>
+					<MenuItem value="draft">Draft</MenuItem>
+					<MenuItem value="published">Published</MenuItem>
+					<MenuItem value="archived">Archived</MenuItem>
+				</TextField>
+				<TextField
+					type="datetime-local"
+					size="small"
+					label="Publish date"
+					value={draft.publishDate}
+					helperText={`${localZoneLabel()}. A future date on a published post schedules it.`}
+					slotProps={{ inputLabel: { shrink: true } }}
+					onChange={(e) => onUpdate({ publishDate: e.target.value })}
+				/>
+				<FormControlLabel
+					control={<Switch checked={draft.featured} onChange={(e) => onUpdate({ featured: e.target.checked })} />}
+					label="Feature this post"
+				/>
+				{saved?.authorName && (
+					<Typography variant="body2" color="text.secondary">
+						By <strong>{saved.authorName}</strong>
+					</Typography>
+				)}
+			</Section>
+
+			<Section title="Address">
+				<TextField
+					size="small"
+					value={draft.slug}
+					placeholder="from-the-title"
+					helperText={slugLocked ? "Leave blank to build it from the title." : "Follows the title until you edit it."}
+					slotProps={{
+						htmlInput: { "aria-label": "Slug", style: { fontFamily: "var(--font-mono)", fontSize: "0.8125rem" } },
+						input: { startAdornment: <InputAdornment position="start">/posts/</InputAdornment> },
+					}}
+					onChange={(e) => onSlug(e.target.value)}
+				/>
+			</Section>
+
+			<Section title="Tags">
+				<Autocomplete
+					multiple
+					freeSolo
+					autoSelect
+					size="small"
+					options={tags}
+					value={draft.tags}
+					onChange={(_event, next) => onUpdate({ tags: next.map((tag) => tag.trim()).filter(Boolean) })}
+					renderValue={(value, getItemProps) =>
+						value.map((tag, index) => {
+							const { key, ...itemProps } = getItemProps({ index });
+							return <Chip key={key} label={tag} size="small" {...itemProps} />;
+						})
+					}
+					renderInput={(params) => <TextField {...params} placeholder="Add a tag" helperText="Press Enter to add a new one." />}
+				/>
+			</Section>
+
+			<Section title="Cover image address">
+				<TextField
+					size="small"
+					type="url"
+					value={draft.coverImage}
+					placeholder="https://…"
+					helperText="Set by uploading or choosing a cover above, or paste an address."
+					slotProps={{ htmlInput: { "aria-label": "Cover image URL" } }}
+					onChange={(e) => onUpdate({ coverImage: e.target.value })}
+				/>
+			</Section>
+
+			{saved && canDelete(saved) && (
+				<Section title="Delete">
+					<Button color="error" variant="outlined" startIcon={<DeleteOutline />} disabled={deleting} onClick={onDelete} sx={{ alignSelf: "flex-start" }}>
+						Delete post
+					</Button>
+				</Section>
+			)}
 		</Paper>
 	);
 }
 
-function ToolButton({ title, onClick, children }: { title: string; onClick: () => void; children: ReactNode }) {
+function Section({ title, children }: { title: string; children: ReactNode }) {
 	return (
-		<Tooltip title={title}>
-			<IconButton size="small" aria-label={title} onClick={onClick} sx={{ borderRadius: 1.5 }}>
-				{children}
-			</IconButton>
-		</Tooltip>
+		<Box sx={{ px: 2.5, py: 2, borderTop: 1, borderColor: "divider", "&:first-of-type": { borderTop: 0 } }}>
+			<Typography variant="overline" color="text.secondary" sx={{ display: "block", lineHeight: 1.6, mb: 1.25 }}>
+				{title}
+			</Typography>
+			<Stack spacing={2}>{children}</Stack>
+		</Box>
 	);
 }
 

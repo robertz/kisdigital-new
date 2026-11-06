@@ -7,7 +7,6 @@ export interface Boot {
 	};
 	csrfToken: string;
 	pendingComments: number;
-	r2UploadPrefix: string;
 }
 
 export const boot: Boot = JSON.parse(document.getElementById("manage-boot")!.textContent!);

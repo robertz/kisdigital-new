@@ -46,7 +46,7 @@ const sharedOptions = {
 const cssEntry = { ...sharedOptions, entryPoints: ["public/assets/css/site.css"] };
 const jsEntry = {
 	...sharedOptions,
-	entryPoints: ["public/assets/js/global.js"],
+	entryPoints: ["public/assets/js/global.js", "public/assets/js/code.ts"],
 	format: "iife",
 	target: ["es2020"],
 };

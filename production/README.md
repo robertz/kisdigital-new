@@ -57,7 +57,7 @@ App Platform (`.do/app.yaml`) still deploys every push to `main` until it's swit
 
    It brings `src/` to the latest commit, builds from it (and the latest base images), runs the specs in the new image, restarts the app on it, and removes the old one. If a spec fails, it stops there and the running app is left as it was; `SKIP_TESTS=1 ./deploy.sh` deploys without them. `cloudflared` connects once the app's health check passes, and stays stopped until `.env` has `TUNNEL_TOKEN`. To deploy something other than `main`, set `REPO_REF` in `.env` to a branch or tag.
 
-Migrations in `db/migrations` aren't run by the app; apply a new one to `chron_production` by hand before deploying the code that needs it.
+New files in `db/migrations` are applied when the app starts (`models/util/Migrator.bx`) and recorded in `SchemaMigration`. The first start records 0001 to 0027 as already applied without running them, since those were applied by hand.
 
 For anything else, `./compose.sh` is `docker compose` for the deployment: `./compose.sh logs -f app`, `./compose.sh ps`.
 

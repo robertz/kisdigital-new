@@ -12,10 +12,9 @@ import Stack from "@mui/material/Stack";
 import Close from "@mui/icons-material/Close";
 import CreateNewFolderOutlined from "@mui/icons-material/CreateNewFolderOutlined";
 import UploadOutlined from "@mui/icons-material/UploadOutlined";
-import { boot } from "../app/boot";
 import { errorMessage } from "../app/api";
 import { MediaBreadcrumbs, MediaGrid, mediaQueryKey } from "./MediaBrowser";
-import { createFolder, uploadImage } from "./media";
+import { createFolder, uploadImage, uploadPath } from "./media";
 
 interface Props {
 	open: boolean;
@@ -25,10 +24,8 @@ interface Props {
 	onClose: () => void;
 }
 
-export const defaultUploadPath = `${boot.r2UploadPrefix}/`;
-
 export function ImagePicker({ open, title, onPick, onClose }: Props) {
-	const [path, setPath] = useState(defaultUploadPath);
+	const [path, setPath] = useState(() => uploadPath());
 	const [failure, setFailure] = useState("");
 	const [busy, setBusy] = useState(false);
 	const fileInput = useRef<HTMLInputElement>(null);

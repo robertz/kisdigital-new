@@ -1,0 +1,60 @@
+/**
+ * Full garbage collections counted by why they ran, from HotSpot's GC
+ * notifications, since the process started. "System.gc()" is an explicit
+ * request (the JDK does this when direct buffer memory nears its cap);
+ * "Allocation Failure" or "G1 Evacuation Pause" is the old generation
+ * filling up. Ported from dt-next's GcCauses.
+ */
+class {
+
+	// cause -> { collections, timeMs } as AtomicLongs
+	variables.causes = "";
+
+	function init(){
+		variables.causes = createObject( "java", "java.util.concurrent.ConcurrentHashMap" ).init();
+		var listener = createDynamicProxy( this, [ "javax.management.NotificationListener" ] );
+		for ( var bean in createObject( "java", "java.lang.management.ManagementFactory" ).getGarbageCollectorMXBeans() ){
+			try {
+				bean.addNotificationListener( listener, javacast( "null", "" ), javacast( "null", "" ) );
+			} catch ( any e ){
+				// a collector that doesn't send notifications (not HotSpot)
+			}
+		}
+		return this;
+	}
+
+	/** The JVM calls this on its notification thread after every collection. */
+	function handleNotification( notification, handback ){
+		try {
+			if ( arguments.notification.getType() != "com.sun.management.gc.notification" ){
+				return;
+			}
+			var info = createObject( "java", "com.sun.management.GarbageCollectionNotificationInfo" ).from( arguments.notification.getUserData() );
+			if ( !findNoCase( "major", info.getGcAction() ) ){
+				return;
+			}
+			var cause = info.getGcCause();
+			variables.causes.putIfAbsent( cause, { "collections": counter(), "timeMs": counter() } );
+			var entry = variables.causes.get( cause );
+			entry.collections.incrementAndGet();
+			entry.timeMs.addAndGet( info.getGcInfo().getDuration() );
+		} catch ( any e ){
+			// an exception here would land on the JVM's notification thread
+		}
+	}
+
+	/** [ { cause, collections, timeMs } ], most collections first. */
+	array function current(){
+		var result = [];
+		for ( var cause in variables.causes.keySet() ){
+			var entry = variables.causes.get( cause );
+			result.append( { "cause": cause, "collections": entry.collections.get(), "timeMs": entry.timeMs.get() } );
+		}
+		return result.sort( ( a, b ) => sgn( b.collections - a.collections ) );
+	}
+
+	private function counter(){
+		return createObject( "java", "java.util.concurrent.atomic.AtomicLong" ).init( 0 );
+	}
+
+}

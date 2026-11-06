@@ -229,6 +229,11 @@ export async function uploadPrepared(file: File, path: string, onProgress?: (fra
 }
 
 /** Prepares (see prepareImage()) and uploads in one step. */
+/** Where new uploads go: a folder per year under cms/, e.g. "cms/2026/". */
+export function uploadPath(when = new Date()): string {
+	return `cms/${when.getFullYear()}/`;
+}
+
 export async function uploadImage(file: File, path: string, onProgress?: (fraction: number) => void): Promise<string> {
 	return uploadPrepared(await prepareImage(file), path, onProgress);
 }

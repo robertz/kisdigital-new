@@ -1,0 +1,104 @@
+/**
+ * Applies db/migrations/*.sql at startup, in filename order, and records each
+ * one in SchemaMigration so it runs once. Adapted from dt-next's Migrator,
+ * keyed by filename rather than the highest number because two files here
+ * share 0005.
+ *
+ * MySQL commits DDL as it goes, so a file that fails partway isn't rolled
+ * back: fix it and restart. A statement whose change is already there (a
+ * column, index, key or table that exists) is skipped, so a file that
+ * stopped partway can simply run again.
+ *
+ * Migrations 0001 to BASELINE were applied by hand before this existed, and
+ * some of them insert, update or delete rows, so they must never run again.
+ * The first run on a database that already has the site's tables records
+ * them as applied without running them.
+ */
+class {
+
+	variables.directory = "";
+	// the last migration applied by hand before the migrator existed
+	variables.BASELINE = 27;
+	// MySQL's errors for a column, index, key or table that's already there (1060, 1061, 1050, 1826)
+	variables.ALREADY_DONE = "(Duplicate column name|Duplicate key name|Table '[^']+' already exists|Duplicate foreign key constraint name)";
+
+	function init( required string directory ){
+		variables.directory = arguments.directory;
+		return this;
+	}
+
+	/** @return the names of the files applied by this run */
+	array function run(){
+		if ( !tableExists( "SchemaMigration" ) ){
+			if ( !tableExists( "Post" ) ){
+				println( "[migrate] this database has no tables yet: load db/schema.sql into it first" );
+				return [];
+			}
+			queryExecute( "CREATE TABLE SchemaMigration ( name varchar(255) NOT NULL PRIMARY KEY, applied_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP )" );
+			for ( var migration in files().filter( ( m ) => m.number <= variables.BASELINE ) ){
+				record( migration.name );
+			}
+			println( "[migrate] recorded 0001 to #numberFormat( variables.BASELINE, '0000' )# as already applied" );
+		}
+
+		var done = {};
+		for ( var row in queryExecute( "SELECT name FROM SchemaMigration", [], { returnType: "array" } ) ){
+			done[ row.name ] = true;
+		}
+
+		var applied = [];
+		for ( var migration in files() ){
+			if ( done.keyExists( migration.name ) ){
+				continue;
+			}
+			for ( var statement in splitStatements( fileRead( migration.path ) ) ){
+				try {
+					queryExecute( statement );
+				} catch ( database e ) {
+					if ( !reFindNoCase( variables.ALREADY_DONE, e.message & " " & ( e.detail ?: "" ) ) ){
+						println( "[migrate] #migration.name# failed: #e.message#" );
+						rethrow;
+					}
+					println( "[migrate] #migration.name#: skipped a statement whose change is already there (#e.message#)" );
+				}
+			}
+			record( migration.name );
+			applied.append( migration.name );
+			println( "[migrate] applied #migration.name#" );
+		}
+		return applied;
+	}
+
+	/** db/migrations/NNNN_name.sql, in order. */
+	private array function files(){
+		return directoryList( variables.directory, false, "name", "*.sql", "name" )
+			.filter( ( name ) => reFind( "^\d+_", name ) > 0 )
+			.map( ( name ) => {
+				return { "name": name, "number": val( listFirst( name, "_" ) ), "path": variables.directory & "/" & name };
+			} );
+	}
+
+	private void function record( required string name ){
+		queryExecute( "INSERT IGNORE INTO SchemaMigration ( name ) VALUES ( ? )", [ arguments.name ] );
+	}
+
+	private boolean function tableExists( required string name ){
+		return queryExecute(
+			"SELECT COUNT(*) AS n FROM information_schema.TABLES WHERE table_schema = DATABASE() AND table_name = ?",
+			[ arguments.name ]
+		).n > 0;
+	}
+
+	/**
+	 * Splits on semicolons that end a line, leaving out comment-only pieces.
+	 * Good enough for hand-written migrations; a semicolon at the end of a line
+	 * inside a string literal would break it.
+	 */
+	private array function splitStatements( required string sqlText ){
+		var pieces = createObject( "java", "java.util.regex.Pattern" ).compile( ";\s*(\r?\n|$)" ).split( arguments.sqlText );
+		return arrayNew( 1 ).append( pieces, true )
+			.map( ( s ) => trim( s ) )
+			.filter( ( s ) => len( s ) && !reFind( "^(--[^\n]*\s*)+$", s ) );
+	}
+
+}

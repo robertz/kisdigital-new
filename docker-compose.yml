@@ -61,3 +61,4 @@ services:
       - ./views:/app/views
       - ./routes:/app/routes
       - ./models:/app/models
+      - ./db/migrations:/app/db/migrations

@@ -206,9 +206,122 @@
 	color: var(--post-anchor);
 }
 
+/* Code blocks. public/assets/js/code.js highlights them and fills the
+   header bar with the language and a Copy button. The bar's room is kept
+   here, so the page doesn't move when the script runs; the code scrolls
+   sideways on its own beneath it. */
 .c-post__body pre {
+	--code-head-height: 34px;
+	position: relative;
+	overflow: visible;
+	margin: 0 0 var(--space-6);
+	padding: var(--code-head-height) 0 0;
+	border: 1px solid var(--ui-border-subtle);
 	border-radius: var(--ui-radius-md);
+	background: var(--code-bg);
+	color: var(--code-text);
+	font-family: var(--font-mono);
 	font-size: 0.875rem;
+	line-height: 1.6;
+}
+
+.c-post__body pre > code {
+	display: block;
+	overflow-x: auto;
+	padding: var(--space-3) var(--space-4) var(--space-4);
+	white-space: pre;
+	overflow-wrap: normal;
+	tab-size: 4;
+}
+
+.c-code-head {
+	position: absolute;
+	inset: 0 0 auto;
+	height: var(--code-head-height);
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 0 var(--space-2) 0 var(--space-4);
+	border-bottom: 1px solid var(--ui-border-subtle);
+	border-radius: var(--ui-radius-md) var(--ui-radius-md) 0 0;
+	background: var(--code-head-bg);
+	color: var(--code-muted);
+	font: 600 0.75rem/1 var(--font-sans, Inter, system-ui, sans-serif);
+	letter-spacing: 0.01em;
+}
+
+.c-code-copy {
+	padding: 4px 10px;
+	border: 0;
+	border-radius: var(--ui-radius-sm);
+	background: none;
+	color: inherit;
+	font: inherit;
+	cursor: pointer;
+}
+
+.c-code-copy:hover,
+.c-code-copy:focus-visible {
+	background: color-mix(in srgb, var(--code-text) 10%, transparent);
+	color: var(--code-text);
+}
+
+.c-post__body .hljs-keyword,
+.c-post__body .hljs-selector-tag,
+.c-post__body .hljs-meta .hljs-keyword,
+.c-post__body .hljs-deletion {
+	color: var(--code-keyword);
+}
+
+.c-post__body .hljs-string,
+.c-post__body .hljs-regexp,
+.c-post__body .hljs-selector-attr,
+.c-post__body .hljs-selector-pseudo {
+	color: var(--code-string);
+}
+
+.c-post__body .hljs-number,
+.c-post__body .hljs-literal,
+.c-post__body .hljs-variable.language_,
+.c-post__body .hljs-built_in,
+.c-post__body .hljs-symbol {
+	color: var(--code-number);
+}
+
+.c-post__body .hljs-comment,
+.c-post__body .hljs-quote,
+.c-post__body .hljs-meta {
+	color: var(--code-comment);
+	font-style: italic;
+}
+
+.c-post__body .hljs-title,
+.c-post__body .hljs-title.function_,
+.c-post__body .hljs-section {
+	color: var(--code-title);
+}
+
+.c-post__body .hljs-type,
+.c-post__body .hljs-title.class_,
+.c-post__body .hljs-params,
+.c-post__body .hljs-attribute {
+	color: var(--code-type);
+}
+
+.c-post__body .hljs-attr,
+.c-post__body .hljs-name,
+.c-post__body .hljs-tag,
+.c-post__body .hljs-addition,
+.c-post__body .hljs-property {
+	color: var(--code-attr);
+}
+
+.c-post__body .hljs-emphasis {
+	font-style: italic;
+}
+
+.c-post__body .hljs-strong {
+	font-weight: 700;
 }
 
 .c-post__body p {

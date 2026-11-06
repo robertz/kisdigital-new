@@ -14,10 +14,22 @@
  *
  * "Disk" below means the container's own filesystem, not the host's — this
  * process only ever sees what's mounted inside its own container.
+ *
+ * The readings marked "since the previous reading" (recent CPU, the busiest
+ * threads, MySQL's recent hit rate) compare against whatever page read last,
+ * the dashboard's gauges included. Ported in part from dt-next's ServerMonitor.
  */
 class {
 
-	variables.app = "";
+	variables.app      = "";
+	variables.gcCauses = "";
+	// { cpu, wall } nanoseconds at the previous reading, for recentLoad
+	variables.lastCpu = {};
+	// { wall, cpu: { thread id: nanoseconds } } at the previous reading
+	variables.lastThreads = {};
+	// MySQL's buffer pool counters at the previous reading
+	variables.lastPool = {};
+	variables.BUSIEST_THREADS = 5;
 
 	/**
 	 * @param {BoxExpress} app - The running app instance, for connector-level
@@ -25,27 +37,40 @@ class {
 	 *        >=0.2.1). Optional so this class still works standalone (e.g.
 	 *        under test) without a real server behind it.
 	 */
-	function init( app = javacast( "null", "" ) ){
-		variables.app = arguments.app;
+	function init( app = javacast( "null", "" ), gcCauses = javacast( "null", "" ) ){
+		variables.app      = arguments.app;
+		variables.gcCauses = arguments.gcCauses;
 		return this;
 	}
 
-	function getSnapshot(){
-		return {
-			"memory"   : _memory(),
-			"cpu"      : _cpu(),
-			"disk"     : _disk(),
-			"jvm"      : _jvm(),
-			"gc"       : _gc(),
-			"threads"  : _threads(),
-			"process"  : _process(),
-			"connector": _connector()
+	/**
+	 * @param {boolean} includeDatabase - Also ask MySQL about itself: a few
+	 *        queries, so only the System page asks, not the dashboard gauges.
+	 */
+	function getSnapshot( boolean includeDatabase = false ){
+		var snapshot = {
+			"boxlangVersion": server.boxlang.version ?: "",
+			"memory"        : _memory(),
+			"cpu"           : _cpu(),
+			"disk"          : _disk(),
+			"jvm"           : _jvm(),
+			"gc"            : _gc(),
+			"fullGcCauses"  : isNull( variables.gcCauses ) || !isObject( variables.gcCauses ) ? [] : variables.gcCauses.current(),
+			"threads"       : _threads(),
+			"files"         : _files(),
+			"process"       : _process(),
+			"connector"     : _connector()
 		};
+		if ( arguments.includeDatabase ){
+			snapshot[ "mysql" ] = _mysql();
+		}
+		return snapshot;
 	}
 
 	private function _memory(){
 		var mgmt    = createObject( "java", "java.lang.management.ManagementFactory" );
 		var memBean = mgmt.getMemoryMXBean();
+		var pools   = _heapPools( mgmt );
 		var heap    = memBean.getHeapMemoryUsage();
 		var nonHeap = memBean.getNonHeapMemoryUsage();
 		var runtime = createObject( "java", "java.lang.Runtime" ).getRuntime();
@@ -60,8 +85,72 @@ class {
 			"nonHeapMax"      : nonHeap.getMax(),
 			"runtimeTotal"    : runtime.totalMemory(),
 			"runtimeFree"     : runtime.freeMemory(),
-			"runtimeMax"      : runtime.maxMemory()
+			"runtimeMax"      : runtime.maxMemory(),
+			"oldGenAfterLastGc": _oldGenAfterLastGc( pools ),
+			"pools"           : pools,
+			"direct"          : _direct( mgmt )
 		};
+	}
+
+	/**
+	 * Each heap area (young, survivor, old) with what it held right after its
+	 * last collection. The old generation's figure is the memory still in use:
+	 * rising across full collections is a leak, holding steady is not.
+	 */
+	private array function _heapPools( required mgmt ){
+		var heapType = createObject( "java", "java.lang.management.MemoryType" ).HEAP;
+		var result   = [];
+		for ( var pool in arguments.mgmt.getMemoryPoolMXBeans() ){
+			if ( pool.getType() != heapType ){
+				continue;
+			}
+			var usage = pool.getUsage();
+			var after = pool.getCollectionUsage();
+			result.append( {
+				"name"           : pool.getName(),
+				"used"           : usage.getUsed(),
+				"committed"      : usage.getCommitted(),
+				"usedAfterLastGc": isNull( after ) ? javacast( "null", "" ) : after.getUsed()
+			} );
+		}
+		return result;
+	}
+
+	private function _oldGenAfterLastGc( required array pools ){
+		for ( var pool in arguments.pools ){
+			if ( reFindNoCase( "old|tenured", pool.name ) && !isNull( pool.usedAfterLastGc ) ){
+				return pool.usedAfterLastGc;
+			}
+		}
+		return javacast( "null", "" );
+	}
+
+	/**
+	 * NIO's direct buffers (Undertow's among them), off the heap and capped by
+	 * -XX:MaxDirectMemorySize, or the heap's cap when that's unset. Near the
+	 * cap, allocating one calls System.gc(): a full collection however empty
+	 * the old generation is. Null when the JVM has no "direct" pool.
+	 */
+	private function _direct( required mgmt ){
+		try {
+			var poolClass = createObject( "java", "java.lang.Class" ).forName( "java.lang.management.BufferPoolMXBean" );
+			for ( var pool in arguments.mgmt.getPlatformMXBeans( poolClass ) ){
+				if ( pool.getName() != "direct" ){
+					continue;
+				}
+				var cap = javacast( "null", "" );
+				try {
+					var option = arguments.mgmt.getPlatformMXBean( createObject( "java", "java.lang.Class" ).forName( "com.sun.management.HotSpotDiagnosticMXBean" ) )
+						.getVMOption( "MaxDirectMemorySize" ).getValue();
+					cap = val( option ) > 0 ? val( option ) : createObject( "java", "java.lang.Runtime" ).getRuntime().maxMemory();
+				} catch ( any e ){
+					// not HotSpot
+				}
+				return { "buffers": pool.getCount(), "used": pool.getMemoryUsed(), "max": cap ?: javacast( "null", "" ) };
+			}
+		} catch ( any e ){
+		}
+		return javacast( "null", "" );
 	}
 
 	private function _cpu(){
@@ -83,6 +172,25 @@ class {
 		_tryPut( result, "freePhysicalMemory", () => osBean.getFreeMemorySize() );
 		_tryPut( result, "totalSwap", () => osBean.getTotalSwapSpaceSize() );
 		_tryPut( result, "freeSwap", () => osBean.getFreeSwapSpaceSize() );
+
+		// Worked out from the process's CPU time, which containers report
+		// reliably where the JVM's own load readings often come back 0.
+		if ( structKeyExists( result, "processCpuTime" ) && result.processCpuTime >= 0 ){
+			var processors  = result.availableProcessors;
+			var cpuNanos    = result.processCpuTime;
+			var wallNanos   = createObject( "java", "java.lang.System" ).nanoTime();
+			var uptimeNanos = createObject( "java", "java.lang.management.ManagementFactory" ).getRuntimeMXBean().getUptime() * 1000000;
+			result[ "processCpuSeconds" ] = cpuNanos / 1000000000;
+			if ( uptimeNanos > 0 ){
+				result[ "averageLoad" ] = min( cpuNanos / ( uptimeNanos * processors ), 1 );
+			}
+			if ( !variables.lastCpu.isEmpty() && wallNanos > variables.lastCpu.wall ){
+				var elapsed = wallNanos - variables.lastCpu.wall;
+				result[ "recentLoad" ]    = min( max( cpuNanos - variables.lastCpu.cpu, 0 ) / ( elapsed * processors ), 1 );
+				result[ "recentSeconds" ] = int( elapsed / 1000000000 );
+			}
+			variables.lastCpu = { "cpu": cpuNanos, "wall": wallNanos };
+		}
 
 		return result;
 	}
@@ -109,7 +217,10 @@ class {
 			"uptimeMs"             : runtimeBean.getUptime(),
 			"loadedClassCount"     : classBean.getLoadedClassCount(),
 			"totalLoadedClassCount": classBean.getTotalLoadedClassCount(),
-			"unloadedClassCount"   : classBean.getUnloadedClassCount()
+			"unloadedClassCount"   : classBean.getUnloadedClassCount(),
+			"startedAt"            : createObject( "java", "java.time.Instant" ).ofEpochMilli( runtimeBean.getStartTime() ).toString(),
+			// -D values hidden: system properties are where a secret would be passed
+			"jvmArguments"         : arrayNew( 1 ).append( runtimeBean.getInputArguments().toArray(), true ).map( ( flag ) => reReplace( flag, "^(-D[^=]+)=.*$", "\1=(hidden)" ) )
 		};
 	}
 
@@ -134,8 +245,133 @@ class {
 			"liveCount"        : threadBean.getThreadCount(),
 			"peakCount"        : threadBean.getPeakThreadCount(),
 			"daemonCount"      : threadBean.getDaemonThreadCount(),
-			"totalStartedCount": threadBean.getTotalStartedThreadCount()
+			"totalStartedCount": threadBean.getTotalStartedThreadCount(),
+			"deadlocked"       : _deadlocked( threadBean ),
+			"busiest"          : _busiest( threadBean )
 		};
+	}
+
+	/** The names of threads stuck waiting on each other's locks; empty normally. */
+	private array function _deadlocked( required bean ){
+		var ids = arguments.bean.findDeadlockedThreads();
+		var names = [];
+		if ( isNull( ids ) ){
+			return names;
+		}
+		for ( var info in arguments.bean.getThreadInfo( ids ) ){
+			if ( !isNull( info ) ){
+				names.append( info.getThreadName() );
+			}
+		}
+		return names;
+	}
+
+	/**
+	 * The threads that used the most CPU since the previous reading, or since
+	 * they started on the first one (recentLoad null): a stuck loop shows as
+	 * one thread near 100%.
+	 */
+	private array function _busiest( required bean ){
+		if ( !arguments.bean.isThreadCpuTimeSupported() || !arguments.bean.isThreadCpuTimeEnabled() ){
+			return [];
+		}
+		var wall    = createObject( "java", "java.lang.System" ).nanoTime();
+		var before  = variables.lastThreads;
+		var elapsed = before.isEmpty() ? 0 : wall - before.wall;
+		var cpu     = {};
+		var result  = [];
+		for ( var info in arguments.bean.getThreadInfo( arguments.bean.getAllThreadIds() ) ){
+			if ( isNull( info ) ){
+				continue;
+			}
+			var id    = toString( info.getThreadId() );
+			var nanos = arguments.bean.getThreadCpuTime( info.getThreadId() );
+			if ( nanos < 0 ){
+				continue;
+			}
+			cpu[ id ] = nanos;
+			var used = elapsed > 0 ? max( nanos - ( before.cpu[ id ] ?: 0 ), 0 ) : nanos;
+			result.append( {
+				"name"      : info.getThreadName(),
+				"state"     : info.getThreadState().toString(),
+				"cpuSeconds": nanos / 1000000000,
+				"recentLoad": elapsed > 0 ? min( used / elapsed, 1 ) : javacast( "null", "" ),
+				"used"      : used
+			} );
+		}
+		variables.lastThreads = { "wall": wall, "cpu": cpu };
+		if ( result.isEmpty() ){
+			return result;
+		}
+		return result.sort( ( a, b ) => sgn( b.used - a.used ) )
+			.slice( 1, min( variables.BUSIEST_THREADS, result.len() ) )
+			.map( ( t ) => t.filter( ( key ) => key != "used" ) );
+	}
+
+	/** Open file descriptors (sockets included) against the process's limit; null off Unix. */
+	private function _files(){
+		var osBean = createObject( "java", "java.lang.management.ManagementFactory" ).getOperatingSystemMXBean();
+		var result = {};
+		_tryPut( result, "open", () => osBean.getOpenFileDescriptorCount() );
+		_tryPut( result, "max", () => osBean.getMaxFileDescriptorCount() );
+		return structKeyExists( result, "open" ) ? result : javacast( "null", "" );
+	}
+
+	/**
+	 * The database as MySQL reports it: how much of the data fits in its
+	 * buffer pool and how often a read had to go to disk (since MySQL started,
+	 * and since the previous reading), connections, slow queries and the
+	 * largest tables. Null when MySQL won't say (no privilege).
+	 */
+	private function _mysql(){
+		try {
+			var values = {};
+			var rows = queryExecute(
+				"SHOW GLOBAL VARIABLES WHERE Variable_name IN ( 'version', 'innodb_buffer_pool_size', 'max_connections', 'long_query_time' )",
+				[], { returnType: "array" }
+			);
+			rows.append( queryExecute(
+				"SHOW GLOBAL STATUS WHERE Variable_name IN ( 'Uptime', 'Threads_connected', 'Threads_running', 'Slow_queries', 'Questions',
+					'Innodb_buffer_pool_read_requests', 'Innodb_buffer_pool_reads', 'Innodb_buffer_pool_pages_data', 'Innodb_page_size',
+					'Created_tmp_tables', 'Created_tmp_disk_tables' )",
+				[], { returnType: "array" }
+			), true );
+			for ( var row in rows ){
+				values[ row.Variable_name ] = row.Value;
+			}
+			var requests = val( values.Innodb_buffer_pool_read_requests ?: 0 );
+			var misses   = val( values.Innodb_buffer_pool_reads ?: 0 );
+			var result = {
+				"version"            : values.version ?: "",
+				"uptimeSeconds"      : val( values.Uptime ?: 0 ),
+				"bufferPoolBytes"    : val( values.innodb_buffer_pool_size ?: 0 ),
+				"bufferPoolDataBytes": val( values.Innodb_buffer_pool_pages_data ?: 0 ) * val( values.Innodb_page_size ?: 16384 ),
+				"hitRate"            : requests ? 1 - misses / requests : javacast( "null", "" ),
+				"queries"            : val( values.Questions ?: 0 ),
+				"slowQueries"        : val( values.Slow_queries ?: 0 ),
+				"longQuerySeconds"   : val( values.long_query_time ?: 0 ),
+				"threadsConnected"   : val( values.Threads_connected ?: 0 ),
+				"threadsRunning"     : val( values.Threads_running ?: 0 ),
+				"maxConnections"     : val( values.max_connections ?: 0 ),
+				"tmpTables"          : val( values.Created_tmp_tables ?: 0 ),
+				"tmpDiskTables"      : val( values.Created_tmp_disk_tables ?: 0 )
+			};
+			var wall = createObject( "java", "java.lang.System" ).nanoTime();
+			if ( !variables.lastPool.isEmpty() && requests > variables.lastPool.requests ){
+				result[ "recentHitRate" ] = 1 - ( misses - variables.lastPool.misses ) / ( requests - variables.lastPool.requests );
+			}
+			variables.lastPool = { "requests": requests, "misses": misses, "wall": wall };
+			// information_schema's sizes are MySQL's estimates
+			result[ "tables" ] = queryExecute(
+				"SELECT table_name AS name, COALESCE( table_rows, 0 ) AS `rows`, data_length AS dataBytes, index_length AS indexBytes
+				FROM information_schema.TABLES WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE'
+				ORDER BY data_length + index_length DESC LIMIT 12",
+				[], { returnType: "array" }
+			);
+			return result;
+		} catch ( any e ){
+			return javacast( "null", "" );
+		}
 	}
 
 	private function _process(){

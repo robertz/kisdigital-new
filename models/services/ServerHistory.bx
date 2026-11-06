@@ -1,0 +1,111 @@
+/**
+ * The running server, recorded hourly in ServerHourly and kept KEEP_DAYS, so
+ * /manage/system can chart a trend: memory still in use after garbage
+ * collection, CPU, requests, errors and full collections. Ported from
+ * dt-next's ServerHistory.
+ *
+ * The per-hour figures are differences from the previous record, kept in
+ * memory: the first record after a restart has none.
+ *
+ * The table is optional (db/migrations/0028_add_server_hourly.sql): without
+ * it, record() does nothing and recent() answers null.
+ */
+class {
+
+	variables.monitor  = "";
+	// the previous record's running totals, for the per-hour figures
+	variables.previous = {};
+	variables.KEEP_DAYS = 90;
+
+	function init( required monitor ){
+		variables.monitor = arguments.monitor;
+		return this;
+	}
+
+	/** Records the server now and clears records older than KEEP_DAYS. */
+	function record(){
+		var snap    = variables.monitor.getSnapshot();
+		var fullGcs = 0;
+		var gcMs    = 0;
+		for ( var collector in snap.gc ){
+			// G1's "G1 Old Generation", Parallel's "PS MarkSweep", Serial's "MarkSweepCompact"
+			if ( reFindNoCase( "old|marksweep|full", collector.name ) ){
+				fullGcs += collector.collectionCount;
+			}
+			gcMs += collector.collectionTime;
+		}
+		var totals = {
+			"uptime"  : int( snap.jvm.uptimeMs / 1000 ),
+			"cpu"     : snap.cpu.processCpuSeconds ?: 0,
+			"fullGcs" : fullGcs,
+			"gcMs"    : gcMs,
+			"requests": isNull( snap.connector ) ? 0 : snap.connector.requestCount,
+			"errors"  : isNull( snap.connector ) ? 0 : snap.connector.errorCount
+		};
+		var before = variables.previous;
+		// a lower uptime is a restart: the totals started over
+		var hasBefore = !before.isEmpty() && totals.uptime > before.uptime;
+		var elapsed   = hasBefore ? totals.uptime - before.uptime : 0;
+		var since     = ( key ) => hasBefore ? max( totals[ key ] - before[ key ], 0 ) : javacast( "null", "" );
+		variables.previous = totals;
+
+		var cpuLoad = ( ) => hasBefore && elapsed > 0
+			? min( max( totals.cpu - before.cpu, 0 ) / ( elapsed * snap.cpu.availableProcessors ), 1 )
+			: javacast( "null", "" );
+		var num = ( value, type = "bigint" ) => { return { value: isNull( value ) ? "" : value, sqltype: type, null: isNull( value ) }; };
+
+		try {
+			queryExecute(
+				"INSERT INTO ServerHourly ( recorded_at, uptime_seconds, heap_used, heap_max, old_gen_after_gc, direct_used, open_files,
+					memory_free, cpu_load_hour, full_gcs_hour, gc_ms_hour, http_requests_hour, http_errors_hour )
+				VALUES ( UTC_TIMESTAMP(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )
+				ON DUPLICATE KEY UPDATE heap_used = VALUES( heap_used )",
+				[
+					num( totals.uptime, "integer" ),
+					num( snap.memory.heapUsed ),
+					num( snap.memory.heapMax ),
+					num( snap.memory.oldGenAfterLastGc ?: javacast( "null", "" ) ),
+					num( isNull( snap.memory.direct ) ? javacast( "null", "" ) : snap.memory.direct.used ),
+					num( isNull( snap.files ) ? javacast( "null", "" ) : snap.files.open, "integer" ),
+					num( snap.cpu.freePhysicalMemory ?: javacast( "null", "" ) ),
+					num( cpuLoad(), "double" ),
+					num( since( "fullGcs" ), "integer" ),
+					num( since( "gcMs" ), "integer" ),
+					num( since( "requests" ), "integer" ),
+					num( since( "errors" ), "integer" )
+				]
+			);
+			queryExecute(
+				"DELETE FROM ServerHourly WHERE recorded_at < DATE_SUB( UTC_TIMESTAMP(), INTERVAL ? DAY )",
+				[ { value: variables.KEEP_DAYS, sqltype: "integer" } ]
+			);
+		} catch ( any e ){
+			println( "[ServerHistory] record failed: " & e.message );
+		}
+	}
+
+	/** The records of the last hours, oldest first; null without the table. */
+	function recent( numeric hours = 48 ){
+		try {
+			return queryExecute(
+				"SELECT DATE_FORMAT( recorded_at, '%Y-%m-%dT%H:%i:%sZ' ) AS recordedAt, heap_used AS heapUsed, heap_max AS heapMax,
+					old_gen_after_gc AS oldGenAfterGc, direct_used AS directUsed, open_files AS openFiles, memory_free AS memoryFree,
+					cpu_load_hour AS cpuLoadHour, full_gcs_hour AS fullGcsHour, gc_ms_hour AS gcMsHour,
+					http_requests_hour AS httpRequestsHour, http_errors_hour AS httpErrorsHour
+				FROM ServerHourly WHERE recorded_at >= DATE_SUB( UTC_TIMESTAMP(), INTERVAL ? HOUR )
+				ORDER BY recorded_at",
+				[ { value: max( 1, min( arguments.hours, 24 * variables.KEEP_DAYS ) ), sqltype: "integer" } ],
+				{ returnType: "array" }
+			);
+		} catch ( any e ){
+			return javacast( "null", "" );
+		}
+	}
+
+	/** Records now and then every hour, on boxlang-express's scheduler. */
+	function startHourly( required app ){
+		var history = this;
+		arguments.app.schedule( 60 * 60 * 1000, () => history.record(), { name: "server-history", immediate: true } );
+	}
+
+}

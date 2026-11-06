@@ -10,11 +10,17 @@
 
 app = boxExpress()
 
+// ── Database migrations ─────────────────────────────────────────────────────
+// db/migrations/*.sql not yet recorded in SchemaMigration are applied here,
+// before any service touches the tables. See models/util/Migrator.bx.
+new models.util.Migrator( expandPath( "./db/migrations" ) ).run()
+
 // ── Static asset manifest (esbuild cache-busted filenames) ─────────────────
 manifestPath = expandPath( "./public/assets/dist/manifest.json" )
 assetManifest = fileExists( manifestPath ) ? jsonDeserialize( fileRead( manifestPath ) ) : {}
 cssHref = assetManifest[ "site.css" ] ?: "/assets/css/site.css"
 jsHref  = assetManifest[ "global.js" ] ?: "/assets/js/global.js"
+codeJsHref = assetManifest[ "code.js" ] ?: ""
 
 // ── Services (manual DI — no WireBox container in boxlang-express) ─────────
 postService     = new models.services.PostService()
@@ -78,10 +84,13 @@ insightsService = new models.services.InsightsService(
 // /manage/insights never has to count 30 days of raw requests.
 insightsService.startDailySummaries()
 
-// /manage/server — live JVM/OS metrics (memory, CPU, disk, GC, threads) plus
-// Undertow's own connector stats via `app`. See ServerMonitor.bx; no
-// datasource involved, pure in-process JMX/Undertow reads.
-serverMonitor = new models.util.ServerMonitor( app )
+// /manage/system — live JVM/OS metrics (memory, CPU, disk, GC, threads) plus
+// Undertow's own connector stats via `app`, and MySQL's own figures. See
+// ServerMonitor.bx. ServerHistory records them hourly (ServerHourly table,
+// db/migrations/0028) for the page's trend charts.
+serverMonitor = new models.util.ServerMonitor( app, new models.util.GcCauses() )
+serverHistory = new models.services.ServerHistory( serverMonitor )
+serverHistory.startHourly( app )
 
 // ── Middleware ───────────────────────────────────────────────────────────
 // requestLogger goes first, ahead of everything else, so its next() wraps
@@ -153,6 +162,7 @@ app.use( ( req, res, next ) => {
 app.locals.siteName = "KISDigital"
 app.locals.cssHref  = cssHref
 app.locals.jsHref   = jsHref
+app.locals.codeJsHref = codeJsHref
 
 app.use( ( req, res, next ) => {
 	res.locals.manageUser = req.session.manage_user ?: ""
@@ -290,7 +300,6 @@ app.use( new routes.Empire( app, empireService, siteDefaults ).router )
 app.use( new routes.Manage( authService, googleOAuthClient ).router )
 app.use( new routes.ManageApp(
 	commentService,
-	getSystemSetting( "R2_UPLOAD_PREFIX", "posts" ),
 	expandPath( "./public/assets/dist/manage/manifest.json" ),
 	getSystemSetting( "MANAGE_DEV_SERVER", "" ),
 	app.getSetting( "env" ) != "development",
@@ -302,7 +311,7 @@ app.use( new routes.ManageApp(
 		new routes.manageapi.Authors( authorService ),
 		new routes.manageapi.Settings( settingsService ),
 		new routes.manageapi.Logs( insightsService ),
-		new routes.manageapi.System( serverMonitor )
+		new routes.manageapi.System( serverMonitor, serverHistory )
 	]
 ).router )
 

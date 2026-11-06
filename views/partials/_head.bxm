@@ -52,7 +52,6 @@
       subset of each (only what this site actually uses), self-hosted so
       there's no separate-origin round trip and this app controls the
       cache lifetime instead of jsdelivr's. --->
-<link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 
@@ -60,32 +59,23 @@
 <!--- Google Fonts is the only remaining third-party stylesheet — separate
       origin (DNS+TLS+download before first paint) and not needed for
       first paint (site.css's own font stack covers it until swapped in),
-      so it uses the same media=print swap trick already applied to the
-      Prism theme below, plus a <noscript> fallback for when there's no JS
+      so it uses the media=print swap trick, plus a <noscript> fallback for when there's no JS
       to flip the media attribute. site.css itself stays render-blocking
       (small, same-origin, needed for the header/layout to not flash
       unstyled). --->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" media="print" onload="this.media='all'">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"></noscript>
-<!--- Only styles code blocks, and prism.min.js below is already deferred
-      (so highlighting doesn't apply until after load regardless) — load
-      this off the critical rendering path via the standard media=print
-      swap trick instead of blocking first paint on every page for it.
-      Gated on data.hasCodeBlocks — only routes/Posts.bx's show() sets it
-      (true when the post's raw markdown actually contains a ``` fence) —
-      so no other page pays for Prism's CSS+JS at all. --->
-<bx:if data.hasCodeBlocks ?: false>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism-themes/1.9.0/prism-one-dark.min.css" integrity="sha512-c6S8OdtvoqZCbMfA1lWE0qd368pLdFvVHVILQzNizfowC+zV8rmVKdSlmL5SuidvATO0A7awDg53axd+s/9amw==" crossorigin="anonymous" referrerpolicy="no-referrer" media="print" onload="this.media='all'">
-<noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism-themes/1.9.0/prism-one-dark.min.css"></noscript>
-</bx:if>
 <link rel="stylesheet" href="#data.cssHref#">
 
 <!--- Deferred JS --->
 <!--- jQuery dropped: nothing on the site actually used it — its one would-be
       consumer, public/assets/js/youtube.js, was never <script>-included
       anywhere (dead file, removed alongside this). --->
-<bx:if data.hasCodeBlocks ?: false>
-<script defer src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.23.0/prism.min.js" integrity="sha512-YBk7HhgDZvBxmtOfUdvX0z8IH2d10Hp3aEygaMNhtF8fSOvBZ16D/1bXZTJV6ndk/L/DlXxYStP8jrF77v2MIg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<!--- Code highlighting and each block's language/Copy header
+      (public/assets/js/code.ts). Gated on data.hasCodeBlocks, which only
+      routes/Posts.bx's show() sets, so no other page loads it. --->
+<bx:if ( data.hasCodeBlocks ?: false ) && len( data.codeJsHref ?: "" )>
+<script defer src="#data.codeJsHref#"></script>
 </bx:if>
 </head>
 <body>

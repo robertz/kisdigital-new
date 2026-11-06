@@ -1,9 +1,9 @@
 -- KISDigital — MySQL schema (chron database)
 --
--- Reference only: there's no migration runner in this project (the ColdBox
--- app this was ported from didn't have one either), so this file documents
--- the live schema rather than driving it. Apply changes by hand against the
--- database, then update this file and add a note under db/migrations/.
+-- Reference: this file documents the live schema rather than driving it.
+-- Changes go in a new numbered file under db/migrations/, which
+-- models/util/Migrator.bx applies when the app starts; update this file to
+-- match. A brand-new database is loaded from this file first.
 
 create table Post
 (
@@ -364,3 +364,21 @@ create table PostRevision
 
 create index idx_postrevision_post_created
     on PostRevision (post_id, created);
+
+create table ServerHourly
+(
+    recorded_at        datetime not null
+        primary key,
+    uptime_seconds     int      not null,
+    heap_used          bigint   not null,
+    heap_max           bigint   not null,
+    old_gen_after_gc   bigint   null,
+    direct_used        bigint   null,
+    open_files         int      null,
+    memory_free        bigint   null,
+    cpu_load_hour      double   null,
+    full_gcs_hour      int      null,
+    gc_ms_hour         int      null,
+    http_requests_hour int      null,
+    http_errors_hour   int      null
+);

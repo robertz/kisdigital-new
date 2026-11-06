@@ -336,17 +336,10 @@
 
 [data-theme="dark"] .c-manage-alert--error { color: #fca5a5; }
 
-/* ── Manage app: CodeMirror body editor, split preview, writing stats ── */
-
-.c-post-editor__panes {
-	display: grid;
-	grid-template-columns: minmax(0, 1fr);
-	gap: var(--space-4);
-}
-
-.c-post-editor__pane {
-	min-width: 0;
-}
+/* ── Manage app: post body editors ──
+   The visual editor (Tiptap) wears .c-post__body, the public post styling,
+   so what's written looks like what's published. The Markdown editor is
+   CodeMirror. */
 
 .c-post-editor__cm {
 	min-height: 480px;
@@ -361,35 +354,107 @@
 	border-color: var(--post-link-text);
 }
 
-.c-post-editor__panes--split {
-	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+.c-rich-editor .ProseMirror {
+	max-width: none;
+	min-height: 400px;
+	outline: none;
+	word-wrap: break-word;
+	white-space: pre-wrap;
 }
 
-/* Side by side, each half scrolls on its own instead of the page growing
-   to the taller of the two. */
-.c-post-editor__panes--split .c-post-editor__cm,
-.c-post-editor__panes--split .c-post-editor__preview {
-	height: 70vh;
-	min-height: 0;
+.c-rich-editor .ProseMirror:focus,
+.c-rich-editor .ProseMirror:focus-visible {
+	outline: none;
 }
 
-.c-post-editor__panes--split .c-post-editor__preview {
-	overflow-y: auto;
+.c-rich-editor .ProseMirror li > p {
+	margin-bottom: 0;
 }
 
-/* Without a height of its own the editor grows to fit the whole post and
-   is clipped by its box, leaving nothing for the wheel to scroll. */
-.c-post-editor__panes--split .c-post-editor__cm .cm-editor {
-	height: 100%;
+.c-rich-editor .ProseMirror > :first-child {
+	margin-top: 0;
 }
 
-.c-post-editor__panes.is-focus .c-post-editor__cm,
-.c-post-editor__panes.is-focus .c-post-editor__preview {
-	min-height: 70vh;
+.c-rich-editor .ProseMirror p.is-editor-empty:first-child::before {
+	content: attr(data-placeholder);
+	float: left;
+	height: 0;
+	pointer-events: none;
+	color: var(--text-placeholder);
 }
 
-@media (max-width: 991.98px) {
-	.c-post-editor__panes--split {
-		grid-template-columns: minmax(0, 1fr);
-	}
+.c-rich-editor .ProseMirror img {
+	cursor: pointer;
+	transition: outline-color 120ms ease;
+	outline: 3px solid transparent;
+	outline-offset: 2px;
+}
+
+.c-rich-editor .ProseMirror img.ProseMirror-selectednode {
+	outline-color: var(--post-link-text);
+}
+
+.c-rich-editor .ProseMirror img[title~="half"] {
+	max-width: 50%;
+}
+
+.c-rich-editor .ProseMirror img[title~="inline"] {
+	display: inline-block;
+	max-height: 2em;
+	margin: 0 0.15em;
+	vertical-align: middle;
+	border: 0;
+}
+
+.c-rich-editor .ProseMirror hr {
+	margin: var(--space-7) 0;
+	border: 0;
+	border-top: 1px solid var(--ui-border-subtle);
+}
+
+.c-rich-editor .ProseMirror hr.ProseMirror-selectednode {
+	border-top-color: var(--post-link-text);
+}
+
+.c-rich-editor .ProseMirror table {
+	width: 100%;
+	border-collapse: collapse;
+	margin-bottom: var(--space-5);
+}
+
+.c-rich-editor .ProseMirror th,
+.c-rich-editor .ProseMirror td {
+	padding: var(--space-2) var(--space-3);
+	border: 1px solid var(--ui-border-subtle);
+	vertical-align: top;
+}
+
+.c-rich-editor .ProseMirror th > p,
+.c-rich-editor .ProseMirror td > p {
+	margin: 0;
+}
+
+.c-rich-editor .ProseMirror .selectedCell {
+	background: color-mix(in srgb, var(--post-link-text) 14%, transparent);
+}
+
+/* Code blocks: colours come from post.css, shared with published posts.
+   The editor has no header bar; the language picker floats on the corner. */
+.c-rich-editor .ProseMirror pre {
+	padding: 0;
+	font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.c-rich-editor .ProseMirror pre > code {
+	padding: var(--space-4);
+}
+
+.c-rich-editor__language {
+	padding: 2px 6px;
+	border: 1px solid var(--ui-border-subtle);
+	border-radius: 6px;
+	background: var(--code-head-bg);
+	color: var(--code-muted);
+	font-size: 0.75rem;
+	cursor: pointer;
 }

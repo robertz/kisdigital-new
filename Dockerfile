@@ -52,6 +52,8 @@ COPY app.bxs .boxlang.json ./
 COPY views/ views/
 COPY routes/ routes/
 COPY models/ models/
+# applied at startup by models/util/Migrator.bx
+COPY db/migrations/ db/migrations/
 COPY public/ public/
 COPY --from=assets /app/public/assets/dist public/assets/dist
 

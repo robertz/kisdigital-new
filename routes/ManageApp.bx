@@ -13,15 +13,13 @@
 class {
 
 	variables.commentService = "";
-	variables.r2UploadPrefix = "posts";
 	variables.manifestPath   = "";
 	variables.devServerUrl   = "";
 	variables.cacheManifest  = true;
 	variables.assetBase      = "/assets/dist/manage/";
 
-	function init( required commentService, r2UploadPrefix = "posts", required string manifestPath, string devServerUrl = "", boolean cacheManifest = true, array apiModules = [] ){
+	function init( required commentService, required string manifestPath, string devServerUrl = "", boolean cacheManifest = true, array apiModules = [] ){
 		variables.commentService = arguments.commentService;
-		variables.r2UploadPrefix = len( trim( arguments.r2UploadPrefix ) ) ? trim( arguments.r2UploadPrefix ).reReplace( "^/+|/+$", "", "all" ) : "posts";
 		variables.manifestPath   = arguments.manifestPath;
 		variables.devServerUrl   = trim( arguments.devServerUrl ).reReplace( "/+$", "" );
 		variables.cacheManifest  = arguments.cacheManifest;
@@ -97,8 +95,7 @@ class {
 				"role"       : user.role
 			},
 			"csrfToken"      : req.csrfToken(),
-			"pendingComments": user.role == "admin" ? val( variables.commentService.getPendingCount() ) : 0,
-			"r2UploadPrefix" : variables.r2UploadPrefix
+			"pendingComments": user.role == "admin" ? val( variables.commentService.getPendingCount() ) : 0
 		};
 
 		res.render( "manage/app", {
