@@ -1,0 +1,110 @@
+<bx:include template="../../partials/_head.bxm">
+<bx:output>
+<div class="container py-5">
+	<div class="c-project-hero">
+		<p class="c-project-hero__eyebrow">Project</p>
+		<h1 class="c-project-hero__title">bx-passkeys</h1>
+		<p class="c-project-hero__tagline"><a href="https://www.w3.org/TR/webauthn-3/" target="_blank" rel="noopener" class="c-post-link">WebAuthn</a> passkeys for <a href="https://boxlang.io" target="_blank" rel="noopener" class="c-post-link">BoxLang</a>: let people register a passkey and sign in with it, no password. It uses only JDK crypto (<code>java.security</code>), with no third-party jars, and has no routes of its own — you call four methods from your own handlers. The ColdBox edition is <a href="/projects/cbpasskeys" class="c-post-link">cbpasskeys</a>.</p>
+		<div class="c-project-hero__actions">
+			<a href="https://github.com/robertz/bx-passkeys" target="_blank" rel="noopener" class="btn btn-primary-custom">View on GitHub</a>
+		</div>
+	</div>
+
+	<div class="c-project-features">
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-cpu"></i> JDK crypto only</p>
+			<p class="c-project-feature__body">ES256, Ed25519 and RS256 — the three algorithms browsers actually use — verified with <code>java.security</code>. A small CBOR decoder is built in for the COSE key.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-plug"></i> Framework-agnostic</p>
+			<p class="c-project-feature__body">No routes. Challenges live in a session struct you pass in — <code>session</code> in a web app, <code>req.session</code> with <a href="/projects/boxlang-express" class="c-post-link">boxlang-express</a>.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-database"></i> Your credential store</p>
+			<p class="c-project-feature__body">A table-backed store (MSSQL, MySQL and Postgres scripts included) and an in-memory one ship with the module, or implement the five-method <code>CredentialStore</code> contract yourself.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-shield-check"></i> Checked end to end</p>
+			<p class="c-project-feature__body">Single-use, expiring challenges; origin and rpId checks; signature counters that refuse cloned keys, with races between two sign-ins on one counter settled in the store.</p>
+		</div>
+	</div>
+
+	<div class="c-post__body c-docs-body">
+
+		<h2>Install</h2>
+		<pre class="bx-code"><span class="bx-code-label">bash</span><code>install-bx-module bx-passkeys</code></pre>
+		<p>Requires BoxLang <strong>1.19+</strong>. Attestation is <code class="bx-inline">"none"</code>: it trusts the key the authenticator hands over and doesn't check where the authenticator came from, which is what nearly every site wants.</p>
+
+		<h2>Settings</h2>
+		<pre class="bx-code"><span class="bx-code-label">json</span><code>"modules": {
+	"bxPasskeys": {
+		"settings": {
+			"rpId": "example.com",
+			"rpName": "Example",
+			"store": { "datasource": "app", "table": "passkey_credentials" }
+		}
+	}
+}</code></pre>
+		<p>Or pass them straight in: <code class="bx-inline">passkeyRelyingParty( { rpId: "example.com" } )</code>. Without <code class="bx-inline">origins</code>, sign-ins are allowed over <code class="bx-inline">https</code> on the rpId itself, and plain <code class="bx-inline">http</code> only on <code class="bx-inline">localhost</code>.</p>
+
+		<h2>Registering a passkey</h2>
+		<p>The user is already signed in some other way:</p>
+		<pre class="bx-code"><span class="bx-code-label">javascript</span><code>// POST /passkeys/options
+rp = passkeyRelyingParty()
+return rp.registrationOptions( { id: user.id, name: user.email, displayName: user.name }, session )
+
+// POST /passkeys        body = what createPasskey() returned
+try {
+	credential = rp.register( { id: user.id }, session, requestBody )
+	return { id: credential.credentialId, name: credential.name }
+} catch ( "Passkeys.Invalid" e ) {
+	// 400, e.message is safe to show
+}</code></pre>
+
+		<h2>Signing in</h2>
+		<pre class="bx-code"><span class="bx-code-label">javascript</span><code>// POST /sign-in/passkey/options
+return passkeyRelyingParty().signInOptions( session )
+
+// POST /sign-in/passkey   body = what signWithPasskey() returned
+try {
+	result = passkeyRelyingParty().verify( session, requestBody )
+	// result = { userId, credentialId, userVerified, signCount, credential }
+	// sign result.userId in; rotate the session id
+} catch ( "Passkeys.Invalid" e ) {
+	// 401
+}</code></pre>
+		<p>To re-confirm a user who is already signed in before a sensitive action, pass their id: <code class="bx-inline">signInOptions( session, user.id )</code>. Only that user's passkeys are offered, and <code class="bx-inline">verify()</code> refuses anyone else's.</p>
+
+		<h2>In the browser</h2>
+		<p><code class="bx-inline">client/passkeys.js</code> is a small ES module, with types in <code class="bx-inline">client/passkeys.d.ts</code>. Copy it into your front end:</p>
+		<pre class="bx-code"><span class="bx-code-label">javascript</span><code>import { createPasskey, signWithPasskey } from './passkeys.js'
+
+const post = (path, body) => fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body ?? {}) }).then((r) => r.json())
+
+// add a passkey
+const registration = await createPasskey(await post('/passkeys/options'))
+if (registration) await post('/passkeys', registration)
+
+// sign in
+const assertion = await signWithPasskey(await post('/sign-in/passkey/options'))
+if (assertion) await post('/sign-in/passkey', assertion)</code></pre>
+		<p>Both functions return <code class="bx-inline">null</code> when the person closes the browser's sheet.</p>
+
+		<h2>Not included</h2>
+		<ul>
+			<li>Attestation verification</li>
+			<li>Authenticator metadata (MDS)</li>
+			<li>WebAuthn extensions</li>
+		</ul>
+
+		<h2>Tests</h2>
+		<p><a href="https://testbox.ortusbooks.com/" target="_blank" rel="noopener" class="c-post-link">TestBox</a> specs, run headlessly. <code class="bx-inline">examples/flow.bxs</code> registers a passkey, signs in with it and shows a replay being refused, with a test authenticator standing in for the browser:</p>
+		<pre class="bx-code"><span class="bx-code-label">bash</span><code>box install
+boxlang setup-tests.bxs   ## once per checkout
+boxlang run-tests.bxs
+boxlang examples/flow.bxs</code></pre>
+
+	</div>
+</div>
+</bx:output>
+<bx:include template="../../partials/_foot.bxm">

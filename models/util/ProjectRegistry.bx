@@ -35,6 +35,18 @@ class {
 			tagline : "The pure-BoxLang sibling to coldbox-graphql — no ColdBox, no WireBox, no HTTP framework required."
 		},
 		{
+			slug    : "bx-passkeys",
+			name    : "bx-passkeys",
+			icon    : "bi-fingerprint",
+			tagline : "WebAuthn passkeys for BoxLang — passwordless registration and sign-in with JDK crypto only, no third-party jars."
+		},
+		{
+			slug    : "cbpasskeys",
+			name    : "cbpasskeys",
+			icon    : "bi-key",
+			tagline : "The ColdBox sibling to bx-passkeys — the same passkey checks and API on Lucee and Adobe ColdFusion."
+		},
+		{
 			slug    : "dnd-game-v2",
 			name    : "dnd-game-v2",
 			icon    : "bi-dice-5",

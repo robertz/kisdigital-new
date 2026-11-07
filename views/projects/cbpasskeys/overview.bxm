@@ -1,0 +1,92 @@
+<bx:include template="../../partials/_head.bxm">
+<bx:output>
+<div class="container py-5">
+	<div class="c-project-hero">
+		<p class="c-project-hero__eyebrow">Project</p>
+		<h1 class="c-project-hero__title">cbpasskeys</h1>
+		<p class="c-project-hero__tagline"><a href="https://www.w3.org/TR/webauthn-3/" target="_blank" rel="noopener" class="c-post-link">WebAuthn</a> passkeys for <a href="https://coldbox.ortusbooks.com/" target="_blank" rel="noopener" class="c-post-link">ColdBox</a> on Lucee and Adobe ColdFusion: registration and sign-in with no password, using only JDK crypto and no third-party jars. It's the CFML sibling of <a href="/projects/bx-passkeys" class="c-post-link">bx-passkeys</a>, with the same checks and the same API.</p>
+		<div class="c-project-hero__actions">
+			<a href="https://github.com/robertz/cbpasskeys" target="_blank" rel="noopener" class="btn btn-primary-custom">View on GitHub</a>
+		</div>
+	</div>
+
+	<div class="c-project-features">
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-layers"></i> Two engines</p>
+			<p class="c-project-feature__body">Tested on Lucee 6.2 and Adobe ColdFusion 2023 on Java 21, against Derby and MySQL 8.4, with a test harness and server file per engine.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-boxes"></i> WireBox-native</p>
+			<p class="c-project-feature__body">Inject <code>RelyingParty@cbpasskeys</code> and call four methods from your handlers. Swap in your own credential store by naming its WireBox id in the settings.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-cpu"></i> JDK crypto only</p>
+			<p class="c-project-feature__body">ES256, Ed25519 and RS256 verified with <code>java.security</code>, called through public interfaces so Adobe CF needs no JVM flags on Java 17+.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-shield-check"></i> Checked end to end</p>
+			<p class="c-project-feature__body">Single-use, expiring challenges; origin and rpId checks; signature counters that refuse cloned keys, with races between two sign-ins on one counter settled in the store.</p>
+		</div>
+	</div>
+
+	<div class="c-post__body c-docs-body">
+
+		<h2>Install</h2>
+		<pre class="bx-code"><span class="bx-code-label">bash</span><code>box install cbpasskeys</code></pre>
+		<p>Requires ColdBox <strong>7+</strong>, Lucee <strong>6+</strong> or Adobe ColdFusion <strong>2023+</strong>, and Java <strong>17+</strong>. Create the credential table from <code class="bx-inline">sql/mssql.sql</code>, <code class="bx-inline">sql/mysql.sql</code> or <code class="bx-inline">sql/postgres.sql</code>.</p>
+
+		<h2>Settings</h2>
+		<pre class="bx-code"><span class="bx-code-label">javascript</span><code>// config/ColdBox.cfc
+moduleSettings = {
+	cbpasskeys : {
+		rpId    : "example.com",
+		rpName  : "Example",
+		origins : [ "https://example.com" ],
+		store   : { datasource: "app", table: "passkey_credentials" }
+	}
+};</code></pre>
+
+		<h2>Routes and a handler</h2>
+		<pre class="bx-code"><span class="bx-code-label">javascript</span><code>// config/Router.cfc
+post( "/passkeys/options" ).to( "passkeys.registrationOptions" );
+post( "/passkeys" ).to( "passkeys.register" );
+post( "/sign-in/passkey/options" ).to( "passkeys.signInOptions" );
+post( "/sign-in/passkey" ).to( "passkeys.signIn" );</code></pre>
+		<p>Signing in, with <a href="https://forgebox.io/view/cbauth" target="_blank" rel="noopener" class="c-post-link">cbauth</a> for the signed-in user — any sign-in works the same way:</p>
+		<pre class="bx-code"><span class="bx-code-label">javascript</span><code>property name="passkeys" inject="RelyingParty@cbpasskeys";
+
+function signInOptions( event, rc, prc ) {
+	return event.renderData( type = "json", data = passkeys.signInOptions( session ) );
+}
+
+function signIn( event, rc, prc ) {
+	var result = {};
+	try {
+		result = passkeys.verify( session, event.getHTTPContent( json = true ) );
+	} catch ( "Passkeys.Invalid" e ) {
+		return event.renderData( type = "json", data = { "error": e.message }, statusCode = 401 );
+	}
+	sessionRotate();
+	auth().login( userService.retrieveUserById( result.userId ) );
+	return event.renderData( type = "json", data = { "signedIn": true } );
+}</code></pre>
+		<p>Registration follows the same shape with <code class="bx-inline">registrationOptions()</code> and <code class="bx-inline">register()</code>. <code class="bx-inline">test-harness/handlers/Passkeys.cfc</code> is a complete handler with list and remove. Protect these routes from CSRF the way you protect your other POST routes.</p>
+
+		<h2>Engine notes</h2>
+		<ul>
+			<li>The options keep their JSON types, so Adobe CF's <code class="bx-inline">serializeJSON</code> keeps key case and doesn't turn a numeric-looking name into a number.</li>
+			<li>Adobe CF's <code class="bx-inline">?:</code> treats <code class="bx-inline">0</code> and <code class="bx-inline">false</code> as missing. The module avoids it where either can occur, so a user id of <code class="bx-inline">0</code> works.</li>
+			<li>To list or remove a user's passkeys, call <code class="bx-inline">passkeys.getStore().listForUser( userId )</code> and compare ids with <code class="bx-inline">compare()</code>, not <code class="bx-inline">==</code>, which ignores case.</li>
+		</ul>
+
+		<h2>Tests</h2>
+		<p>The test harness is a small ColdBox app in <code class="bx-inline">test-harness/</code>. With a Derby 10.15+ jar in <code class="bx-inline">test-harness/lib/</code>, run every engine or just one:</p>
+		<pre class="bx-code"><span class="bx-code-label">bash</span><code>cd test-harness &amp;&amp; box install &amp;&amp; cd ..
+bash scripts/test.sh            ## every engine
+bash scripts/test.sh lucee@6    ## one engine
+bash scripts/coverage.sh        ## line coverage on Lucee 6</code></pre>
+
+	</div>
+</div>
+</bx:output>
+<bx:include template="../../partials/_foot.bxm">
