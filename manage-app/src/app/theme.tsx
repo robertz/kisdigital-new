@@ -75,6 +75,12 @@ function buildTheme(mode: Mode): Theme {
 			MuiButton: { defaultProps: { disableElevation: true } },
 			MuiTextField: { defaultProps: { size: "small", fullWidth: true } },
 			MuiTooltip: { defaultProps: { arrow: true } },
+			// MUI locks scrolling with overflow: hidden on <body>, which makes <body>
+			// a scroll container: every position: sticky bar on the page stops
+			// sticking and the layout jumps while a menu is open. A dropdown doesn't
+			// need the lock; dialogs and drawers keep it behind their backdrop.
+			MuiPopover: { defaultProps: { disableScrollLock: true } },
+			MuiMenu: { defaultProps: { disableScrollLock: true } },
 			MuiChip: { styleOverrides: { root: { fontWeight: 600 } } },
 			MuiTableCell: {
 				styleOverrides: {
