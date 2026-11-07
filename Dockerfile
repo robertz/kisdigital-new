@@ -45,7 +45,7 @@ ARG BOXLANG_MODULES=boxlang-express,bx-mysql,bx-markdown,bx-password-encrypt,bx-
 # install-bx-module always takes the latest from ForgeBox, but this line never
 # changes, so Docker and App Platform's Kaniko builder reuse the cached layer.
 # Change this to force a fresh pull, e.g. right after publishing a module fix.
-ARG MODULE_CACHE_BUST=2026-10-24-bx-jsoup
+ARG MODULE_CACHE_BUST=2026-11-06-boxlang-express-0.2.25
 RUN install-bx-module "$BOXLANG_MODULES" --local
 
 COPY app.bxs .boxlang.json ./
