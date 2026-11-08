@@ -1,0 +1,10 @@
+<!--- Topic links above the Writing and tag lists. Expects data.topics (the
+      most-used tags, { tag, post_count }) and data.currentTag ("" on Writing). --->
+<bx:output>
+<nav class="topic-filter" aria-label="Topics">
+	<a href="/posts" class="topic-filter__link" #!len( data.currentTag ?: "" ) ? 'aria-current="page"' : ''#>All</a>
+	<bx:loop array="#data.topics#" item="topic">
+		<a href="/tag/#encodeForURL( topic.tag )#" class="topic-filter__link" #( data.currentTag ?: "" ) == topic.tag ? 'aria-current="page"' : ''#>#encodeForHTML( topic.tag )#</a>
+	</bx:loop>
+</nav>
+</bx:output>

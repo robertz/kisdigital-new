@@ -25,33 +25,13 @@ class {
 	}
 
 	// route: /
-	// Each post appears on the home page at most once: the lead and the
-	// latest grid are settled first, then every later row is asked to skip
-	// what's already shown.
 	function index( req, res ){
-		var featuredPost   = variables.postService.getFeaturedPost();
-		var leadIsFeatured = featuredPost.exists();
-		var gridPosts      = variables.postService.getLatestPosts( 5 );
-		var leadPost       = leadIsFeatured ? featuredPost : ( gridPosts.len() ? gridPosts.shift() : "" );
-		if ( gridPosts.len() > 4 ) gridPosts = gridPosts.slice( 1, 4 );
-
-		var shownIds = gridPosts.map( ( post ) => post.getId() );
-		if ( isObject( leadPost ) ) shownIds.prepend( leadPost.getId() );
-
-		var mostReadPosts = variables.postService.getMostReadPosts( 4, shownIds );
-		shownIds.append( mostReadPosts.map( ( post ) => post.getId() ), true );
-
 		res.render( "main/index", {
-			pageTitle      : "",
-			canonicalUrl   : variables.siteDefaults.canonicalUrl( req.path ),
-			meta           : variables.siteDefaults.defaultMeta( req.path ),
-			leadPost       : leadPost,
-			leadIsFeatured : leadIsFeatured,
-			gridPosts      : gridPosts,
-			mostReadPosts  : mostReadPosts,
-			projects       : variables.projectRegistry.getProjects().slice( 1, 4 ),
-			archivePosts   : variables.postService.getArchivePosts( 4, shownIds ),
-			allTags        : variables.postService.getAllTags()
+			pageTitle        : "",
+			canonicalUrl     : variables.siteDefaults.canonicalUrl( req.path ),
+			meta             : variables.siteDefaults.defaultMeta( req.path ),
+			recentPosts      : variables.postService.getPosts( page = 1, pageSize = 8 ).posts,
+			featuredProjects : variables.projectRegistry.getFeatured()
 		} );
 	}
 
@@ -62,7 +42,7 @@ class {
 			canonicalUrl : variables.siteDefaults.canonicalUrl( req.path ),
 			meta         : variables.siteDefaults.defaultMeta( req.path ),
 			author       : variables.authorService.getFirstAuthor(),
-			latestPosts  : variables.postService.getLatestPosts()
+			latestPosts  : variables.postService.getLatestPosts( 5 )
 		} );
 	}
 

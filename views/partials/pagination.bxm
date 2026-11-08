@@ -1,0 +1,20 @@
+<!--- Newer/older links for a paged list. Expects data.paging and pageBase,
+      the list's URL without a page (e.g. "/posts" or "/search?q=boxlang"). --->
+<bx:set pageJoin = find( "?", pageBase ) ? "&" : "?">
+<bx:output>
+<bx:if data.paging.totalPages gt 1>
+<nav class="pager" aria-label="Pages">
+	<bx:if data.paging.page gt 1>
+		<a href="#pageBase##data.paging.page gt 2 ? pageJoin & 'page=' & ( data.paging.page - 1 ) : ''#" class="pager__link" rel="prev">&larr; Newer</a>
+	<bx:else>
+		<span></span>
+	</bx:if>
+	<span class="pager__count">Page #data.paging.page# of #data.paging.totalPages#</span>
+	<bx:if data.paging.page lt data.paging.totalPages>
+		<a href="#pageBase##pageJoin#page=#data.paging.page + 1#" class="pager__link" rel="next">Older &rarr;</a>
+	<bx:else>
+		<span></span>
+	</bx:if>
+</nav>
+</bx:if>
+</bx:output>

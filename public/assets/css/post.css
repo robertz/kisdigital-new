@@ -1,5 +1,3 @@
-/* ── Single post view ── */
-
 /* ── Post body links ── */
 
 .c-post-link {
@@ -17,50 +15,6 @@
 }
 
 /* ── Share bar ── */
-
-.c-post__share {
-	display: flex;
-	align-items: center;
-	justify-content: flex-end;
-	gap: var(--space-3);
-	font-size: 1.0625rem;
-	max-width: var(--measure);
-	margin-bottom: var(--space-6);
-}
-
-.c-post__share-label {
-	font-size: 0.8rem;
-	font-weight: 500;
-	color: var(--text-muted);
-	white-space: nowrap;
-}
-
-.c-post__share-links {
-	display: flex;
-	gap: var(--space-2);
-}
-
-.c-post__share-btn {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	width: 32px;
-	height: 32px;
-	border-radius: var(--ui-radius-sm);
-	border: 1px solid var(--ui-border-subtle);
-	color: var(--text-secondary);
-	transition: border-color 120ms ease, color 120ms ease;
-}
-
-.c-post__share-btn svg {
-	width: 15px;
-	height: 15px;
-}
-
-.c-post__share-btn:hover {
-	border-color: var(--post-link-text);
-	color: var(--post-link-text);
-}
 
 .c-post {
 	background: none;
@@ -98,8 +52,8 @@
 }
 
 .c-post__title {
-	font-size: clamp(1.9rem, 4vw, 2.6rem);
-	font-weight: 600;
+	font-size: clamp(1.75rem, 3.5vw, 2.25rem);
+	font-weight: 700;
 	line-height: 1.15;
 	letter-spacing: -0.02em;
 	color: var(--post-anchor);
@@ -130,35 +84,26 @@
 	color: var(--text-sep);
 }
 
-.c-post__author-avatar {
-	width: 30px;
-	height: 30px;
-	border-radius: 50%;
-	object-fit: cover;
-	background: var(--ui-surface-2);
-	border: 1px solid var(--ui-border-subtle);
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	font-size: 0.65rem;
-	font-weight: 600;
-	color: var(--post-anchor);
-	flex-shrink: 0;
-}
-
-.c-post__tags {
-	display: flex;
-	flex-wrap: wrap;
-	gap: var(--space-3);
-}
-
 /* ── Body ── */
 
 .c-post__body {
 	max-width: var(--measure);
-	font-size: 1.0625rem;
-	line-height: 1.75;
+	font-family: var(--font-serif);
+	font-size: 1.15rem;
+	line-height: 1.7;
 	color: var(--post-anchor);
+}
+
+.c-post__body h1,
+.c-post__body h2,
+.c-post__body h3,
+.c-post__body h4,
+.c-post__body h5,
+.c-post__body h6,
+.c-post__body figcaption,
+.c-post__body table,
+.c-post__body .c-code-head {
+	font-family: var(--font-sans);
 }
 
 .c-post__body h2,
@@ -266,64 +211,6 @@
 	color: var(--code-text);
 }
 
-.c-post__body .hljs-keyword,
-.c-post__body .hljs-selector-tag,
-.c-post__body .hljs-meta .hljs-keyword,
-.c-post__body .hljs-deletion {
-	color: var(--code-keyword);
-}
-
-.c-post__body .hljs-string,
-.c-post__body .hljs-regexp,
-.c-post__body .hljs-selector-attr,
-.c-post__body .hljs-selector-pseudo {
-	color: var(--code-string);
-}
-
-.c-post__body .hljs-number,
-.c-post__body .hljs-literal,
-.c-post__body .hljs-variable.language_,
-.c-post__body .hljs-built_in,
-.c-post__body .hljs-symbol {
-	color: var(--code-number);
-}
-
-.c-post__body .hljs-comment,
-.c-post__body .hljs-quote,
-.c-post__body .hljs-meta {
-	color: var(--code-comment);
-	font-style: italic;
-}
-
-.c-post__body .hljs-title,
-.c-post__body .hljs-title.function_,
-.c-post__body .hljs-section {
-	color: var(--code-title);
-}
-
-.c-post__body .hljs-type,
-.c-post__body .hljs-title.class_,
-.c-post__body .hljs-params,
-.c-post__body .hljs-attribute {
-	color: var(--code-type);
-}
-
-.c-post__body .hljs-attr,
-.c-post__body .hljs-name,
-.c-post__body .hljs-tag,
-.c-post__body .hljs-addition,
-.c-post__body .hljs-property {
-	color: var(--code-attr);
-}
-
-.c-post__body .hljs-emphasis {
-	font-style: italic;
-}
-
-.c-post__body .hljs-strong {
-	font-weight: 700;
-}
-
 .c-post__body p {
 	margin-bottom: var(--space-5);
 }
@@ -370,16 +257,12 @@
 }
 
 /* wide: full column width, no height cap */
-.c-post__body .c-post-img--wide,
-.c-post__body .c-post-figure--wide .c-post-img {
+.c-post__body .c-post-img--wide {
 	max-width: 100%;
 	max-height: none;
 }
 
 /* half: 50% of column, centred */
-.c-post__body .c-post-figure--half {
-	max-width: 50%;
-}
 
 /* inline: icon-scale, flows with text */
 .c-post__body .c-post-img--inline {
@@ -437,24 +320,6 @@
 
 .c-post__body tbody tr:hover td {
 	background: var(--ui-surface-2);
-}
-
-/* ── Sidebar widgets ── */
-
-.c-post-sidebar__author-avatar {
-	width: 42px;
-	height: 42px;
-	border-radius: 50%;
-	object-fit: cover;
-	background: var(--ui-surface-2);
-	border: 1px solid var(--ui-border-subtle);
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	font-size: 0.85rem;
-	font-weight: 600;
-	color: var(--post-anchor);
-	flex-shrink: 0;
 }
 
 /* ── Comments ── */
@@ -861,8 +726,7 @@ a.c-comment__handle:hover,
    solid light-mode red is too low-contrast against a dark surface. */
 @media (prefers-color-scheme: dark) {
 	html:not([data-theme="light"]) .c-comment-form__error { color: #fca5a5; background: rgba(239, 68, 68, 0.12); }
-	html:not([data-theme="light"]) .c-comment__delete-btn:hover { color: #fca5a5; }
-}
+	html:not([data-theme="light"]) .c-comment__delete-btn:hover { color: #fca5a5; }}
 
 [data-theme="dark"] .c-comment-form__error { color: #fca5a5; background: rgba(239, 68, 68, 0.12); }
 [data-theme="dark"] .c-comment__delete-btn:hover { color: #fca5a5; }
@@ -900,158 +764,13 @@ a.c-comment__handle:hover,
 	color: var(--post-link-text);
 }
 
-/* ── Posts listing page header ── */
-
-.c-posts-header {
-	border-bottom: 1px solid var(--ui-border-subtle);
-	padding: var(--space-8) 0 var(--space-7);
-}
-
-.c-posts-header__title {
-	font-size: clamp(1.9rem, 4vw, 2.6rem);
-	font-weight: 600;
-	letter-spacing: -0.02em;
-	color: var(--post-anchor);
-}
-
-.c-posts-header__eyebrow {
-	font-size: 0.72rem;
-	font-weight: 700;
-	letter-spacing: 0.06em;
-	text-transform: uppercase;
-	color: var(--post-link-text);
-	margin-bottom: var(--space-2);
-}
-
-.c-posts-header__count {
-	font-size: 0.9rem;
-	color: var(--text-muted);
-}
-
-/* ── Search page ── */
-
-.c-search-form {
-	display: flex;
-	gap: var(--space-2);
-	max-width: 480px;
-}
-
-.c-search-form__input {
-	flex: 1;
-	padding: 10px var(--space-4);
-	border: 1px solid var(--main-border-color);
-	border-radius: var(--ui-radius-sm);
-	background: var(--ui-surface-1);
-	color: var(--post-anchor);
-	font-size: 0.9375rem;
-}
-
-.c-search-form__input:focus {
-	outline: none;
-	border-color: var(--post-link-text);
-}
-
-.c-search-form__input::placeholder {
-	color: var(--text-placeholder);
-}
-
-.c-search-form__submit {
-	display: inline-flex;
-	align-items: center;
-	gap: var(--space-2);
-	padding: 10px var(--space-5);
-	background: var(--post-anchor);
-	border: 1px solid var(--post-anchor);
-	border-radius: var(--ui-radius-sm);
-	color: var(--site-background-color);
-	font-weight: 600;
-	font-size: 0.9rem;
-	white-space: nowrap;
-	transition: opacity 0.15s ease;
-}
-
-.c-search-form__submit:hover {
-	opacity: 0.85;
-}
-
-/* ── Pagination ── */
-
-.c-pagination {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	gap: var(--space-2);
-	margin-top: var(--space-7);
-}
-
-.c-pagination__btn {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	min-width: 36px;
-	height: 36px;
-	padding: 0 var(--space-3);
-	border-radius: var(--ui-radius-sm);
-	border: 1px solid var(--ui-border-subtle);
-	background: none;
-	color: var(--text-secondary);
-	font-size: 0.8125rem;
-	text-decoration: none;
-	transition: border-color 120ms ease, color 120ms ease, background-color 120ms ease;
-}
-
-.c-pagination__btn:hover {
-	border-color: var(--post-anchor);
-	color: var(--post-anchor);
-}
-
-.c-pagination__btn--active {
-	background: var(--post-anchor);
-	border-color: var(--post-anchor);
-	color: var(--site-background-color);
-	font-weight: 600;
-}
-
-.c-pagination__btn--active:hover {
-	background: var(--post-anchor);
-	border-color: var(--post-anchor);
-	color: var(--site-background-color);
-}
-
-.c-pagination__btn--disabled {
-	opacity: 0.35;
-	pointer-events: none;
-}
-
-.c-pagination__ellipsis {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	min-width: 24px;
-	height: 36px;
-	color: var(--text-secondary);
-}
-
 /* ── Responsive ── */
 
 @media (max-width: 575.98px) {
 	.c-post__header,
 	.c-post__body {
 		max-width: none;
-	}
-}
-
-/* ── Dark mode ── */
-/* Most rules above use tokens that already flip in root.css — only true
-   exceptions (fixed site-background-color-on-anchor buttons, etc.) need
-   restating here. */
-
-@media (prefers-color-scheme: dark) {
-	html:not([data-theme="light"]) .c-pagination__btn--active { color: var(--site-background-color); }
-}
-
-[data-theme="dark"] .c-pagination__btn--active { color: var(--site-background-color); }
-
+	}}
 
 /* ── Draft preview banner ── */
 
@@ -1092,8 +811,7 @@ a.c-comment__handle:hover,
 
 	html:not([data-theme="light"]) .c-post__preview-banner__link:hover {
 		color: #ffda6a;
-	}
-}
+	}}
 
 [data-theme="dark"] .c-post__preview-banner {
 	background: rgba(255,193,7,0.12);
@@ -1109,11 +827,3 @@ a.c-comment__handle:hover,
 	color: #ffda6a;
 }
 
-/* ── Author bio in sidebar ── */
-
-.c-post-sidebar__author-bio {
-	font-size: 0.875rem;
-	color: var(--text-secondary);
-	margin: 0;
-	line-height: 1.55;
-}

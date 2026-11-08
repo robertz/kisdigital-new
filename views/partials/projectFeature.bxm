@@ -1,0 +1,19 @@
+<!--- A featured project (ProjectRegistry.getFeatured()): icon, name, pitch,
+      stack and one link. Expects `project`. --->
+<bx:set featureExternal = left( project.url, 4 ) == "http">
+<bx:output>
+<article class="feature">
+	<span class="feature__icon" aria-hidden="true">
+		<bx:if len( project.image ?: "" )>
+			<img src="#project.image#" alt="" width="40" height="40">
+		<bx:else>
+			<i class="bi #project.icon#"></i>
+		</bx:if>
+	</span>
+	<div class="feature__body">
+		<h3 class="feature__name"><a href="#encodeForHTMLAttribute( project.url )#"#featureExternal ? ' rel="noopener"' : ''#>#encodeForHTML( project.name )#</a></h3>
+		<p class="feature__pitch">#encodeForHTML( project.pitch )#</p>
+		<p class="feature__meta">#encodeForHTML( project.stack )# <span aria-hidden="true">&middot;</span> <a href="#encodeForHTMLAttribute( project.url )#">#encodeForHTML( project.label )#<bx:if featureExternal> ↗</bx:if></a></p>
+	</div>
+</article>
+</bx:output>

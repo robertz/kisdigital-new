@@ -8,121 +8,20 @@
 class {
 
 	/**
-	 * Returns the most recently published featured post as a PostBean.
-	 *
-	 * Tags and primary author are fetched in separate queries and merged
-	 * before the bean is populated. When no featured post exists, returns
-	 * an unpopulated PostBean (exists() → false).
-	 *
-	 * @return {PostBean} Populated bean, or empty bean if none found.
-	 */
-	function getFeaturedPost(){
-		var rows = queryExecute(
-			"SELECT
-				id,
-				title,
-				slug,
-				description,
-				cover_image,
-				publish_date
-			FROM Post
-			WHERE featured = 1
-				AND status = 'published'
-				AND publish_date <= NOW()
-			ORDER BY RAND()
-			LIMIT 1",
-			{},
-			{ returnType: "array" }
-		);
-
-		if ( !rows.len() ) return new models.PostBean().init();
-
-		var row = rows[ 1 ];
-
-		row[ "tags" ] = queryExecute(
-			"SELECT T.tag
-			FROM Tag T
-			INNER JOIN TagPost TP ON TP.tag_id = T.id
-			WHERE TP.post_id = :post_id
-			ORDER BY T.tag ASC",
-			{ "post_id": { value: row.id, cfsqltype: "cf_sql_varchar" } },
-			{ returnType: "array" }
-		).map( ( r ) => r.tag );
-
-		var author = queryExecute(
-			"SELECT U.display_name, U.avatar_label, U.avatar_url
-			FROM User U
-			INNER JOIN UserPost UP ON UP.user_id = U.id
-			WHERE UP.post_id = :post_id
-				AND UP.author_role = 'author'
-			LIMIT 1",
-			{ "post_id": { value: row.id, cfsqltype: "cf_sql_varchar" } },
-			{ returnType: "array" }
-		);
-
-		row[ "author_name" ]         = author.len() ? author[ 1 ].display_name : "";
-		row[ "author_avatar_label" ] = author.len() ? author[ 1 ].avatar_label  : "";
-		row[ "author_avatar_url" ]   = author.len() ? author[ 1 ].avatar_url    : "";
-
-		return new models.PostBean().populate( row );
-	}
-
-	/**
-	 * Returns the most recently published non-featured posts for the home page feed.
+	 * Returns the most recently published posts.
 	 *
 	 * @param {numeric} limit - Maximum number of posts to return. Defaults to 6.
 	 * @return {array} Array of PostBeans.
 	 */
 	function getLatestPosts( numeric limit = 6 ){
 		return _queryPostCards(
-			where   = "P.featured != 1",
 			orderBy = "P.publish_date DESC",
 			limit   = arguments.limit
 		);
 	}
 
 	/**
-	 * The home page's "Most read" row: published posts by all-time views.
-	 *
-	 * @param {numeric} limit      - Maximum number of posts to return.
-	 * @param {array}   excludeIds - Post ids already shown elsewhere on the page.
-	 * @return {array} Array of PostBeans.
-	 */
-	function getMostReadPosts( numeric limit = 4, array excludeIds = [] ){
-		return _queryPostCards(
-			join       = "INNER JOIN Views V ON V.post_id = P.id",
-			where      = "V.views > 0",
-			orderBy    = "ANY_VALUE(V.views) DESC, P.publish_date DESC",
-			limit      = arguments.limit,
-			excludeIds = arguments.excludeIds
-		);
-	}
-
-	/**
-	 * The home page's "From the archive" row: a random pick of posts older
-	 * than `olderThanDays`. Seeded by the date, so the pick changes once a
-	 * day rather than on every refresh.
-	 *
-	 * @param {numeric} limit         - Maximum number of posts to return.
-	 * @param {array}   excludeIds    - Post ids already shown elsewhere on the page.
-	 * @param {numeric} olderThanDays - Minimum age of a post, in days.
-	 * @return {array} Array of PostBeans.
-	 */
-	function getArchivePosts( numeric limit = 4, array excludeIds = [], numeric olderThanDays = 365 ){
-		return _queryPostCards(
-			where      = "P.publish_date < DATE_SUB(NOW(), INTERVAL :olderThanDays DAY)",
-			orderBy    = "RAND(:daySeed)",
-			limit      = arguments.limit,
-			excludeIds = arguments.excludeIds,
-			params     = {
-				"olderThanDays": { value: arguments.olderThanDays, cfsqltype: "cf_sql_integer" },
-				"daySeed"      : { value: dateDiff( "d", createDate( 2000, 1, 1 ), now() ), cfsqltype: "cf_sql_integer" }
-			}
-		);
-	}
-
-	/**
-	 * Shared query behind the home page's card rows: published posts with
+	 * Shared query behind getLatestPosts(): published posts with
 	 * their tags (GROUP_CONCAT, split into an array before the bean is
 	 * populated) and primary author.
 	 *
@@ -559,6 +458,22 @@ class {
 	 *
 	 * @return {array} Array of structs with keys: tag, post_count. Ordered alphabetically.
 	 */
+	/**
+	 * The most-used tags, most posts first, for the topic links on Writing.
+	 * @param {string} include - A tag to add if it didn't make the cut (the one being viewed).
+	 */
+	array function getTopTags( numeric limit = 10, string include = "" ){
+		var tags = getAllTags();
+		tags.sort( ( a, b ) => b.post_count - a.post_count );
+		var top = tags.len() > arguments.limit ? tags.slice( 1, arguments.limit ) : tags;
+		var wanted = arguments.include;
+		if ( len( wanted ) && !top.some( ( row ) => row.tag == wanted ) ){
+			var extra = tags.filter( ( row ) => row.tag == wanted );
+			if ( extra.len() ) top.append( extra[ 1 ] );
+		}
+		return top;
+	}
+
 	function getAllTags(){
 		return queryExecute(
 			"SELECT

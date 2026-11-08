@@ -66,12 +66,12 @@ class {
 		}
 
 		res.render( "posts/index", {
-			pageTitle     : "Articles",
+			pageTitle     : "Writing",
 			canonicalUrl  : variables.siteDefaults.canonicalUrl( req.path ),
 			meta          : variables.siteDefaults.defaultMeta( req.path ),
 			paging        : paging,
-			trendingPosts : variables.postService.getTrendingPosts(),
-			allTags       : variables.postService.getAllTags()
+			topics        : variables.postService.getTopTags(),
+			currentTag    : ""
 		} );
 	}
 
@@ -146,13 +146,9 @@ class {
 			post          : post,
 			isPreview     : isPreview,
 			postBodyHtml  : variables.postRenderer.render( post.getBody() ),
-			// Prism (CSS+JS) is only pulled into _head.bxm for posts that
-			// actually have a fenced code block to highlight — no other
-			// page ever needs it (see PostRenderer.bx/ProjectDocRenderer.bx:
-			// project docs rewrite fenced blocks into this site's own
-			// non-JS .bx-code styling instead).
+			// code.js (highlighting and the Copy button) only loads for a
+			// post with a fenced code block.
 			hasCodeBlocks : find( "```", post.getBody() ) > 0,
-			trendingPosts : variables.postService.getTrendingPosts(),
 			relatedPosts  : variables.postService.getRelatedPosts( post.getId(), post.getTags() ),
 			commentThread : variables.commentService.getCommentThread( post.getId() ),
 			commentCount  : variables.commentService.getCommentCount( post.getId() ),
@@ -221,9 +217,7 @@ class {
 			canonicalUrl  : variables.siteDefaults.canonicalUrl( req.path ),
 			meta          : variables.siteDefaults.defaultMeta( req.path ),
 			q             : q,
-			paging        : paging,
-			trendingPosts : variables.postService.getTrendingPosts(),
-			allTags       : variables.postService.getAllTags()
+			paging        : paging
 		} );
 	}
 

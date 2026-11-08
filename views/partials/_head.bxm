@@ -63,8 +63,8 @@
       to flip the media attribute. site.css itself stays render-blocking
       (small, same-origin, needed for the header/layout to not flash
       unstyled). --->
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" media="print" onload="this.media='all'">
-<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"></noscript>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap"></noscript>
 <link rel="stylesheet" href="#data.cssHref#">
 
 <!--- Deferred JS --->
@@ -82,21 +82,22 @@
 
 <a class="skip-link" href="##main-content">Skip to content</a>
 
+<bx:script>
+	navPath    = data.currentPath ?: "";
+	navWriting = navPath == "/posts" || left( navPath, 7 ) == "/posts/" || left( navPath, 5 ) == "/tag/" || navPath == "/search";
+	navProjects = left( navPath, 9 ) == "/projects";
+	navAbout   = navPath == "/about";
+</bx:script>
 <header class="header">
 	<div class="container">
 		<div class="header__inner">
 			<a href="/" class="header__logo" aria-label="KISDigital home">
 				<span class="header__wordmark">KIS<span class="header__logo-accent">Digital</span></span>
-				<span class="header__tagline">ColdFusion, Lucee<br>&amp; BoxLang</span>
 			</a>
 			<nav class="header-actions" aria-label="Sections">
-				<a href="/posts" class="header__link">Articles</a>
-				<a href="/tag/boxlang" class="header__link">BoxLang</a>
-				<a href="/tag/cfml" class="header__link">CFML</a>
-				<a href="/tag/commandbox" class="header__link">CommandBox</a>
-				<a href="/projects" class="header__link">Projects</a>
-				<a href="/games" class="header__link">Games</a>
-				<a href="/about" class="header__link">About</a>
+				<a href="/posts" class="header__link" #navWriting ? 'aria-current="page"' : ''#>Writing</a>
+				<a href="/projects" class="header__link" #navProjects ? 'aria-current="page"' : ''#>Projects</a>
+				<a href="/about" class="header__link" #navAbout ? 'aria-current="page"' : ''#>About</a>
 				<bx:if len( data.manageUser ?: "" )>
 					<a href="/manage" class="header__link">Dashboard</a>
 				</bx:if>
@@ -105,53 +106,32 @@
 			<a href="/search" class="header-icon-button" aria-label="Search articles">
 				<i class="bi bi-search"></i>
 			</a>
+			<a href="/rss" class="header-icon-button" aria-label="RSS feed">
+				<i class="bi bi-rss"></i>
+			</a>
 			<button class="header-icon-button" id="theme-toggle" aria-label="Toggle colour theme">
 				<i class="bi bi-moon-fill" id="theme-icon"></i>
 			</button>
-			<a href="/##follow" class="header__cta">Follow</a>
 			<button class="header-icon-button header-menu-toggle" id="mobile-menu-toggle" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-menu">
 				<i class="bi bi-list" id="mobile-menu-icon"></i>
 			</button>
 		</div>
 	</div>
 
-	<!--- Mobile-only dropdown: search + nav links that .header-search/.header-actions
-	      hide below 768px (no room for them inline — see site.css). Toggled by the
-	      hamburger button above; JS lives in _foot.bxm next to the theme toggle. --->
+	<!--- Below 768px the nav links don't fit inline; the hamburger opens this
+	      instead (JS in _foot.bxm). --->
 	<div class="mobile-menu" id="mobile-menu" hidden>
 		<form method="get" action="/search" class="mobile-menu__search" role="search">
 			<i class="bi bi-search mobile-menu__search-icon" aria-hidden="true"></i>
 			<input type="search" name="q" class="mobile-menu__search-input" placeholder="Search articles…" aria-label="Search articles">
 		</form>
 		<nav class="mobile-menu__links">
-			<a href="/posts" class="mobile-menu__link">
-				<i class="bi bi-file-text"></i> Articles
-			</a>
-			<a href="/tag/boxlang" class="mobile-menu__link">
-				<i class="bi bi-box"></i> BoxLang
-			</a>
-			<a href="/tag/cfml" class="mobile-menu__link">
-				<i class="bi bi-code-slash"></i> CFML
-			</a>
-			<a href="/tag/commandbox" class="mobile-menu__link">
-				<i class="bi bi-terminal"></i> CommandBox
-			</a>
-			<a href="/projects" class="mobile-menu__link">
-				<i class="bi bi-boxes"></i> Projects
-			</a>
-			<a href="/games" class="mobile-menu__link">
-				<i class="bi bi-joystick"></i> Games
-			</a>
-			<a href="/about" class="mobile-menu__link">
-				<i class="bi bi-person"></i> About
-			</a>
-			<a href="/##follow" class="mobile-menu__link">
-				<i class="bi bi-rss"></i> Follow
-			</a>
+			<a href="/posts" class="mobile-menu__link">Writing</a>
+			<a href="/projects" class="mobile-menu__link">Projects</a>
+			<a href="/about" class="mobile-menu__link">About</a>
+			<a href="/rss" class="mobile-menu__link">RSS feed</a>
 			<bx:if len( data.manageUser ?: "" )>
-				<a href="/manage" class="mobile-menu__link">
-					<i class="bi bi-speedometer2"></i> Dashboard
-				</a>
+				<a href="/manage" class="mobile-menu__link">Dashboard</a>
 			</bx:if>
 		</nav>
 	</div>

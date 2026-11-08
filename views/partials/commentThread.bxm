@@ -4,9 +4,7 @@
       no nesting/recursion needed since the list is already in display
       order. Included once per item from a plain <bx:loop item="comment">
       in views/posts/show.bxm; data.currentUser/data.csrfToken/data.post
-      come from that same view's own render data, same as how
-      trendingSidebar.bxm reaches data.trendingPosts regardless of which
-      top-level view included it.
+      come from that same view's own render data.
 
       Also used standalone by routes/Comments.bx to render a single new
       comment's fragment for the AJAX response (see public/assets/js/

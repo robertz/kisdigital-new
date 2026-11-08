@@ -47,8 +47,7 @@ class {
 			meta          : variables.siteDefaults.defaultMeta( req.path ),
 			currentTag    : currentTag,
 			paging        : paging,
-			trendingPosts : variables.postService.getTrendingPosts(),
-			allTags       : variables.postService.getAllTags()
+			topics        : variables.postService.getTopTags( include = currentTag )
 		} );
 	}
 

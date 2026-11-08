@@ -39,8 +39,21 @@ class {
 			pageTitle    : "Projects",
 			canonicalUrl : variables.siteDefaults.canonicalUrl( req.path ),
 			meta         : variables.siteDefaults.defaultMeta( req.path ),
-			projects     : variables.projectRegistry.getProjects()
+			featured     : variables.projectRegistry.getFeatured(),
+			groups       : variables.projectRegistry.getGroups(),
+			docsHome     : _docsHome()
 		} );
+	}
+
+	// slug -> its first docs page, for the projects that have docs.
+	private struct function _docsHome(){
+		var home = {};
+		for ( var project in variables.projectRegistry.getProjects() ){
+			if ( variables.projectDocRegistry.projectHasDocs( project.slug ) ){
+				home[ project.slug ] = variables.projectDocRegistry.getDocsForProject( project.slug )[ 1 ].page_slug;
+			}
+		}
+		return home;
 	}
 
 	// route: /projects/:slug

@@ -1,21 +1,52 @@
 <bx:include template="../partials/_head.bxm">
 <bx:output>
-<div class="container py-5">
-	<div class="c-projects-hero">
-		<p class="section-label mb-3">Projects</p>
-		<h1 class="c-projects-hero__title">Things I've built</h1>
-		<p class="c-projects-hero__lede">Open-source tools and libraries, documented here alongside the articles.</p>
-	</div>
+<div class="container">
+	<div class="narrow">
 
-	<div class="c-projects-grid">
-		<bx:loop array="#data.projects#" item="project">
-		<a href="/projects/#project.slug#" class="c-project-card">
-			<span class="c-project-card__icon"><i class="bi #project.icon#"></i></span>
-			<span class="c-project-card__name">#encodeForHTML( project.name )#</span>
-			<span class="c-project-card__tagline">#encodeForHTML( project.tagline )#</span>
-			<span class="c-project-card__link">View project &rarr;</span>
-		</a>
+		<header class="page-head">
+			<h1 class="page-head__title">Projects</h1>
+			<p class="page-head__lede">Open-source modules for BoxLang and ColdBox, and the apps built on them. Each module has an overview here and its source on GitHub.</p>
+		</header>
+
+		<section class="home-block">
+			<div class="block-head">
+				<h2 class="block-head__title">Featured</h2>
+			</div>
+			<div class="feature-list">
+				<bx:loop array="#data.featured#" item="project">
+					<bx:include template="../partials/projectFeature.bxm">
+				</bx:loop>
+			</div>
+		</section>
+
+		<bx:loop array="#data.groups#" item="group">
+		<section class="home-block" id="#group.id#">
+			<div class="block-head">
+				<h2 class="block-head__title">#encodeForHTML( group.title )#</h2>
+				<p class="block-head__text">#encodeForHTML( group.text )#</p>
+			</div>
+			<div class="project-list">
+				<bx:loop array="#group.projects#" item="project">
+				<article class="project-row">
+					<div class="project-row__head">
+						<h3 class="project-row__name"><a href="/projects/#project.slug#">#encodeForHTML( project.name )#</a></h3>
+						<span class="project-row__status project-row__status--#lCase( listFirst( project.status, ' ' ) )#">#encodeForHTML( project.status )#</span>
+					</div>
+					<p class="project-row__tagline">#encodeForHTML( project.tagline )#</p>
+					<p class="project-row__meta">
+						<span>#encodeForHTML( project.language )#</span>
+						<a href="/projects/#project.slug#">Overview</a>
+						<bx:if data.docsHome.keyExists( project.slug )>
+							<a href="/projects/#project.slug#/docs/#data.docsHome[ project.slug ]#">Docs</a>
+						</bx:if>
+						<a href="https://github.com/robertz/#project.slug#" rel="noopener">GitHub ↗</a>
+					</p>
+				</article>
+				</bx:loop>
+			</div>
+		</section>
 		</bx:loop>
+
 	</div>
 </div>
 </bx:output>

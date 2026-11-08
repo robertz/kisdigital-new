@@ -1,0 +1,17 @@
+<!--- One post as a text row (date, title, summary, topic) for the home page,
+      Writing, tag pages and "Related". Expects `post` (a PostBean). --->
+<bx:set entryTag = post.getPrimaryTag()>
+<bx:output>
+<article class="entry">
+	<time class="entry__date" datetime="#dateFormat( post.getPublishDate(), 'yyyy-mm-dd' )#">#dateFormat( post.getPublishDate(), "mmm d, yyyy" )#</time>
+	<div class="entry__body">
+		<h3 class="entry__title"><a href="#post.getPostUrl()#">#encodeForHTML( post.getTitle() )#</a></h3>
+		<bx:if len( post.getDescription() )>
+		<p class="entry__summary">#encodeForHTML( post.getDescription() )#</p>
+		</bx:if>
+		<bx:if len( entryTag )>
+		<a href="/tag/#encodeForURL( entryTag )#" class="entry__topic">#encodeForHTML( entryTag )#</a>
+		</bx:if>
+	</div>
+</article>
+</bx:output>

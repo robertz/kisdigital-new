@@ -4,7 +4,10 @@
 <footer class="c-site-footer">
 	<div class="container">
 		<div class="c-site-footer__inner">
-			<span>&copy; #year( now() )# KISDigital</span>
+			<span>&copy; #year( now() )# Robert Zehnder</span>
+			<p class="c-site-footer__follow">
+				Follow by <a href="/rss">RSS</a> or on the fediverse as <code>@blog@kisdigital.com</code>
+			</p>
 			<nav class="c-site-footer__links">
 				<a href="/about">About</a>
 				<a href="/privacy">Privacy</a>

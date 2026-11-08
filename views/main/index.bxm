@@ -1,164 +1,38 @@
 <bx:include template="../partials/_head.bxm">
-<bx:set leadPost  = data.leadPost>
-<bx:set gridPosts = data.gridPosts>
 <bx:output>
-<h1 class="sr-only">KISDigital — ColdFusion, Lucee &amp; BoxLang</h1>
+<div class="container">
+	<div class="narrow">
 
-<bx:if isObject( leadPost )>
-<section class="home-lead">
-	<div class="container">
-		<div class="home-lead__grid">
-			<a href="#leadPost.getPostUrl()#" class="home-lead__media" tabindex="-1" aria-hidden="true">
-				<bx:if len( leadPost.getCoverImage() )>
-					<bx:set coverSrc = leadPost.getCoverImage()>
-					<bx:set coverIsLead = true>
-					<bx:include template="../partials/coverImage.bxm">
-				<bx:else>
-					<span class="post-tile__fallback">#encodeForHTML( len( leadPost.getPrimaryTag() ) ? leadPost.getPrimaryTag() : "kisdigital" )#</span>
-				</bx:if>
-			</a>
-			<div class="home-lead__body">
-				<span class="home-lead__badge">#data.leadIsFeatured ? "Featured" : "Latest"#</span>
-				<h2 class="home-lead__title"><a href="#leadPost.getPostUrl()#">#encodeForHTML( leadPost.getTitle() )#</a></h2>
-				<bx:if len( leadPost.getDescription() )>
-				<p class="home-lead__dek">#encodeForHTML( leadPost.getDescription() )#</p>
-				</bx:if>
-				<p class="post-byline post-byline--stacked">
-					<bx:if len( leadPost.getAuthorName() )><span class="post-byline__name">#encodeForHTML( leadPost.getAuthorName() )#</span></bx:if>
-					<time>#dateFormat( leadPost.getPublishDate(), "MMMM D, YYYY" )#</time>
-				</p>
-			</div>
-		</div>
-	</div>
-</section>
-</bx:if>
+		<section class="intro">
+			<h1 class="intro__title">Robert Zehnder</h1>
+			<p class="intro__lede">I write about BoxLang, CFML and the JVM web stack, and build open-source modules and apps with them. This is where the notes, the deep dives and the projects live.</p>
+		</section>
 
-<bx:if gridPosts.len()>
-<section class="home-section">
-	<div class="container">
-		<div class="tile-grid">
-			<bx:set tileTag = "">
-			<bx:loop array="#gridPosts#" item="post">
-				<bx:include template="../partials/postTile.bxm">
-			</bx:loop>
-		</div>
-	</div>
-</section>
-</bx:if>
+		<section class="home-block">
+			<div class="block-head">
+				<h2 class="block-head__title">Recent writing</h2>
+				<a href="/posts" class="block-head__more">All writing &rarr;</a>
+			</div>
+			<div class="entry-list">
+				<bx:loop array="#data.recentPosts#" item="post">
+					<bx:include template="../partials/postEntry.bxm">
+				</bx:loop>
+			</div>
+		</section>
 
-<section class="home-section" id="follow">
-	<div class="container">
-		<div class="follow-band">
-			<div>
-				<h2 class="follow-band__title">Follow along</h2>
-				<p class="follow-band__text">New articles on BoxLang, CFML and the JVM web stack, wherever you already read.</p>
+		<section class="home-block">
+			<div class="block-head">
+				<h2 class="block-head__title">Selected projects</h2>
+				<a href="/projects" class="block-head__more">All projects &rarr;</a>
 			</div>
-			<div class="follow-band__options">
-				<div class="follow-band__option">
-					<span>Mastodon and the fediverse</span>
-					<code>@blog@kisdigital.com</code>
-				</div>
-				<a href="/rss" class="follow-band__option">
-					<span>RSS feed</span>
-					<code>/rss</code>
-				</a>
+			<div class="feature-list">
+				<bx:loop array="#data.featuredProjects#" item="project">
+					<bx:include template="../partials/projectFeature.bxm">
+				</bx:loop>
 			</div>
-		</div>
-	</div>
-</section>
+		</section>
 
-<bx:if data.mostReadPosts.len()>
-<section class="home-section">
-	<div class="container">
-		<div class="section-head">
-			<div>
-				<h2 class="section-head__title">Most read</h2>
-				<p class="section-head__text">What readers keep coming back to.</p>
-			</div>
-			<a href="/posts" class="section-head__more">All articles <i class="bi bi-chevron-right" aria-hidden="true"></i></a>
-		</div>
-		<div class="tile-grid">
-			<bx:set tileTag = "">
-			<bx:loop array="#data.mostReadPosts#" item="post">
-				<bx:include template="../partials/postTile.bxm">
-			</bx:loop>
-		</div>
 	</div>
-</section>
-</bx:if>
-
-<bx:if data.projects.len()>
-<section class="home-section">
-	<div class="container">
-		<div class="section-head">
-			<div>
-				<h2 class="section-head__title">Projects</h2>
-				<p class="section-head__text">Open-source modules and tools, documented here.</p>
-			</div>
-			<a href="/projects" class="section-head__more">All projects <i class="bi bi-chevron-right" aria-hidden="true"></i></a>
-		</div>
-		<a href="https://feedhouse.app" class="project-callout">
-			<img src="/assets/images/feedhouse-icon.svg" alt="" class="project-callout__icon" width="64" height="64">
-			<span class="project-callout__body">
-				<span class="post-kicker">New</span>
-				<span class="project-callout__title">Feedhouse</span>
-				<span class="project-callout__text">A feed reader in the spirit of Google Reader. You pick the sources, it shows what's new in the order it was published, and nothing ranks your feed for you. RSS, YouTube, podcasts, Mastodon and Bluesky, with read later, highlights and full-text search. Built on BoxLang and BoxExpress.</span>
-			</span>
-			<span class="project-callout__cta">Visit feedhouse.app <i class="bi bi-arrow-up-right" aria-hidden="true"></i></span>
-		</a>
-		<a href="https://dismalthreads.com" class="project-callout project-callout--dismalthreads">
-			<img src="/assets/images/dismalthreads-icon.svg" alt="" class="project-callout__icon" width="64" height="64">
-			<span class="project-callout__body">
-				<span class="post-kicker">New</span>
-				<span class="project-callout__title">DismalThreads</span>
-				<span class="project-callout__text">A community of groups, posts and threaded comments, rebuilt from bxThreads. Join public groups or ask into private ones, follow friends, and react and reply with everything updating live. Built on BoxLang and BoxExpress, with a React front end.</span>
-			</span>
-			<span class="project-callout__cta">Visit dismalthreads.com <i class="bi bi-arrow-up-right" aria-hidden="true"></i></span>
-		</a>
-		<div class="tile-grid">
-			<bx:loop array="#data.projects#" item="project">
-				<bx:include template="../partials/projectTile.bxm">
-			</bx:loop>
-		</div>
-	</div>
-</section>
-</bx:if>
-
-<bx:if data.archivePosts.len()>
-<section class="home-section">
-	<div class="container">
-		<div class="section-head">
-			<div>
-				<h2 class="section-head__title">From the archive</h2>
-				<p class="section-head__text">Older posts worth another look. A new pick each day.</p>
-			</div>
-			<a href="/posts" class="section-head__more">All articles <i class="bi bi-chevron-right" aria-hidden="true"></i></a>
-		</div>
-		<div class="tile-grid">
-			<bx:set tileTag = "">
-			<bx:loop array="#data.archivePosts#" item="post">
-				<bx:include template="../partials/postTile.bxm">
-			</bx:loop>
-		</div>
-	</div>
-</section>
-</bx:if>
-
-<section class="home-section">
-	<div class="container">
-		<div class="section-head">
-			<div>
-				<h2 class="section-head__title">Topics</h2>
-				<p class="section-head__text">Browse everything by tag.</p>
-			</div>
-			<a href="/posts" class="section-head__more">All articles <i class="bi bi-chevron-right" aria-hidden="true"></i></a>
-		</div>
-		<div class="tag-cloud">
-			<bx:loop array="#data.allTags#" item="tagRow">
-				<a href="/tag/#encodeForURL( tagRow.tag )#" class="tag-badge">#encodeForHTML( tagRow.tag )#<span class="tag-badge__count">#tagRow.post_count#</span></a>
-			</bx:loop>
-		</div>
-	</div>
-</section>
+</div>
 </bx:output>
 <bx:include template="../partials/_foot.bxm">

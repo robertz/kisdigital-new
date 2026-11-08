@@ -1,80 +1,3 @@
-/* ── Projects index ── */
-
-.c-projects-hero {
-	max-width: var(--measure);
-	margin-bottom: var(--space-8);
-}
-
-.c-projects-hero__title {
-	font-size: clamp(1.9rem, 4vw, 2.75rem);
-	font-weight: 600;
-	line-height: 1.15;
-	letter-spacing: -0.02em;
-	color: var(--post-anchor);
-	margin-bottom: var(--space-4);
-}
-
-.c-projects-hero__lede {
-	font-size: 1.0625rem;
-	line-height: 1.6;
-	color: var(--text-secondary);
-}
-
-.c-projects-grid {
-	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-	gap: var(--space-6);
-}
-
-.c-project-card {
-	display: flex;
-	flex-direction: column;
-	gap: var(--space-3);
-	padding: var(--space-6);
-	background: var(--ui-surface-1);
-	border: 1px solid var(--ui-border-subtle);
-	border-radius: var(--ui-radius-md);
-	text-decoration: none;
-	transition: border-color 120ms ease, transform 120ms ease;
-}
-
-.c-project-card:hover {
-	border-color: var(--post-link-text);
-	transform: translateY(-2px);
-}
-
-.c-project-card__icon {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	width: 44px;
-	height: 44px;
-	border-radius: var(--ui-radius-sm);
-	background: var(--ui-surface-2);
-	color: var(--post-link-text);
-	font-size: 1.25rem;
-}
-
-.c-project-card__name {
-	font-size: 1.15rem;
-	font-weight: 700;
-	color: var(--post-anchor);
-}
-
-.c-project-card__tagline {
-	font-size: 0.9375rem;
-	line-height: 1.55;
-	color: var(--text-secondary);
-}
-
-.c-project-card__link {
-	margin-top: auto;
-	font-family: var(--font-mono);
-	font-size: 0.8125rem;
-	font-weight: 500;
-	color: var(--post-link-text);
-}
-
 /* ── Project overview (landing) page ── */
 
 .c-project-hero {
@@ -368,15 +291,12 @@
 
 	.c-docs-nav__link {
 		flex-shrink: 0;
-	}
-}
+	}}
 
 @media (prefers-color-scheme: dark) {
-	html:not([data-theme="light"]) .c-project-card,
+	
 	html:not([data-theme="light"]) .c-project-feature,
-	html:not([data-theme="light"]) .c-docs-nav { background: var(--ui-surface-1); border-color: var(--ui-border-subtle); }
-}
+	html:not([data-theme="light"]) .c-docs-nav { background: var(--ui-surface-1); border-color: var(--ui-border-subtle); }}
 
-[data-theme="dark"] .c-project-card,
 [data-theme="dark"] .c-project-feature,
 [data-theme="dark"] .c-docs-nav { background: var(--ui-surface-1); border-color: var(--ui-border-subtle); }

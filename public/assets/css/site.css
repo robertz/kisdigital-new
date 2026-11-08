@@ -11,6 +11,7 @@
 @import 'about.css';
 @import 'manage.css';
 @import 'projects.css';
+@import 'editorial.css';
 
 html {
 	scrollbar-gutter: stable;
@@ -105,7 +106,7 @@ pre {
 	gap: 28px;
 }
 
-/* ── Logo: heavy wordmark, accent rule, two-line tagline ── */
+/* ── Logo ── */
 
 .header__logo {
 	display: inline-flex;
@@ -122,54 +123,14 @@ pre {
 }
 
 .header__wordmark {
-	font-size: 1.6rem;
-	font-weight: 900;
-	letter-spacing: -0.045em;
+	font-size: 1.35rem;
+	font-weight: 800;
+	letter-spacing: -0.04em;
 	line-height: 1;
 }
 
 .header__logo-accent {
 	color: var(--post-link-text);
-}
-
-.header__tagline {
-	padding-left: 10px;
-	border-left: 2px solid var(--post-link-text);
-	font-size: 0.72rem;
-	font-weight: 600;
-	line-height: 1.2;
-	color: var(--post-anchor);
-}
-
-@media (max-width: 1199.98px) {
-	.header__tagline {
-		display: none;
-	}
-}
-
-.header__cta {
-	display: inline-flex;
-	align-items: center;
-	padding: 8px 16px;
-	border-radius: var(--ui-radius-md);
-	background: var(--post-link-text);
-	color: var(--on-accent);
-	font-size: 0.85rem;
-	font-weight: 600;
-	text-decoration: none;
-	white-space: nowrap;
-	transition: opacity 120ms ease;
-}
-
-.header__cta:hover {
-	color: var(--on-accent);
-	opacity: 0.88;
-}
-
-@media (max-width: 767.98px) {
-	.header__cta {
-		display: none;
-	}
 }
 
 /* ── Spacer (pushes actions right) ── */
@@ -337,7 +298,11 @@ pre {
 
 .header__link:hover {
 	color: var(--post-anchor);
-	border-bottom-color: var(--post-link-text);
+}
+
+.header__link[aria-current="page"] {
+	color: var(--post-anchor);
+	border-bottom-color: var(--post-anchor);
 }
 
 /* ── Layout container ── */
