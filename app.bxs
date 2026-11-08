@@ -54,6 +54,18 @@ commentNotifier = new models.services.CommentNotifier(
 commentService.onCreated( ( commentId ) => commentNotifier.commentCreated( commentId ) )
 commentService.onPublished( ( commentId ) => commentNotifier.commentPublished( commentId ) )
 
+// Email subscriptions to new posts (models/services/SubscriptionService.bx).
+// The sweep emails each post as it goes public, scheduled posts included.
+// SES reports bounces and complaints through an SNS topic, which POSTs to
+// /email/ses-feedback; that route is off until SES_SNS_TOPIC_ARN is set.
+subscriptionService = new models.services.SubscriptionService(
+	mailer,
+	getSystemSetting( "SITEURL", "https://kisdigital.com" ),
+	getSystemSetting( "MAIL_POSTAL_ADDRESS", "" )
+)
+subscriptionHttp = new models.util.SafeHttp( userAgent = "KISDigital" )
+snsVerifier      = new models.util.SnsVerifier( getSystemSetting( "SES_SNS_TOPIC_ARN", "" ), subscriptionHttp )
+
 // /projects/:slug/docs/:page — page metadata in models/util/ProjectDocRegistry.bx,
 // each page's markdown body in views/projects/{slug}/docs/{page_slug}.md. See
 // ProjectDocRenderer.bx for how plain markdown() output gets this site's
@@ -108,6 +120,8 @@ insightsService.startDailySummaries()
 serverMonitor = new models.util.ServerMonitor( app, new models.util.GcCauses(), requestLogger )
 serverHistory = new models.services.ServerHistory( serverMonitor )
 serverHistory.startHourly( app )
+
+app.schedule( 60 * 1000, () => subscriptionService.run(), { name: "post-emails" } )
 
 // ── Middleware ───────────────────────────────────────────────────────────
 // requestLogger goes first, ahead of everything else, so its next() wraps
@@ -316,8 +330,10 @@ app.use( ( req, res, next ) => {
 app.use( new routes.Auth( authService, googleOAuthClient ).router )
 app.use( new routes.Main( postService, authorService, siteDefaults ).router )
 // Before Posts: its router checks CSRF on every request that reaches it,
-// which would refuse a mail client's one-click unsubscribe POST.
+// which would refuse a mail client's one-click unsubscribe POST (and the
+// sign-up form, which carries no token).
 app.use( new routes.Comments( commentService ).router )
+app.use( new routes.Subscriptions( subscriptionService, snsVerifier, subscriptionHttp ).router )
 app.use( new routes.Posts( postService, postRenderer, siteDefaults, commentService, variables.activityPub ?: javacast( "null", "" ), variables.webmentionService ?: javacast( "null", "" ) ).router )
 app.use( new routes.Tags( postService, siteDefaults ).router )
 app.use( new routes.Feeds( sitemapService ).router )

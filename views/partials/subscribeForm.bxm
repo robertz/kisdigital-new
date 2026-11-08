@@ -1,0 +1,9 @@
+<bx:output>
+<form method="post" action="/subscribe" class="search-box subscribe-form">
+	<input type="email" name="email" class="search-box__input" value="#encodeForHTMLAttribute( data.email ?: "" )#" placeholder="you@example.com" aria-label="Email address" autocomplete="email" required>
+	<div class="subscribe-form__trap" aria-hidden="true">
+		<label>Leave this empty <input type="text" name="website" tabindex="-1" autocomplete="off"></label>
+	</div>
+	<button type="submit" class="search-box__submit">Subscribe</button>
+</form>
+</bx:output>

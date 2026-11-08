@@ -1,0 +1,303 @@
+/**
+ * Email subscriptions to new posts (tables in db/migrations/0030).
+ *
+ * Signing up is double opt-in: subscribe() emails a confirmation link and
+ * nothing else is sent until it's used. Unsubscribing deletes the address.
+ * Addresses SES reports as bouncing or complaining are kept, marked, so they
+ * are never emailed again.
+ *
+ * run() is scheduled from app.bxs. It queues each post as it goes public,
+ * then emails it to every address confirmed before that, BATCH per run at
+ * about ten a second, recording each delivery so a restart carries on where
+ * it stopped. A post backdated more than a week is never sent.
+ */
+class {
+
+	variables.BATCH         = 300;
+	variables.PAUSE_MS      = 100;
+	// at most one confirmation email per address per day
+	variables.RESEND_HOURS  = 24;
+	variables.CONFIRM_DAYS  = 7;
+
+	function init( required mailer, required string siteUrl, string postalAddress = "" ){
+		variables.mailer        = arguments.mailer;
+		variables.siteUrl       = reReplace( arguments.siteUrl, "/+$", "" );
+		variables.postalAddress = trim( arguments.postalAddress );
+		return this;
+	}
+
+	/**
+	 * @return The address, trimmed and lower-cased, or "" when it isn't one.
+	 */
+	string function normalizeEmail( required string email ){
+		var address = lCase( trim( arguments.email ) );
+		if ( len( address ) > 254 || !isValid( "email", address ) ) return "";
+		return address;
+	}
+
+	/**
+	 * Starts a subscription and sends the confirmation email when one is due.
+	 * The caller says the same thing whatever happens here, so the form never
+	 * tells anyone whether an address is already on the list.
+	 *
+	 * @return {string} sent, already (active, or confirmation sent recently),
+	 *         blocked (bounced or complained) or invalid.
+	 */
+	string function subscribe( required string email ){
+		var address = normalizeEmail( arguments.email );
+		if ( !len( address ) ) return "invalid";
+
+		var rows = queryExecute(
+			"SELECT id, status, TIMESTAMPDIFF(HOUR, confirm_sent, NOW()) AS hours_since_confirm FROM Subscriber WHERE email = :email",
+			{ "email": { value: address, sqltype: "varchar" } },
+			{ returnType: "array" }
+		);
+		var confirmToken = _token();
+
+		if ( !rows.len() ){
+			var id = createUUID();
+			queryExecute(
+				"INSERT INTO Subscriber (id, email, status, confirm_token, unsubscribe_token, confirm_sent)
+				VALUES (:id, :email, 'pending', :confirm, :unsub, NOW())",
+				{
+					"id"      : { value: id,           sqltype: "varchar" },
+					"email"   : { value: address,      sqltype: "varchar" },
+					"confirm" : { value: confirmToken, sqltype: "varchar" },
+					"unsub"   : { value: _token(),     sqltype: "varchar" }
+				}
+			);
+			_sendConfirmation( address, id, confirmToken );
+			return "sent";
+		}
+
+		var row = rows[ 1 ];
+		if ( listFind( "bounced,complained", row.status ) ) return "blocked";
+		if ( row.status == "active" ) return "already";
+		if ( isNumeric( row.hours_since_confirm ?: "" ) && row.hours_since_confirm < variables.RESEND_HOURS ) return "already";
+
+		queryExecute(
+			"UPDATE Subscriber SET status = 'pending', confirm_token = :confirm, confirm_sent = NOW() WHERE id = :id",
+			{
+				"id"      : { value: row.id,       sqltype: "varchar" },
+				"confirm" : { value: confirmToken, sqltype: "varchar" }
+			}
+		);
+		_sendConfirmation( address, row.id, confirmToken );
+		return "sent";
+	}
+
+	boolean function confirm( required string id, required string token ){
+		if ( !len( arguments.token ) ) return false;
+		var result = queryExecute(
+			"UPDATE Subscriber SET status = 'active', confirmed = NOW(), confirm_token = NULL
+			WHERE id = :id AND confirm_token = :token AND status = 'pending'
+				AND confirm_sent > DATE_SUB(NOW(), INTERVAL #variables.CONFIRM_DAYS# DAY)",
+			{
+				"id"    : { value: arguments.id,    sqltype: "varchar" },
+				"token" : { value: arguments.token, sqltype: "varchar" }
+			},
+			{ result: "outcome" }
+		);
+		return outcome.recordCount > 0;
+	}
+
+	/**
+	 * Deletes the subscription. Says nothing about whether it existed.
+	 */
+	void function unsubscribe( required string id, required string token ){
+		if ( !len( arguments.token ) ) return;
+		queryExecute(
+			"DELETE FROM Subscriber WHERE id = :id AND unsubscribe_token = :token AND status IN ('pending', 'active')",
+			{
+				"id"    : { value: arguments.id,    sqltype: "varchar" },
+				"token" : { value: arguments.token, sqltype: "varchar" }
+			}
+		);
+	}
+
+	/**
+	 * From SES: a permanent bounce or a spam complaint. The address is kept,
+	 * marked, so signing up again doesn't email it.
+	 *
+	 * @param {string} kind - bounced or complained.
+	 */
+	void function suppress( required string email, required string kind ){
+		var address = lCase( trim( arguments.email ) );
+		if ( !len( address ) || !listFind( "bounced,complained", arguments.kind ) ) return;
+		queryExecute(
+			"INSERT INTO Subscriber (id, email, status, unsubscribe_token)
+			VALUES (:id, :email, :status, :unsub)
+			ON DUPLICATE KEY UPDATE status = IF(status = 'complained', status, VALUES(status)), confirm_token = NULL",
+			{
+				"id"     : { value: createUUID(),    sqltype: "varchar" },
+				"email"  : { value: address,         sqltype: "varchar" },
+				"status" : { value: arguments.kind,  sqltype: "varchar" },
+				"unsub"  : { value: _token(),        sqltype: "varchar" }
+			}
+		);
+		println( "[subscriptions] #address# #arguments.kind#; no more post emails" );
+	}
+
+	numeric function activeCount(){
+		return queryExecute( "SELECT COUNT(*) AS n FROM Subscriber WHERE status = 'active'", [], { returnType: "array" } )[ 1 ].n;
+	}
+
+	/**
+	 * @return {struct} How many emails went out, for logging.
+	 */
+	struct function run(){
+		var counts = { "sent": 0, "failed": 0 };
+
+		queryExecute(
+			"INSERT IGNORE INTO PostEmail (post_id)
+			SELECT id FROM Post
+			WHERE status = 'published' AND publish_date <= NOW() AND publish_date >= DATE_SUB(NOW(), INTERVAL 7 DAY)"
+		);
+
+		var posts = queryExecute(
+			"SELECT P.id, P.title, P.description, P.slug, P.publish_date, PE.queued
+			FROM PostEmail PE
+			JOIN Post P ON P.id = PE.post_id
+			WHERE PE.finished IS NULL AND P.status = 'published' AND P.publish_date <= NOW()
+			ORDER BY PE.queued",
+			[],
+			{ returnType: "array" }
+		);
+
+		var budget = variables.BATCH;
+		for ( var post in posts ){
+			if ( budget <= 0 ) break;
+			var recipients = queryExecute(
+				"SELECT S.id, S.email, S.unsubscribe_token
+				FROM Subscriber S
+				LEFT JOIN PostEmailDelivery D ON D.post_id = :post AND D.subscriber_id = S.id
+				WHERE S.status = 'active' AND S.confirmed <= :queued AND D.post_id IS NULL
+				ORDER BY S.confirmed
+				LIMIT :lim",
+				{
+					"post"   : { value: post.id,     sqltype: "varchar" },
+					"queued" : { value: post.queued, sqltype: "timestamp" },
+					"lim"    : { value: budget,      sqltype: "integer" }
+				},
+				{ returnType: "array" }
+			);
+
+			if ( !recipients.len() ){
+				queryExecute(
+					"UPDATE PostEmail SET finished = NOW() WHERE post_id = :post",
+					{ "post": { value: post.id, sqltype: "varchar" } }
+				);
+				continue;
+			}
+
+			for ( var recipient in recipients ){
+				budget--;
+				queryExecute(
+					"INSERT IGNORE INTO PostEmailDelivery (post_id, subscriber_id) VALUES (:post, :sub)",
+					{
+						"post" : { value: post.id,      sqltype: "varchar" },
+						"sub"  : { value: recipient.id, sqltype: "varchar" }
+					}
+				);
+				try {
+					var message = postEmail( post, recipient );
+					variables.mailer.deliverNow( recipient.email, message.subject, message.body, message.headers );
+					counts.sent++;
+				} catch ( any e ){
+					// Likely SES throttling or an outage: give the address back
+					// and stop until the next run.
+					queryExecute(
+						"DELETE FROM PostEmailDelivery WHERE post_id = :post AND subscriber_id = :sub",
+						{
+							"post" : { value: post.id,      sqltype: "varchar" },
+							"sub"  : { value: recipient.id, sqltype: "varchar" }
+						}
+					);
+					counts.failed++;
+					println( "[subscriptions] sending ""#post.title#"" failed: #e.message#" );
+					_recordSent( post.id );
+					return counts;
+				}
+				sleep( variables.PAUSE_MS );
+			}
+			_recordSent( post.id );
+		}
+
+		queryExecute(
+			"DELETE FROM Subscriber WHERE status = 'pending' AND confirmed IS NULL AND created < DATE_SUB(NOW(), INTERVAL 30 DAY)"
+		);
+
+		if ( counts.sent + counts.failed > 0 ){
+			println( "[subscriptions] post emails: #counts.sent# sent, #counts.failed# failed" );
+		}
+		return counts;
+	}
+
+	/**
+	 * @param {struct} post      - id, title, description, slug, publish_date.
+	 * @param {struct} recipient - id, unsubscribe_token.
+	 * @return {struct} subject, body, headers.
+	 */
+	struct function postEmail( required struct post, required struct recipient ){
+		var pd       = arguments.post.publish_date;
+		var postUrl  = variables.siteUrl & "/posts/#year( pd )#/#numberFormat( month( pd ), '00' )#/#encodeForURL( arguments.post.slug )#";
+		var unsubUrl = unsubscribeUrl( arguments.recipient.id, arguments.recipient.unsubscribe_token );
+		var lines = [
+			arguments.post.title,
+			"",
+			trim( arguments.post.description ),
+			"",
+			"Read it: #postUrl#",
+			"",
+			"--",
+			"You're getting this because you subscribed to new posts on #_siteHost()#.",
+			"Unsubscribe: #unsubUrl#"
+		];
+		if ( len( variables.postalAddress ) ) lines.append( variables.postalAddress );
+		return {
+			"subject" : arguments.post.title,
+			"body"    : lines.toList( char( 10 ) ),
+			"headers" : {
+				"List-Unsubscribe"      : "<#unsubUrl#>",
+				"List-Unsubscribe-Post" : "List-Unsubscribe=One-Click"
+			}
+		};
+	}
+
+	string function unsubscribeUrl( required string id, required string token ){
+		return "#variables.siteUrl#/unsubscribe/posts/#arguments.id#/#arguments.token#";
+	}
+
+	private void function _sendConfirmation( required string address, required string id, required string token ){
+		var confirmUrl = "#variables.siteUrl#/subscribe/confirm/#arguments.id#/#arguments.token#";
+		var lines = [
+			"Someone, hopefully you, asked to get new posts from #_siteHost()# by email.",
+			"",
+			"Confirm your subscription: #confirmUrl#",
+			"",
+			"The link works for #variables.CONFIRM_DAYS# days. If this wasn't you, ignore this email and you won't hear from us again."
+		];
+		if ( len( variables.postalAddress ) ){
+			lines.append( "" );
+			lines.append( "--" );
+			lines.append( variables.postalAddress );
+		}
+		variables.mailer.send( arguments.address, "Confirm your subscription to KISDigital", lines.toList( char( 10 ) ) );
+	}
+
+	private void function _recordSent( required string postId ){
+		queryExecute(
+			"UPDATE PostEmail SET sent = (SELECT COUNT(*) FROM PostEmailDelivery WHERE post_id = :post) WHERE post_id = :post",
+			{ "post": { value: arguments.postId, sqltype: "varchar" } }
+		);
+	}
+
+	private string function _siteHost(){
+		return reReplace( variables.siteUrl, "^https?://", "" );
+	}
+
+	private string function _token(){
+		return lCase( replace( createUUID(), "-", "", "all" ) );
+	}
+
+}

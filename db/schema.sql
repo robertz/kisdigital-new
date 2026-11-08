@@ -383,3 +383,35 @@ create table ServerHourly
     http_requests_hour int      null,
     http_errors_hour   int      null
 );
+
+create table Subscriber
+(
+    id                varchar(36)                                                         not null primary key,
+    email             varchar(255)                                                        not null,
+    status            enum ('pending', 'active', 'unsubscribed', 'bounced', 'complained') default 'pending' not null,
+    confirm_token     char(32)                                                            null,
+    unsubscribe_token char(32)                                                            not null,
+    created           timestamp                                                           default CURRENT_TIMESTAMP not null,
+    confirm_sent      timestamp                                                           null,
+    confirmed         timestamp                                                           null,
+    updated           timestamp                                                           default CURRENT_TIMESTAMP not null on update CURRENT_TIMESTAMP,
+    constraint Subscriber_email_uindex unique (email)
+);
+
+create index idx_subscriber_status on Subscriber (status, confirmed);
+
+create table PostEmail
+(
+    post_id  varchar(36) not null primary key,
+    queued   timestamp   default CURRENT_TIMESTAMP not null,
+    finished timestamp   null,
+    sent     int         default 0 not null
+);
+
+create table PostEmailDelivery
+(
+    post_id       varchar(36) not null,
+    subscriber_id varchar(36) not null,
+    sent          timestamp   default CURRENT_TIMESTAMP not null,
+    primary key (post_id, subscriber_id)
+);

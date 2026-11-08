@@ -1,0 +1,123 @@
+/**
+ * Email subscriptions to new posts: the sign-up form, its confirmation link,
+ * the unsubscribe link in every post email, and SES's bounce and complaint
+ * notifications (through SNS). See models/services/SubscriptionService.bx.
+ *
+ * Mounted before Posts.bx, whose router checks CSRF on every request it sees.
+ * None of these carry a token: the sign-up form is shown to readers with no
+ * session, and the worst a forged sign-up can do is send one confirmation
+ * email a day. The token in each link's path is its own proof. Links only
+ * show a button on GET, because mail scanners follow every link in an email.
+ */
+class {
+
+	variables.MAX_SNS_BYTES = 262144;
+
+	function init( required subscriptionService, required snsVerifier, required http ){
+		variables.subscriptions = arguments.subscriptionService;
+		variables.sns           = arguments.snsVerifier;
+		variables.http          = arguments.http;
+		variables.botDetector   = new models.util.BotDetector();
+
+		this.router = boxExpressRouter();
+		this.router.get( "/subscribe", ( req, res ) => _page( res, "form" ) );
+		this.router.post(
+			"/subscribe",
+			boxExpressRateLimit( { windowMs: 15 * 60000, max: 5 } ),
+			( req, res ) => subscribe( req, res )
+		);
+		this.router.get( "/subscribe/confirm/:id/:token", ( req, res ) => _page( res, "confirm", _linkPath( "/subscribe/confirm", req ) ) );
+		this.router.post( "/subscribe/confirm/:id/:token", ( req, res ) => confirm( req, res ) );
+		this.router.get( "/unsubscribe/posts/:id/:token", ( req, res ) => _page( res, "unsubscribe", _linkPath( "/unsubscribe/posts", req ) ) );
+		this.router.post( "/unsubscribe/posts/:id/:token", ( req, res ) => unsubscribe( req, res ) );
+		this.router.post( "/email/ses-feedback", ( req, res ) => sesFeedback( req, res ) );
+
+		return this;
+	}
+
+	// POST /subscribe — body: email, website (a honeypot, left empty by people).
+	function subscribe( req, res ){
+		var email = req.body.email ?: "";
+		if ( len( req.body.website ?: "" ) || variables.botDetector.isBot( req.get( "User-Agent" ) ?: "" ) ){
+			return _page( res, "sent" );
+		}
+		if ( !len( variables.subscriptions.normalizeEmail( email ) ) ){
+			return _page( res.status( 400 ), "form", "", "That doesn't look like an email address.", email );
+		}
+		variables.subscriptions.subscribe( email );
+		_page( res, "sent" );
+	}
+
+	function confirm( req, res ){
+		var ok = variables.subscriptions.confirm( req.params.id ?: "", req.params.token ?: "" );
+		_page( res, ok ? "confirmed" : "expired" );
+	}
+
+	// From the page's button or a mail client's one-click unsubscribe.
+	function unsubscribe( req, res ){
+		variables.subscriptions.unsubscribe( req.params.id ?: "", req.params.token ?: "" );
+		_page( res, "unsubscribed" );
+	}
+
+	// POST /email/ses-feedback — SNS sends text/plain JSON, so the body is read
+	// here rather than by boxExpressJSON().
+	function sesFeedback( req, res ){
+		if ( !variables.sns.isConfigured() ) return res.status( 404 ).send( "" );
+
+		var bytes = req.bodyStream().readNBytes( variables.MAX_SNS_BYTES + 1 );
+		if ( arrayLen( bytes ) > variables.MAX_SNS_BYTES ) return res.status( 413 ).send( "" );
+		try {
+			var message = jsonDeserialize( createObject( "java", "java.lang.String" ).init( bytes, "UTF-8" ) );
+		} catch ( any e ){
+			return res.status( 400 ).send( "" );
+		}
+		if ( !isStruct( message ) || !variables.sns.verify( message ) ) return res.status( 403 ).send( "" );
+
+		if ( message.Type == "SubscriptionConfirmation" ){
+			var subscribeUrl = message.SubscribeURL ?: "";
+			if ( !variables.sns.isSnsUrl( subscribeUrl ) ) return res.status( 400 ).send( "" );
+			var answer = variables.http.get( subscribeUrl, "*/*" );
+			println( "[sns] confirmed the subscription to #message.TopicArn# (#answer.status#)" );
+			return res.send( "" );
+		}
+		if ( message.Type == "Notification" ){
+			try {
+				_applyFeedback( jsonDeserialize( message.Message ?: "{}" ) );
+			} catch ( any e ){
+				println( "[sns] couldn't read a notification: #e.message#" );
+			}
+		}
+		res.send( "" );
+	}
+
+	// Identity notifications say notificationType; configuration-set events say eventType.
+	private void function _applyFeedback( required any feedback ){
+		if ( !isStruct( arguments.feedback ) ) return;
+		var kind = arguments.feedback.notificationType ?: ( arguments.feedback.eventType ?: "" );
+		if ( kind == "Bounce" && ( arguments.feedback.bounce.bounceType ?: "" ) == "Permanent" ){
+			for ( var recipient in arguments.feedback.bounce.bouncedRecipients ?: [] ){
+				variables.subscriptions.suppress( recipient.emailAddress ?: "", "bounced" );
+			}
+		} else if ( kind == "Complaint" ){
+			for ( var recipient in arguments.feedback.complaint.complainedRecipients ?: [] ){
+				variables.subscriptions.suppress( recipient.emailAddress ?: "", "complained" );
+			}
+		}
+	}
+
+	private string function _linkPath( required string base, required req ){
+		return "#arguments.base#/#encodeForURL( arguments.req.params.id ?: "" )#/#encodeForURL( arguments.req.params.token ?: "" )#";
+	}
+
+	private function _page( required res, required string state, string action = "", string error = "", string email = "" ){
+		arguments.res.set( "X-Robots-Tag", "noindex" );
+		arguments.res.render( "main/subscribe", {
+			pageTitle : "Subscribe",
+			state     : arguments.state,
+			action    : arguments.action,
+			error     : arguments.error,
+			email     : arguments.email
+		} );
+	}
+
+}

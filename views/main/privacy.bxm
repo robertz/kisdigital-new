@@ -6,7 +6,7 @@
 			<div class="col-lg-8">
 
 				<h1 class="c-post__title">Privacy Policy</h1>
-				<p class="c-post__description">Last updated August 25, 2026.</p>
+				<p class="c-post__description">Last updated November 8, 2026.</p>
 
 				<div class="c-post__body">
 
@@ -21,6 +21,10 @@
 					<p>You can delete your own comment at any time; it disappears from the page immediately. The underlying record is kept (not shown to anyone) rather than hard-deleted, so a reply to your comment doesn't end up orphaned &mdash; the same reasoning Reddit and most other threaded comment systems use. If you'd like your account and comments removed from the database entirely, email <a href="mailto:info@kisdigital.com" class="c-post-link">info@kisdigital.com</a> and it'll be done by hand.</p>
 					<p>Google sign-in is handled by Google, not this site &mdash; see <a href="https://policies.google.com/privacy" target="_blank" rel="noopener" class="c-post-link">Google's own privacy policy</a> for how they handle it on their end.</p>
 
+					<h2>If you subscribe by email</h2>
+					<p>Subscribing to new posts stores your email address and when you signed up and confirmed. It's used for one thing: sending you an email when a post goes up. Nothing is sent until you click the link in the confirmation email, and an unconfirmed address is deleted after 30 days. The emails are plain text, with no tracking pixels or tracked links.</p>
+					<p>Every email has an unsubscribe link, and unsubscribing deletes your address. The one exception is an address the mail system reports as bouncing or marking these emails as spam: it's kept, marked, so it's never emailed again.</p>
+					<p>If you tick &ldquo;Email me when someone replies&rdquo; on a comment, the email address from your Google sign-in is used for those reply emails, each of which has its own link to stop them.</p>
 					<h2>Cookies and local storage</h2>
 					<p>Signing in sets one cookie to keep you signed in &mdash; it's marked <code>httpOnly</code>, isn't readable by page scripts, and isn't used for tracking or advertising of any kind. Nothing is set for visitors who don't sign in.</p>
 					<p>Your light/dark theme choice and a couple of small UI preferences are saved in your browser's own local storage. That data never leaves your browser or reaches this site's server.</p>
@@ -31,6 +35,7 @@
 						<li><strong>Google</strong> &mdash; sign-in, as described above.</li>
 						<li><strong>DigitalOcean</strong> &mdash; hosts the application and its database.</li>
 						<li><strong>Cloudflare</strong> &mdash; sits in front of the site as a CDN, and stores uploaded post cover images.</li>
+						<li><strong>Amazon Web Services</strong> &mdash; delivers the site's emails (Amazon SES), and tells the site when an address bounces.</li>
 					</ul>
 					<p>None of them are given access to this site's data beyond what's inherent to providing that infrastructure, and none of them are paid to advertise or track you here.</p>
 

@@ -1,0 +1,50 @@
+<bx:include template="../partials/_head.bxm">
+<bx:output>
+<div class="container">
+	<div class="narrow">
+		<header class="page-head">
+			<bx:switch expression="#data.state#">
+				<bx:case value="sent">
+					<h1 class="page-head__title">Check your inbox</h1>
+					<p class="page-head__lede">If that address can get new posts, a confirmation email is on its way. Nothing else is sent until you click the link in it.</p>
+				</bx:case>
+				<bx:case value="confirm">
+					<h1 class="page-head__title">Confirm your subscription</h1>
+					<p class="page-head__lede">You'll get an email when a new post goes up, and nothing else.</p>
+					<form method="post" action="#encodeForHTMLAttribute( data.action )#" class="subscribe-action">
+						<button type="submit" class="search-box__submit">Confirm</button>
+					</form>
+				</bx:case>
+				<bx:case value="confirmed">
+					<h1 class="page-head__title">You're subscribed</h1>
+					<p class="page-head__lede">You'll get an email when the next post goes up. Every email has an unsubscribe link.</p>
+				</bx:case>
+				<bx:case value="expired">
+					<h1 class="page-head__title">That link has expired</h1>
+					<p class="page-head__lede">It may already have been used, or be more than a week old. <a href="/subscribe">Sign up again</a> for a new one.</p>
+				</bx:case>
+				<bx:case value="unsubscribe">
+					<h1 class="page-head__title">Stop post emails?</h1>
+					<p class="page-head__lede">Your address will be removed and you won't get any more emails about new posts.</p>
+					<form method="post" action="#encodeForHTMLAttribute( data.action )#" class="subscribe-action">
+						<button type="submit" class="search-box__submit">Unsubscribe</button>
+					</form>
+				</bx:case>
+				<bx:case value="unsubscribed">
+					<h1 class="page-head__title">You're unsubscribed</h1>
+					<p class="page-head__lede">Your address has been removed. You can still follow by <a href="/rss">RSS</a>.</p>
+				</bx:case>
+				<bx:defaultcase>
+					<h1 class="page-head__title">Get new posts by email</h1>
+					<p class="page-head__lede">One email when a post goes up: the title, a summary and a link. No tracking, and you can unsubscribe from any email.</p>
+					<bx:include template="../partials/subscribeForm.bxm">
+					<bx:if len( data.error )>
+						<p class="subscribe-error" role="alert">#encodeForHTML( data.error )#</p>
+					</bx:if>
+				</bx:defaultcase>
+			</bx:switch>
+		</header>
+	</div>
+</div>
+</bx:output>
+<bx:include template="../partials/_foot.bxm">

@@ -110,6 +110,13 @@
 						</div>
 					</div>
 					</bx:if>
+					<bx:if !data.isPreview>
+					<div class="subscribe-card">
+						<p class="subscribe-card__title">Get new posts by email</p>
+						<p class="subscribe-card__text">One email per post, nothing else. Unsubscribe from any of them.</p>
+						<bx:include template="../partials/subscribeForm.bxm">
+					</div>
+					</bx:if>
 				</footer>
 
 			</article>

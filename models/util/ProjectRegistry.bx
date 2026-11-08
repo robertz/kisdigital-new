@@ -41,7 +41,7 @@ class {
 			icon     : "bi-fingerprint",
 			tagline  : "WebAuthn passkeys for BoxLang: passwordless registration and sign-in with JDK crypto only, no third-party jars.",
 			group    : "boxlang",
-			status   : "Beta",
+			status   : "In production",
 			language : "BoxLang"
 		},
 		{
@@ -50,7 +50,7 @@ class {
 			icon     : "bi-diagram-2",
 			tagline  : "A schema-first GraphQL server for plain BoxLang, with no ColdBox, WireBox or HTTP framework required.",
 			group    : "boxlang",
-			status   : "Beta",
+			status   : "In production",
 			language : "BoxLang"
 		},
 		{

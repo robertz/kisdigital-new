@@ -1,0 +1,82 @@
+/**
+ * Checks that a message POSTed to us really came from Amazon SNS, from the
+ * one topic we expect: https://docs.aws.amazon.com/sns/latest/dg/sns-verify-signature-of-message.html
+ *
+ * The signing certificate is fetched from the URL the message names, so that
+ * URL has to be on an SNS host; otherwise anyone could sign with their own.
+ * Certificates are cached by URL, since SNS reuses them for months.
+ */
+class {
+
+	variables.SNS_HOST = "^sns\.[a-z0-9-]+\.amazonaws\.com$";
+
+	function init( required string topicArn, required http ){
+		variables.topicArn = arguments.topicArn;
+		variables.http     = arguments.http;
+		variables.certs    = {};
+		return this;
+	}
+
+	boolean function isConfigured(){
+		return len( variables.topicArn ) > 0;
+	}
+
+	boolean function isSnsUrl( required string address ){
+		try {
+			var parsed = createObject( "java", "java.net.URI" ).init( arguments.address );
+		} catch ( any e ){
+			return false;
+		}
+		return lCase( parsed.getScheme() ?: "" ) == "https" && reFind( variables.SNS_HOST, lCase( parsed.getHost() ?: "" ) ) > 0;
+	}
+
+	/**
+	 * @param {struct} message - The POST body, parsed from JSON.
+	 */
+	boolean function verify( required struct message ){
+		var msg = arguments.message;
+		if ( !isConfigured() || ( msg.TopicArn ?: "" ) != variables.topicArn ) return false;
+		if ( !listFind( "Notification,SubscriptionConfirmation,UnsubscribeConfirmation", msg.Type ?: "" ) ) return false;
+
+		var certUrl = msg.SigningCertURL ?: "";
+		if ( !isSnsUrl( certUrl ) || !reFindNoCase( "\.pem$", listFirst( certUrl, "?" ) ) ) return false;
+
+		var algorithm = ( msg.SignatureVersion ?: "" ) == "2" ? "SHA256withRSA" : ( ( msg.SignatureVersion ?: "" ) == "1" ? "SHA1withRSA" : "" );
+		if ( !len( algorithm ) ) return false;
+
+		try {
+			var signer = createObject( "java", "java.security.Signature" ).getInstance( algorithm );
+			signer.initVerify( _certificate( certUrl ) );
+			signer.update( stringToSign( msg ).getBytes( "UTF-8" ) );
+			return signer.verify( binaryDecode( msg.Signature ?: "", "base64" ) );
+		} catch ( any e ){
+			println( "[sns] couldn't verify a message: #e.message#" );
+			return false;
+		}
+	}
+
+	string function stringToSign( required struct message ){
+		var keys = arguments.message.Type == "Notification"
+			? [ "Message", "MessageId", "Subject", "Timestamp", "TopicArn", "Type" ]
+			: [ "Message", "MessageId", "SubscribeURL", "Timestamp", "Token", "TopicArn", "Type" ];
+		var out = "";
+		for ( var key in keys ){
+			if ( key == "Subject" && !arguments.message.keyExists( "Subject" ) ) continue;
+			out &= key & char( 10 ) & ( arguments.message[ key ] ?: "" ) & char( 10 );
+		}
+		return out;
+	}
+
+	private any function _certificate( required string certUrl ){
+		if ( !variables.certs.keyExists( arguments.certUrl ) ){
+			var response = variables.http.get( arguments.certUrl, "*/*" );
+			if ( response.status != 200 ) throw( type = "SnsVerifier.Cert", message = "certificate fetch returned #response.status#" );
+			var stream = createObject( "java", "java.io.ByteArrayInputStream" ).init( response.bytes );
+			variables.certs[ arguments.certUrl ] = createObject( "java", "java.security.cert.CertificateFactory" )
+				.getInstance( "X.509" )
+				.generateCertificate( stream );
+		}
+		return variables.certs[ arguments.certUrl ];
+	}
+
+}

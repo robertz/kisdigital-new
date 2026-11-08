@@ -522,3 +522,44 @@
 .about-body p {
 	margin: 0 0 var(--space-5);
 }
+
+/* ── Email subscriptions ── */
+
+.subscribe-card {
+	margin-top: var(--space-6);
+	padding: var(--space-5);
+	border: 1px solid var(--ui-border-subtle);
+	border-radius: var(--ui-radius-md);
+}
+
+.subscribe-card__title {
+	margin: 0 0 var(--space-1) !important;
+	font-weight: 600;
+	color: var(--post-anchor);
+}
+
+.subscribe-card__text {
+	margin: 0 !important;
+}
+
+.subscribe-card .subscribe-form {
+	margin-bottom: 0;
+}
+
+.subscribe-form__trap {
+	position: absolute;
+	left: -10000px;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+}
+
+.subscribe-action {
+	margin-top: var(--space-5);
+}
+
+.subscribe-error {
+	margin: 0;
+	font-size: 0.875rem;
+	color: var(--bs-danger, #c0392b);
+}

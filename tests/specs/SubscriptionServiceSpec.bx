@@ -1,0 +1,52 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "SubscriptionService", function(){
+
+			beforeEach( function(){
+				variables.service = new models.services.SubscriptionService( {}, "https://kisdigital.com/", "PO Box 1, Town, ST 00000" )
+			} )
+
+			describe( "normalizeEmail()", function(){
+
+				it( "trims and lower-cases an address", function(){
+					expect( service.normalizeEmail( "  Reader@Example.COM " ) ).toBe( "reader@example.com" )
+				} )
+
+				it( "refuses things that aren't addresses", function(){
+					expect( service.normalizeEmail( "" ) ).toBe( "" )
+					expect( service.normalizeEmail( "not an email" ) ).toBe( "" )
+					expect( service.normalizeEmail( "a@b@c.com" ) ).toBe( "" )
+					expect( service.normalizeEmail( repeatString( "a", 250 ) & "@x.com" ) ).toBe( "" )
+				} )
+
+			} )
+
+			describe( "postEmail()", function(){
+
+				beforeEach( function(){
+					variables.message = service.postEmail(
+						{ id: "p1", title: "A new post", description: "What it's about.", slug: "a-new-post", publish_date: createDate( 2026, 3, 9 ) },
+						{ id: "s1", unsubscribe_token: "abc123" }
+					)
+				} )
+
+				it( "uses the title as the subject and links to the post", function(){
+					expect( message.subject ).toBe( "A new post" )
+					expect( message.body ).toInclude( "What it's about." )
+					expect( message.body ).toInclude( "Read it: https://kisdigital.com/posts/2026/03/a-new-post" )
+				} )
+
+				it( "carries an unsubscribe link, one-click headers and the postal address", function(){
+					expect( message.body ).toInclude( "Unsubscribe: https://kisdigital.com/unsubscribe/posts/s1/abc123" )
+					expect( message.body ).toInclude( "PO Box 1, Town, ST 00000" )
+					expect( message.headers[ "List-Unsubscribe" ] ).toBe( "<https://kisdigital.com/unsubscribe/posts/s1/abc123>" )
+					expect( message.headers[ "List-Unsubscribe-Post" ] ).toBe( "List-Unsubscribe=One-Click" )
+				} )
+
+			} )
+
+		} )
+	}
+
+}

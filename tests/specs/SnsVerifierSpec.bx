@@ -1,0 +1,43 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "SnsVerifier", function(){
+
+			beforeEach( function(){
+				variables.verifier = new models.util.SnsVerifier( "arn:aws:sns:us-east-1:123456789012:ses-feedback", {} )
+			} )
+
+			it( "only trusts https URLs on SNS hosts", function(){
+				expect( verifier.isSnsUrl( "https://sns.us-east-1.amazonaws.com/SimpleNotificationService-abc.pem" ) ).toBeTrue()
+				expect( verifier.isSnsUrl( "http://sns.us-east-1.amazonaws.com/x.pem" ) ).toBeFalse()
+				expect( verifier.isSnsUrl( "https://sns.us-east-1.amazonaws.com.evil.example/x.pem" ) ).toBeFalse()
+				expect( verifier.isSnsUrl( "https://evil.example/sns.us-east-1.amazonaws.com" ) ).toBeFalse()
+				expect( verifier.isSnsUrl( "not a url" ) ).toBeFalse()
+			} )
+
+			it( "builds the notification string to sign, skipping a missing Subject", function(){
+				var lf = char( 10 )
+				var signed = verifier.stringToSign( { Type: "Notification", Message: "m", MessageId: "id", Timestamp: "t", TopicArn: "arn" } )
+				expect( signed ).toBe( "Message#lf#m#lf#MessageId#lf#id#lf#Timestamp#lf#t#lf#TopicArn#lf#arn#lf#Type#lf#Notification#lf#" )
+			} )
+
+			it( "builds the subscription confirmation string to sign", function(){
+				var lf = char( 10 )
+				var signed = verifier.stringToSign( { Type: "SubscriptionConfirmation", Message: "m", MessageId: "id", SubscribeURL: "u", Timestamp: "t", Token: "k", TopicArn: "arn" } )
+				expect( signed ).toBe( "Message#lf#m#lf#MessageId#lf#id#lf#SubscribeURL#lf#u#lf#Timestamp#lf#t#lf#Token#lf#k#lf#TopicArn#lf#arn#lf#Type#lf#SubscriptionConfirmation#lf#" )
+			} )
+
+			it( "rejects a message from another topic or with a foreign certificate before fetching anything", function(){
+				var base = { Type: "Notification", Message: "{}", MessageId: "1", Timestamp: "t", SignatureVersion: "1", Signature: "AAAA" }
+				expect( verifier.verify( base.copy().append( { TopicArn: "arn:aws:sns:us-east-1:999:other", SigningCertURL: "https://sns.us-east-1.amazonaws.com/c.pem" } ) ) ).toBeFalse()
+				expect( verifier.verify( base.copy().append( { TopicArn: "arn:aws:sns:us-east-1:123456789012:ses-feedback", SigningCertURL: "https://evil.example/c.pem" } ) ) ).toBeFalse()
+			} )
+
+			it( "is off without a topic", function(){
+				expect( new models.util.SnsVerifier( "", {} ).isConfigured() ).toBeFalse()
+			} )
+
+		} )
+	}
+
+}
