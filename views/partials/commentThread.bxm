@@ -78,6 +78,7 @@
 								<div class="c-comment-form--reply__row">
 									<button type="submit" class="c-comment-form__submit">Reply</button>
 									<button type="button" class="c-comment-form__cancel" data-comment-cancel>Cancel</button>
+									<label class="c-comment-form__notify"><input type="checkbox" name="notify_replies" value="1"> Email me when someone replies</label>
 								</div>
 							</form>
 						</details>

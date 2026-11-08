@@ -1,0 +1,86 @@
+/**
+ * Plain-text email through Amazon SES's SMTP interface (bx-mail). Off until
+ * MAIL_SMTP_HOST, MAIL_SMTP_USER, MAIL_SMTP_PASSWORD and MAIL_FROM are all
+ * set: send() then just logs what it would have sent, so development needs no
+ * mail server.
+ *
+ * bx:mail delivers synchronously when given its server inline (the spool only
+ * covers servers from module settings), so send() hands it to a background
+ * thread: a comment never waits on SMTP, and a failed delivery is logged, not
+ * thrown.
+ */
+class {
+
+	variables.host     = "";
+	variables.port     = 587;
+	variables.username = "";
+	variables.password = "";
+	variables.from     = "";
+
+	function init(
+		required string host,
+		required numeric port,
+		required string username,
+		required string password,
+		required string from
+	){
+		variables.host     = arguments.host;
+		variables.port     = arguments.port;
+		variables.username = arguments.username;
+		variables.password = arguments.password;
+		variables.from     = arguments.from;
+		return this;
+	}
+
+	boolean function isEnabled(){
+		return len( variables.host ) && len( variables.username ) && len( variables.password ) && len( variables.from );
+	}
+
+	/**
+	 * @param {struct} headers - Extra headers, name → value.
+	 */
+	void function send( required string to, required string subject, required string body, struct headers = {} ){
+		if ( !isEnabled() ){
+			println( "[mail] not configured; would have sent ""#arguments.subject#"" to #arguments.to#" );
+			return;
+		}
+		var to      = arguments.to;
+		var subject = arguments.subject;
+		var body    = arguments.body;
+		var headers = arguments.headers;
+		runAsync( () => {
+			try {
+				_deliver( to, subject, body, headers );
+			} catch ( any e ){
+				println( "[mail] couldn't send ""#subject#"" to #to#: #e.message#" );
+			}
+		} );
+	}
+
+	private void function _deliver( required string to, required string subject, required string body, required struct headers ){
+		var extraHeaders = arguments.headers;
+		var messageBody  = arguments.body;
+		// SES takes STARTTLS on 587 and 2587, implicit TLS on 465 and 2465.
+		var implicitTls  = listFind( "465,2465", variables.port ) > 0;
+
+		bx:mail
+			from     = variables.from
+			to       = arguments.to
+			subject  = arguments.subject
+			server   = variables.host
+			port     = variables.port
+			username = variables.username
+			password = variables.password
+			useSSL   = implicitTls
+			useTLS   = !implicitTls
+			type     = "text"
+			charset  = "utf-8"
+		{
+			for ( var name in extraHeaders ){
+				bx:mailparam name = name value = extraHeaders[ name ];
+			}
+			writeOutput( messageBody );
+		}
+	}
+
+}

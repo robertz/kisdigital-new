@@ -156,7 +156,10 @@
 							<input type="hidden" name="parent_id" value="">
 							<input type="hidden" name="redirect" value="#encodeForHTMLAttribute( data.post.getPostUrl() )#">
 							<textarea name="body" class="c-comment-form__input" rows="3" placeholder="Add a comment&hellip;" required></textarea>
-							<button type="submit" class="c-comment-form__submit">Comment</button>
+							<div class="c-comment-form__row">
+								<button type="submit" class="c-comment-form__submit">Comment</button>
+								<label class="c-comment-form__notify"><input type="checkbox" name="notify_replies" value="1"> Email me when someone replies</label>
+							</div>
 						</form>
 					<bx:else>
 						<p class="c-comments__signin">

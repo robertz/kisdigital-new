@@ -1,0 +1,21 @@
+<bx:include template="../partials/_head.bxm">
+<bx:output>
+<section class="py-5 posts-section">
+	<div class="container">
+		<div class="c-404">
+			<bx:if data.done>
+				<h1 class="c-404__title">You're unsubscribed</h1>
+				<p class="c-404__message">You won't get any more emails about replies to that comment.</p>
+				<a href="/" class="btn btn-primary-custom">Back to home</a>
+			<bx:else>
+				<h1 class="c-404__title">Stop reply emails?</h1>
+				<p class="c-404__message">You won't get any more emails when someone replies to this comment.</p>
+				<form method="post" action="#encodeForHTMLAttribute( data.action )#">
+					<button type="submit" class="btn btn-primary-custom">Stop emails</button>
+				</form>
+			</bx:if>
+		</div>
+	</div>
+</section>
+</bx:output>
+<bx:include template="../partials/_foot.bxm">

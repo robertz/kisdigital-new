@@ -41,6 +41,13 @@ class {
 		);
 		this.router.post( "/comments/:id/delete", requireCommenter, ( req, res ) => remove( req, res ) );
 
+		// Outside /comments, so no CSRF token: the token in the path is the
+		// proof, and mail clients' one-click unsubscribe (RFC 8058) POSTs here
+		// with no session. GET only shows a button, since link scanners follow
+		// every link in an email.
+		this.router.get( "/unsubscribe/replies/:id/:token", ( req, res ) => unsubscribePage( req, res ) );
+		this.router.post( "/unsubscribe/replies/:id/:token", ( req, res ) => unsubscribe( req, res ) );
+
 		return this;
 	}
 
@@ -71,7 +78,8 @@ class {
 				postId,
 				parentId,
 				user.id,
-				req.body.body ?: ""
+				req.body.body ?: "",
+				( req.body.notify_replies ?: "" ) == "1"
 			);
 
 			if ( ajax ){
@@ -126,6 +134,25 @@ class {
 			return;
 		}
 		res.redirect( redirectTo );
+	}
+
+	// GET /unsubscribe/replies/:id/:token
+	function unsubscribePage( req, res ){
+		res.set( "X-Robots-Tag", "noindex" );
+		res.render( "main/unsubscribe", {
+			pageTitle : "Reply emails",
+			action    : "/unsubscribe/replies/#encodeForURL( req.params.id )#/#encodeForURL( req.params.token )#",
+			done      : false
+		} );
+	}
+
+	// POST /unsubscribe/replies/:id/:token — from the page's button or a mail
+	// client's one-click unsubscribe. Says it worked even for a stale token:
+	// either way, no more emails for that comment.
+	function unsubscribe( req, res ){
+		variables.commentService.stopReplyEmails( req.params.id ?: "", req.params.token ?: "" );
+		res.set( "X-Robots-Tag", "noindex" );
+		res.render( "main/unsubscribe", { pageTitle: "Reply emails", action: "", done: true } );
 	}
 
 	// Renders a single comment through the same partial the full comment

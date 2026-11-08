@@ -1,0 +1,111 @@
+/**
+ * The emails comments send (wired to CommentService's onCreated() and
+ * onPublished() in app.bxs):
+ *
+ *   - an alert to MAIL_ALERT_TO for every new comment, local, fediverse or
+ *     webmention, saying when it waits for approval. An admin's own comments
+ *     don't alert.
+ *   - a reply email to a commenter who ticked "Email me when someone replies",
+ *     once a reply to that comment is visible. Never for replying to yourself.
+ *     Each one carries a one-click unsubscribe link (routes/Comments.bx).
+ */
+class {
+
+	variables.mailer         = "";
+	variables.commentService = "";
+	variables.siteUrl        = "";
+	variables.alertTo        = "";
+
+	function init( required mailer, required commentService, required string siteUrl, required string alertTo ){
+		variables.mailer         = arguments.mailer;
+		variables.commentService = arguments.commentService;
+		variables.siteUrl        = arguments.siteUrl;
+		variables.alertTo        = arguments.alertTo;
+		return this;
+	}
+
+	void function commentCreated( required string commentId ){
+		if ( !len( variables.alertTo ) ) return;
+		var comment = variables.commentService.getNotification( arguments.commentId );
+		if ( isNull( comment ) || comment.authorRole == "admin" ) return;
+
+		var pending = comment.status == "pending";
+		var kind    = comment.source == "webmention" ? "mentioned" : ( comment.source == "activitypub" ? "replied from the fediverse on" : "commented on" );
+		var lines   = [
+			"#comment.authorName# #kind# ""#comment.postTitle#"":",
+			"",
+			excerpt( comment.body, comment.isRemote ),
+			""
+		];
+		if ( pending ){
+			lines.append( "It's waiting for your approval: #variables.siteUrl#/manage/comments" );
+		} else {
+			lines.append( "Read it: #variables.siteUrl##comment.postUrl###comment-#comment.id#" );
+			lines.append( "Moderate: #variables.siteUrl#/manage/comments" );
+		}
+
+		variables.mailer.send(
+			variables.alertTo,
+			( pending ? "Comment awaiting approval" : "New comment" ) & " on ""#comment.postTitle#""",
+			lines.toList( char( 10 ) )
+		);
+	}
+
+	void function commentPublished( required string commentId ){
+		var comment = variables.commentService.getNotification( arguments.commentId );
+		if ( isNull( comment ) || isNull( comment.parent ) ) return;
+		var parent = comment.parent;
+		if (
+			parent.status != "visible"
+			|| !len( parent.notifyToken )
+			|| !len( parent.email )
+			|| !parent.isActive
+			|| parent.userId == comment.userId
+		) return;
+
+		var unsubscribeUrl = "#variables.siteUrl#/unsubscribe/replies/#parent.id#/#parent.notifyToken#";
+		var lines = [
+			"Hi #parent.name#,",
+			"",
+			"#comment.authorName# replied to your comment on ""#comment.postTitle#"":",
+			"",
+			excerpt( comment.body, comment.isRemote ),
+			"",
+			"Read the thread: #variables.siteUrl##comment.postUrl###comment-#comment.id#",
+			"",
+			"--",
+			"You asked to be emailed when someone replies to this comment.",
+			"Stop these emails: #unsubscribeUrl#"
+		];
+
+		variables.mailer.send(
+			parent.email,
+			"#comment.authorName# replied to your comment on ""#comment.postTitle#""",
+			lines.toList( char( 10 ) ),
+			{
+				"List-Unsubscribe"      : "<#unsubscribeUrl#>",
+				"List-Unsubscribe-Post" : "List-Unsubscribe=One-Click"
+			}
+		);
+	}
+
+	/**
+	 * The comment as plain text, quoted and cut to about 600 characters.
+	 * Remote comments are stored as sanitized HTML.
+	 */
+	string function excerpt( required string body, boolean isHtml = false ){
+		var text = arguments.body;
+		if ( arguments.isHtml ){
+			text = reReplaceNoCase( text, "<br\s*/?>|</p>", char( 10 ), "all" );
+			text = reReplace( text, "<[^>]+>", "", "all" );
+			var entities = [ [ "&lt;", "<" ], [ "&gt;", ">" ], [ "&quot;", """" ], [ "&##39;", "'" ], [ "&nbsp;", " " ], [ "&amp;", "&" ] ];
+			for ( var entity in entities ){
+				text = replace( text, entity[ 1 ], entity[ 2 ], "all" );
+			}
+		}
+		text = trim( text );
+		if ( len( text ) > 600 ) text = left( text, 597 ) & "...";
+		return text.listToArray( char( 10 ), true ).map( ( line ) => "> " & line ).toList( char( 10 ) );
+	}
+
+}

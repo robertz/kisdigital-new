@@ -116,6 +116,7 @@ create table Comment
     body      text                                                    not null,
     status    enum ('visible', 'deleted')  default 'visible'          not null,
     created   timestamp(3)                 default CURRENT_TIMESTAMP(3) null,
+    reply_notify_token varchar(32)                                    null,
     constraint Comment_Post_id_fk
         foreign key (post_id) references Post (id)
             on update cascade on delete cascade,

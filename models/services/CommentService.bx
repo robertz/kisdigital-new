@@ -37,6 +37,8 @@ class {
 	// else wait for approval. "" = federation off, nothing is held.
 	variables.fediverseAuthorId = "";
 	variables.changeListeners   = [];
+	variables.createdListeners  = [];
+	variables.publishedListeners = [];
 
 	// Columns every thread node needs (see _toNode()); remote_* are NULL for local comments.
 	variables.NODE_COLUMNS = "C.id, C.parent_id, C.user_id, C.body, C.status, C.created,
@@ -192,11 +194,12 @@ class {
 	 *        commenter, author, or admin can all comment).
 	 * @param {string} body     - Comment text, trimmed. Rejected if empty
 	 *        or over 5000 characters after trimming.
+	 * @param {boolean} notifyReplies - Email the commenter when someone replies.
 	 * @return {string} The new comment's id. It may be stored 'pending' (see
 	 *         holdFediverseReplies()); getComment() says so with isPending.
 	 * @throws {CommentValidationError} if body is empty or too long.
 	 */
-	function createComment( required string postId, string parentId = "", required string userId, required string body ){
+	function createComment( required string postId, string parentId = "", required string userId, required string body, boolean notifyReplies = false ){
 		var trimmedBody = trim( arguments.body );
 		if ( !len( trimmedBody ) ){
 			throw( type: "CommentValidationError", message: "Comment can't be empty." );
@@ -212,19 +215,21 @@ class {
 			? "pending" : "visible";
 
 		queryExecute(
-			"INSERT INTO Comment (id, post_id, parent_id, user_id, body, status)
-			VALUES (:id, :post_id, :parent_id, :user_id, :body, :status)",
+			"INSERT INTO Comment (id, post_id, parent_id, user_id, body, status, reply_notify_token)
+			VALUES (:id, :post_id, :parent_id, :user_id, :body, :status, :notify_token)",
 			{
 				"id"       : { value: newId,                    cfsqltype: "cf_sql_varchar" },
 				"post_id"  : { value: arguments.postId,          cfsqltype: "cf_sql_varchar" },
 				"parent_id": { value: arguments.parentId,        cfsqltype: "cf_sql_varchar", null: !len( trim( arguments.parentId ) ) },
 				"user_id"  : { value: arguments.userId,          cfsqltype: "cf_sql_varchar" },
 				"body"     : { value: trimmedBody,               cfsqltype: "cf_sql_longvarchar" },
-				"status"   : { value: status,                    cfsqltype: "cf_sql_varchar" }
+				"status"   : { value: status,                    cfsqltype: "cf_sql_varchar" },
+				"notify_token": { value: arguments.notifyReplies ? lCase( replace( createUUID(), "-", "", "all" ) ) : "", cfsqltype: "cf_sql_varchar", null: !arguments.notifyReplies }
 			}
 		);
 
 		_changed( newId );
+		_created( newId, status );
 		return newId;
 	}
 
@@ -402,6 +407,7 @@ class {
 				"created"     : { value: arguments.reply.published,                   sqltype: "timestamp" }
 			}
 		);
+		_created( newId, status );
 		return newId;
 	}
 
@@ -417,7 +423,8 @@ class {
 	 * @return {string} The new comment's id.
 	 */
 	function createWebmentionComment( required string postId, required struct mention ){
-		var newId = lCase( createGUID() );
+		var newId  = lCase( createGUID() );
+		var status = isTrustedRemoteAuthor( arguments.mention.actorUrl ) ? "visible" : "pending";
 		queryExecute(
 			"INSERT INTO Comment (id, post_id, parent_id, user_id, remote_source, remote_actor_url, remote_name,
 				remote_handle, remote_profile_url, remote_url, body, status, created)
@@ -431,10 +438,11 @@ class {
 				"profile" : { value: left( arguments.mention.authorUrl, 512 ),        sqltype: "varchar" },
 				"url"     : { value: left( arguments.mention.url, 512 ),              sqltype: "varchar" },
 				"body"    : { value: sanitizeRemoteHtml( arguments.mention.html ),    sqltype: "longvarchar" },
-				"status"  : { value: isTrustedRemoteAuthor( arguments.mention.actorUrl ) ? "visible" : "pending", sqltype: "varchar" },
+				"status"  : { value: status,                                          sqltype: "varchar" },
 				"created" : { value: arguments.mention.published,                     sqltype: "timestamp" }
 			}
 		);
+		_created( newId, status );
 		return newId;
 	}
 
@@ -514,7 +522,10 @@ class {
 			{ result: "result" }
 		);
 		var approved = ( result.recordCount ?: 0 ) > 0;
-		if ( approved ) _changed( arguments.commentId );
+		if ( approved ){
+			_changed( arguments.commentId );
+			_published( arguments.commentId );
+		}
 		return approved;
 	}
 
@@ -534,6 +545,99 @@ class {
 	 */
 	function onChange( required any callback ){
 		variables.changeListeners.append( arguments.callback );
+	}
+
+	/**
+	 * callback( commentId ) runs after any comment is stored: local, fediverse
+	 * or webmention, visible or pending.
+	 */
+	function onCreated( required any callback ){
+		variables.createdListeners.append( arguments.callback );
+	}
+
+	/**
+	 * callback( commentId ) runs when a comment becomes visible: stored visible,
+	 * or approved out of the queue.
+	 */
+	function onPublished( required any callback ){
+		variables.publishedListeners.append( arguments.callback );
+	}
+
+	/**
+	 * Everything an email about a comment needs, or null if it's gone: the
+	 * comment, its post, and its parent (null for a top-level comment) with the
+	 * parent author's address and reply-email token.
+	 */
+	function getNotification( required string commentId ){
+		var rows = queryExecute(
+			"SELECT C.id, C.status, C.body, C.user_id, C.remote_source, C.remote_name, C.remote_handle,
+				U.display_name, U.role,
+				P.title, P.slug, P.publish_date,
+				PC.id AS parent_id, PC.status AS parent_status, PC.user_id AS parent_user_id,
+				PC.body AS parent_body, PC.reply_notify_token AS parent_token,
+				PU.email AS parent_email, PU.display_name AS parent_name, PU.is_active AS parent_active
+			FROM Comment C
+			INNER JOIN Post P ON P.id = C.post_id
+			LEFT JOIN User U ON U.id = C.user_id
+			LEFT JOIN Comment PC ON PC.id = C.parent_id
+			LEFT JOIN User PU ON PU.id = PC.user_id
+			WHERE C.id = :id
+			LIMIT 1",
+			{ "id": { value: arguments.commentId, sqltype: "varchar" } },
+			{ returnType: "array" }
+		);
+		if ( !rows.len() ) return javacast( "null", "" );
+		var row      = rows[ 1 ];
+		var isRemote = len( row.remote_source ?: "" ) > 0;
+		var pd       = row.publish_date;
+
+		var notification = {
+			"id"         : row.id,
+			"status"     : row.status,
+			"body"       : row.body,
+			"isRemote"   : isRemote,
+			"source"     : row.remote_source ?: "",
+			"userId"     : row.user_id ?: "",
+			"authorName" : isRemote ? _remoteDisplayName( row ) : ( row.display_name ?: "" ),
+			"authorRole" : row.role ?: "",
+			"postTitle"  : row.title,
+			"postUrl"    : isDate( pd )
+				? "/posts/#year( pd )#/#numberFormat( month( pd ), '00' )#/#encodeForURL( row.slug )#"
+				: "/posts/#encodeForURL( row.slug )#",
+			"parent"     : javacast( "null", "" )
+		};
+		if ( len( row.parent_id ?: "" ) ){
+			notification.parent = {
+				"id"          : row.parent_id,
+				"status"      : row.parent_status,
+				"userId"      : row.parent_user_id ?: "",
+				"body"        : row.parent_body,
+				"notifyToken" : row.parent_token ?: "",
+				"email"       : row.parent_email ?: "",
+				"name"        : row.parent_name ?: "",
+				"isActive"    : ( row.parent_active ?: 0 ) == 1
+			};
+		}
+		return notification;
+	}
+
+	/**
+	 * Stops reply emails for a comment, given the token from one of them.
+	 *
+	 * @return {boolean} False if the token doesn't match (or was already cleared).
+	 */
+	boolean function stopReplyEmails( required string commentId, required string token ){
+		if ( !len( arguments.token ) ) return false;
+		var result = {};
+		queryExecute(
+			"UPDATE Comment SET reply_notify_token = NULL WHERE id = :id AND reply_notify_token = :token",
+			{
+				"id"   : { value: arguments.commentId, sqltype: "varchar" },
+				"token": { value: arguments.token,     sqltype: "varchar" }
+			},
+			{ result: "result" }
+		);
+		return ( result.recordCount ?: 0 ) > 0;
 	}
 
 	/**
@@ -584,6 +688,25 @@ class {
 			{ "since": { value: arguments.since, sqltype: "timestamp" } },
 			{ returnType: "array" }
 		).map( ( row ) => row.id );
+	}
+
+	private void function _created( required string commentId, required string status ){
+		_notify( variables.createdListeners, arguments.commentId );
+		if ( arguments.status == "visible" ) _published( arguments.commentId );
+	}
+
+	private void function _published( required string commentId ){
+		_notify( variables.publishedListeners, arguments.commentId );
+	}
+
+	private void function _notify( required array listeners, required string commentId ){
+		for ( var listener in arguments.listeners ){
+			try {
+				listener( arguments.commentId );
+			} catch ( any e ){
+				println( "[comments] listener failed for #arguments.commentId#: #e.message#" );
+			}
+		}
 	}
 
 	private void function _changed( required string commentId ){

@@ -41,7 +41,7 @@ RUN rm -rf /app/* /app/.[!.]*
 # bx-compat-cfml gives dateFormat()/dateTimeFormat() their CF mask meanings
 # ("mmm d, yyyy", "h:nn tt"); without it the masks silently become java.time
 # patterns. bx-activitypub's moduleName is bxactivitypub.
-ARG BOXLANG_MODULES=boxlang-express,bx-mysql,bx-markdown,bx-password-encrypt,bx-esapi,bx-compat-cfml,bx-activitypub,bx-jsoup
+ARG BOXLANG_MODULES=boxlang-express,bx-mysql,bx-markdown,bx-password-encrypt,bx-esapi,bx-compat-cfml,bx-activitypub,bx-jsoup,bx-mail
 # install-bx-module always takes the latest from ForgeBox, but this line never
 # changes, so Docker and App Platform's Kaniko builder reuse the cached layer.
 # Change this to force a fresh pull, e.g. right after publishing a module fix.
