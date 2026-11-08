@@ -89,6 +89,7 @@
 					</bx:if>
 					<p class="article-foot__share">
 						Share on
+						<a href="https://dismalthreads.com/share?u=#encodeForURL( data.canonicalUrl )#" target="_blank" rel="noopener">DismalThreads</a>,
 						<a href="https://www.linkedin.com/sharing/share-offsite/?url=#encodeForURL( data.canonicalUrl )#" target="_blank" rel="noopener">LinkedIn</a>,
 						<a href="https://bsky.app/intent/compose?text=#encodeForURL( data.post.getTitle() & ' ' & data.canonicalUrl )#" target="_blank" rel="noopener">Bluesky</a>
 						or <a href="https://twitter.com/share?url=#encodeForURL( data.canonicalUrl )#&text=#encodeForURL( data.post.getTitle() )#" target="_blank" rel="noopener">X</a>

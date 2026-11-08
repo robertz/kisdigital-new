@@ -211,6 +211,66 @@
 	color: var(--code-text);
 }
 
+/* Token colours: highlight.js adds these classes in the browser
+   (public/assets/js/code.ts), so no template mentions them. */
+.c-post__body .hljs-keyword,
+.c-post__body .hljs-selector-tag,
+.c-post__body .hljs-meta .hljs-keyword,
+.c-post__body .hljs-deletion {
+	color: var(--code-keyword);
+}
+
+.c-post__body .hljs-string,
+.c-post__body .hljs-regexp,
+.c-post__body .hljs-selector-attr,
+.c-post__body .hljs-selector-pseudo {
+	color: var(--code-string);
+}
+
+.c-post__body .hljs-number,
+.c-post__body .hljs-literal,
+.c-post__body .hljs-variable.language_,
+.c-post__body .hljs-built_in,
+.c-post__body .hljs-symbol {
+	color: var(--code-number);
+}
+
+.c-post__body .hljs-comment,
+.c-post__body .hljs-quote,
+.c-post__body .hljs-meta {
+	color: var(--code-comment);
+	font-style: italic;
+}
+
+.c-post__body .hljs-title,
+.c-post__body .hljs-title.function_,
+.c-post__body .hljs-section {
+	color: var(--code-title);
+}
+
+.c-post__body .hljs-type,
+.c-post__body .hljs-title.class_,
+.c-post__body .hljs-params,
+.c-post__body .hljs-attribute {
+	color: var(--code-type);
+}
+
+.c-post__body .hljs-attr,
+.c-post__body .hljs-name,
+.c-post__body .hljs-tag,
+.c-post__body .hljs-addition,
+.c-post__body .hljs-property {
+	color: var(--code-attr);
+}
+
+.c-post__body .hljs-emphasis {
+	font-style: italic;
+}
+
+.c-post__body .hljs-strong {
+	font-weight: 700;
+}
+
 .c-post__body p {
 	margin-bottom: var(--space-5);
 }
@@ -256,10 +316,17 @@
 	line-height: 1.5;
 }
 
-/* wide: full column width, no height cap */
-.c-post__body .c-post-img--wide {
+/* wide: full column width, no height cap. PostRenderer.bx builds the
+   c-post-figure--{size} classes from the image title, so no template has them. */
+.c-post__body .c-post-img--wide,
+.c-post__body .c-post-figure--wide .c-post-img {
 	max-width: 100%;
 	max-height: none;
+}
+
+/* half: 50% of column, centred */
+.c-post__body .c-post-figure--half {
+	max-width: 50%;
 }
 
 /* half: 50% of column, centred */
