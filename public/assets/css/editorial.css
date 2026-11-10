@@ -563,3 +563,7 @@
 	font-size: 0.875rem;
 	color: var(--bs-danger, #c0392b);
 }
+
+.about-body a {
+	color: var(--post-link-text);
+}
