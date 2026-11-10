@@ -13,9 +13,9 @@
 		</header>
 
 		<div class="about-body">
-			<p>I'm a senior software developer with many years of experience in CFML, from long-running tag-based applications to modern BoxLang. Most of my professional work is in e-commerce integration: connecting platforms such as Shopify, Amazon, eBay and Walmart so that inventory, orders and fulfillment stay accurate across every sales channel.</p>
-			<p>I also build open-source tools for the BoxLang ecosystem. <a href="/projects/boxlang-express">boxlang-express</a>, an Express.js-style web framework, started because nothing like it existed; this site runs on it. Other work includes modules for ActivityPub federation, GraphQL and passkey authentication. They're all on the <a href="/projects">projects page</a>.</p>
-			<p>I care about systems with clear rules, code that's easy to maintain and documentation that explains why things are the way they are. Outside of work I read a lot of science fiction and fantasy, and train calisthenics.</p>
+			<p>I am a senior software developer with extensive experience across the CFML ecosystem, from established tag-based ColdFusion applications to modern BoxLang. My professional focus is e-commerce integration: building and maintaining the connections between platforms such as Shopify, Amazon, eBay and Walmart, so that inventory, orders and fulfillment remain accurate across every sales channel.</p>
+			<p>I am also an active open-source contributor to the BoxLang ecosystem. I created <a href="/projects/boxlang-express">boxlang-express</a>, an Express.js-style web framework that fills a gap in the platform and powers this site. My other work includes modules for ActivityPub federation, GraphQL and passkey authentication, all of which are listed on the <a href="/projects">projects page</a>.</p>
+			<p>I value well-defined systems, maintainable code and documentation that records not only how something works but why it was built that way. Outside of work, I enjoy science fiction and fantasy, and I train in calisthenics.</p>
 		</div>
 	</div>
 </div>
