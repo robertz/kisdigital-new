@@ -1,5 +1,4 @@
-# Local dev only — production deploys via .do/app.yaml, building the same
-# Dockerfile directly (no compose). app.bxs already has reloadOnChange +
+# Local dev only — production is production/docker-compose.yml. app.bxs already has reloadOnChange +
 # env=development on (once ENV=development is set below), so editing a
 # bind-mounted .bx/.bxs/.bxm file restarts the server inside the container
 # automatically.

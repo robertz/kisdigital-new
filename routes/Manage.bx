@@ -97,7 +97,7 @@ class {
 		var user = variables.authService.authenticate( userEmail, userPassword );
 
 		// Practically unreachable for a role='commenter' row — see
-		// AuthService.findOrCreateGoogleUser()'s own note on why its
+		// AuthService.findOrCreateOAuthUser()'s own note on why its
 		// password can never actually verify — but kept as a real check
 		// rather than relying on that alone, same instinct as
 		// authenticate()'s constant-time-ish dummy-hash comparison: don't

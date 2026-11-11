@@ -415,7 +415,7 @@
    shared, since that one is styled to fill a narrow centered auth card
    at width:100%, which would look oversized inline in the wider post
    content column this sits in. */
-.c-comments__google-btn {
+.c-comments__signin-btn {
 	display: inline-flex;
 	align-items: center;
 	gap: var(--space-2);
@@ -430,9 +430,53 @@
 	transition: border-color 120ms ease;
 }
 
-.c-comments__google-btn:hover {
+.c-comments__signin-btn:hover {
 	border-color: var(--post-link-text);
 	color: var(--post-anchor);
+}
+
+button.c-comments__signin-btn {
+	cursor: pointer;
+	font-family: inherit;
+}
+
+button.c-comments__signin-btn[hidden] {
+	display: none;
+}
+
+.c-account__passkeys {
+	list-style: none;
+	padding: 0;
+	margin: 0 0 var(--space-4);
+}
+
+.c-account__passkey {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-3);
+	padding: var(--space-3) 0;
+	border-bottom: 1px solid var(--ui-border-subtle);
+}
+
+.c-account__meta {
+	display: block;
+	color: var(--text-muted);
+	font-size: 0.85rem;
+}
+
+.c-account__remove {
+	background: none;
+	border: 1px solid var(--ui-border-subtle);
+	border-radius: var(--ui-radius-sm);
+	color: var(--text-secondary);
+	font-size: 0.8rem;
+	padding: 4px var(--space-3);
+	cursor: pointer;
+}
+
+.c-account__remove:hover {
+	border-color: var(--post-link-text);
 }
 
 .c-comments__legal {

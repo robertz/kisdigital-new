@@ -135,6 +135,7 @@
 					<bx:if data.currentUser.role == "commenter">
 					<p class="c-comments__account">
 						Signed in as <strong>#encodeForHTML( data.currentUser.displayName )#</strong>
+						&middot; <a href="/account">Passkeys</a>
 						&middot; <a href="/auth/logout?redirect=#encodeForURL( data.post.getPostUrl() )#">Sign out</a>
 					</p>
 					</bx:if>
@@ -151,7 +152,7 @@
 					</form>
 				<bx:else>
 					<p class="c-comments__signin">
-						<a href="/auth/google?redirect=#encodeForURL( data.post.getPostUrl() )#" class="c-comments__google-btn">
+						<a href="/auth/google?redirect=#encodeForURL( data.post.getPostUrl() )#" class="c-comments__signin-btn">
 							<svg width="16" height="16" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
 								<path fill="##4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.259h2.908c1.702-1.567 2.684-3.874 2.684-6.617z"/>
 								<path fill="##34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332C2.438 15.983 5.482 18 9 18z"/>
@@ -160,8 +161,23 @@
 							</svg>
 							Sign in with Google
 						</a>
+						<bx:if data.githubSignInEnabled ?: false>
+							<a href="/auth/github?redirect=#encodeForURL( data.post.getPostUrl() )#" class="c-comments__signin-btn">
+								<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+									<path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+								</svg>
+								Sign in with GitHub
+							</a>
+						</bx:if>
+						<button type="button" class="c-comments__signin-btn" data-passkey-signin data-redirect="#encodeForHTMLAttribute( data.post.getPostUrl() )#" hidden>
+							<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+								<path d="M3.5 11.5a3.5 3.5 0 1 1 3.163-5H14L15.5 8 14 9.5l-1-1-1 1-1-1-1 1-1-1-1 1H6.663a3.5 3.5 0 0 1-3.163 2zM2.5 9a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"/>
+							</svg>
+							Sign in with a passkey
+						</button>
 						<span>to leave a comment.</span>
 					</p>
+					<div class="c-comment-form__error" role="alert" data-passkey-error hidden></div>
 					<p class="c-comments__legal">
 						By signing in you agree to the <a href="/terms">Terms of Service</a> and <a href="/privacy">Privacy Policy</a>.
 					</p>
@@ -192,4 +208,5 @@
 </section>
 </bx:output>
 <script src="/assets/js/comments.js"></script>
+<script type="module" src="/assets/js/passkey-ui.js"></script>
 <bx:include template="../partials/_foot.bxm">

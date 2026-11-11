@@ -69,10 +69,10 @@ class {
 	 * one nobody can ever know the plaintext for, so password-based login
 	 * (doLogin() in routes/Manage.bx) can never succeed against it. That
 	 * route also independently rejects any non-admin/author role even if it
-	 * somehow did, so this account only ever gets in via Google.
+	 * somehow did, so this account only ever gets in via Google or GitHub.
 	 *
 	 * SECURITY: only call this with an email whose ownership Google has
-	 * already confirmed (GoogleOAuthClient.getUserInfo()'s emailVerified) —
+	 * already confirmed (GoogleOAuthClient/GitHubOAuthClient getUserInfo()'s emailVerified) —
 	 * this trusts the given email outright, the same way authenticate()
 	 * trusts a matched password.
 	 *
@@ -94,7 +94,7 @@ class {
 	 *         avatar_url. Empty struct if a matching row exists but is
 	 *         deactivated.
 	 */
-	function findOrCreateGoogleUser( required string email, string displayName = "", string pictureUrl = "" ){
+	function findOrCreateOAuthUser( required string email, string displayName = "", string pictureUrl = "" ){
 		var normalizedEmail = lCase( trim( arguments.email ) );
 		var pictureUrl       = trim( arguments.pictureUrl );
 
@@ -141,6 +141,23 @@ class {
 		);
 
 		return { "id": newId, "display_name": name, "email": normalizedEmail, "role": "commenter", "avatar_url": pictureUrl };
+	}
+
+	/**
+	 * For passkey sign-in, which proves the User.id rather than an email.
+	 * @return {struct} Same shape as findOrCreateOAuthUser(); empty when
+	 *         there's no such user or it's deactivated.
+	 */
+	function findActiveUserById( required string id ){
+		var rows = queryExecute(
+			"SELECT id, display_name, email, role, avatar_url
+			FROM User
+			WHERE id = :id AND is_active = 1
+			LIMIT 1",
+			{ "id": { value: arguments.id, cfsqltype: "cf_sql_varchar" } },
+			{ returnType: "array" }
+		);
+		return rows.len() ? rows[ 1 ] : {};
 	}
 
 }

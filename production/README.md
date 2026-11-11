@@ -2,7 +2,7 @@
 
 The same setup as dt-next. The server keeps a deployment folder of its own, outside any checkout, e.g. `~/Containers/kisdigital`. It holds only what's specific to that server: `deploy.sh`, `.env` and `production.env`. Everything else comes from GitHub on each deploy: `deploy.sh` pulls the latest `main` into the folder's `src/`, then builds and starts with `src/production/docker-compose.yml`, so compose changes ship with the code. It also refreshes itself and `compose.sh` from the repo. It runs the app and `cloudflared`, publishes no ports, and uses the MySQL container already on the host: the app joins its network (`docker-mysql_default`, where `do-mirror-mysql` runs) and connects by container name.
 
-App Platform (`.do/app.yaml`) still deploys every push to `main` until it's switched off. The Dockerfile's last stage is the app for its sake, and its fixed JVM settings are App Platform's; the compose file replaces them with ones sized from the container.
+The compose file replaces the Dockerfile's fixed JVM settings with ones sized from the container.
 
 1. **Tunnel.** In Cloudflare Zero Trust, create a tunnel (Networks > Tunnels > Create, type Cloudflared). Under the tunnel's **Public hostname** tab, add `kisdigital.com` and `www.kisdigital.com` with service `HTTP` and URL `app:3005`. Copy the tunnel token from its install command.
 2. **Deploy key.** The repo is private, so `deploy.sh` clones it over SSH. On the server, make a key just for this:
@@ -12,7 +12,7 @@ App Platform (`.do/app.yaml`) still deploys every push to `main` until it's swit
    ```
 
    Add `~/.ssh/kisdigital_deploy.pub` to the repo under Settings > Deploy keys, read-only.
-3. **Database.** The schema is a copy of amos's `chron`, loaded into `chron_production` on the MySQL container. Do it again just before switching DNS over, so nothing written on App Platform in between is lost. With amos's login in `~/Development/docker-mysql/amos.cnf` (a `[client]` section: host, port, user, password, `ssl-mode=REQUIRED`):
+3. **Database.** The schema is a copy of amos's `chron`, loaded into `chron_production` on the MySQL container. With amos's login in `~/Development/docker-mysql/amos.cnf` (a `[client]` section: host, port, user, password, `ssl-mode=REQUIRED`):
 
    ```bash
    docker cp ~/Development/docker-mysql/amos.cnf do-mirror-mysql:/tmp/amos.cnf
@@ -47,7 +47,7 @@ App Platform (`.do/app.yaml`) still deploys every push to `main` until it's swit
    mkdir -p ~/Containers/kisdigital && cd ~/Containers/kisdigital
    ```
 
-   Copy `deploy.sh`, `.env.example` (as `.env`) and `production.env.example` (as `production.env`) there from this folder, then fill them in. `.env` is read by compose only: the tunnel token, the repo and branch, and `DEPLOY_KEY=/home/<you>/.ssh/kisdigital_deploy`. `production.env` holds the app's settings; the secrets (R2, Google OAuth, the database password) are the ones App Platform has now.
+   Copy `deploy.sh`, `.env.example` (as `.env`) and `production.env.example` (as `production.env`) there from this folder, then fill them in. `.env` is read by compose only: the tunnel token, the repo and branch, and `DEPLOY_KEY=/home/<you>/.ssh/kisdigital_deploy`. `production.env` holds the app's settings; the secrets are R2, Google and GitHub OAuth, SES, and the database password.
 
 5. **Deploy**, now and after every push to `main`:
 

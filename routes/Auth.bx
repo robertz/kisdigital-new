@@ -1,116 +1,209 @@
 /**
- * "Sign in with Google" — general-purpose, not CMS-specific. A matched
- * existing User row (admin/author — real staff) gets the normal CMS
- * session (req.session.manage_user, same shape doLogin() sets in
- * routes/Manage.bx). Anyone else gets a lightweight role='commenter'
- * account (AuthService.findOrCreateGoogleUser()) and a separate
- * req.session.commenter session that carries no /manage access at all —
- * groundwork for a comments feature, not wired into any comment UI yet.
+ * "Sign in with Google" / "Sign in with GitHub" — general-purpose, not
+ * CMS-specific. A matched existing User row (admin/author — real staff)
+ * gets the normal CMS session (req.session.manage_user, same shape
+ * doLogin() sets in routes/Manage.bx). Anyone else gets a lightweight
+ * role='commenter' account (AuthService.findOrCreateOAuthUser()) and a
+ * separate req.session.commenter session that carries no /manage access.
+ * Accounts are matched by verified email, so the same person signing in
+ * with Google and then GitHub lands on the same User row.
  *
- * Deliberately its own router (not folded into Manage.bx) since this isn't
- * a CMS concern — a future comment form on a post page would point its own
- * "Sign in" link at GET /auth/google?redirect=<that post's URL>.
+ * The comment form on a post page links to
+ * GET /auth/<provider>?redirect=<that post's URL>.
  */
 class {
 
-	variables.authService     = "";
-	variables.googleOAuthClient = "";
+	variables.authService = "";
+	variables.providers   = {};
+	variables.passkeys    = "";
 
-	function init( required authService, required googleOAuthClient ){
-		variables.authService       = arguments.authService;
-		variables.googleOAuthClient = arguments.googleOAuthClient;
+	function init( required authService, required googleOAuthClient, required githubOAuthClient, required passkeys ){
+		variables.authService = arguments.authService;
+		variables.passkeys    = arguments.passkeys;
+		variables.providers   = {
+			"google": { "label": "Google", "client": arguments.googleOAuthClient },
+			"github": { "label": "GitHub", "client": arguments.githubOAuthClient }
+		};
 
 		this.router = boxExpressRouter();
-		this.router.get( "/auth/google", ( req, res ) => start( req, res ) );
-		this.router.get( "/auth/google/callback", ( req, res ) => callback( req, res ) );
+		this.router.get( "/auth/google", ( req, res ) => start( req, res, "google" ) );
+		this.router.get( "/auth/google/callback", ( req, res ) => callback( req, res, "google" ) );
+		this.router.get( "/auth/github", ( req, res ) => start( req, res, "github" ) );
+		this.router.get( "/auth/github/callback", ( req, res ) => callback( req, res, "github" ) );
 		this.router.get( "/auth/logout", ( req, res ) => logout( req, res ) );
+
+		// Passkey sign-in carries no CSRF token: a post page doesn't mint one
+		// for a visitor with no session, and the challenge is already bound to
+		// this session and has to be signed by the person's own authenticator.
+		var signInLimit = boxExpressRateLimit( { windowMs: 15 * 60000, max: 30 } );
+		this.router.post( "/auth/passkey/options", signInLimit, ( req, res ) => passkeySignInOptions( req, res ) );
+		this.router.post( "/auth/passkey", signInLimit, ( req, res ) => passkeySignIn( req, res ) );
+
+		// A commenter's own account page: their passkeys. Scoped so the token
+		// is only minted for requests that reach it.
+		var requireCommenter = ( req, res, next ) => _requireCommenter( req, res, next );
+		this.router.use( "/account", boxExpressCsrf() );
+		this.router.get( "/account", requireCommenter, ( req, res ) => account( req, res ) );
+		this.router.post(
+			"/account/passkeys/options",
+			requireCommenter,
+			boxExpressRateLimit( { windowMs: 15 * 60000, max: 20 } ),
+			( req, res ) => passkeyRegistrationOptions( req, res )
+		);
+		this.router.post( "/account/passkeys", requireCommenter, ( req, res ) => passkeyRegister( req, res ) );
+		this.router.post( "/account/passkeys/:id/delete", requireCommenter, ( req, res ) => passkeyRemove( req, res ) );
 
 		return this;
 	}
 
-	// GET /auth/google?redirect=<internal path> — begins the OAuth dance.
-	function start( req, res ){
-		if ( !variables.googleOAuthClient.isConfigured() ){
-			res.status( 503 ).send( "Google sign-in isn't configured." );
+	// GET /auth/:provider?redirect=<internal path> — begins the OAuth dance.
+	function start( req, res, required string provider ){
+		var p = variables.providers[ arguments.provider ];
+		if ( !p.client.isConfigured() ){
+			res.status( 503 ).send( p.label & " sign-in isn't configured." );
 			return;
 		}
 
 		var state = createUUID();
 		req.session.oauthState    = state;
+		req.session.oauthProvider = arguments.provider;
 		req.session.oauthRedirect = _safeRedirect( req.query.redirect ?: "/" );
 
-		res.redirect( variables.googleOAuthClient.buildAuthorizationUrl( state ) );
+		res.redirect( p.client.buildAuthorizationUrl( state ) );
 	}
 
-	// GET /auth/google/callback?code=...&state=...
-	function callback( req, res ){
-		var expectedState = req.session.oauthState ?: "";
-		var redirectTo    = req.session.oauthRedirect ?: "/";
+	// GET /auth/:provider/callback?code=...&state=...
+	function callback( req, res, required string provider ){
+		var p                = variables.providers[ arguments.provider ];
+		var expectedState    = req.session.oauthState ?: "";
+		var expectedProvider = req.session.oauthProvider ?: "";
+		var redirectTo       = req.session.oauthRedirect ?: "/";
 		structDelete( req.session, "oauthState" );
+		structDelete( req.session, "oauthProvider" );
 		structDelete( req.session, "oauthRedirect" );
 
 		var returnedState = req.query.state ?: "";
-		var code           = req.query.code  ?: "";
+		var code          = req.query.code  ?: "";
 
-		if ( !len( expectedState ) || !len( returnedState ) || returnedState != expectedState ){
-			println( "[auth] Google OAuth state mismatch from " & req.ip );
+		if ( !len( expectedState ) || !len( returnedState ) || returnedState != expectedState || expectedProvider != arguments.provider ){
+			println( "[auth] " & p.label & " OAuth state mismatch from " & req.ip );
 			flashSet( req, { loginError: "Sign-in failed — please try again." } );
 			res.redirect( "/manage/login" );
 			return;
 		}
 
 		if ( !len( code ) ){
-			// User denied consent, or Google sent an error instead of a code.
-			flashSet( req, { loginError: "Google sign-in was cancelled." } );
+			// User denied consent, or the provider sent an error instead of a code.
+			flashSet( req, { loginError: p.label & " sign-in was cancelled." } );
 			res.redirect( "/manage/login" );
 			return;
 		}
 
 		try {
-			var accessToken = variables.googleOAuthClient.exchangeCodeForToken( code );
-			var profile     = variables.googleOAuthClient.getUserInfo( accessToken );
+			var accessToken = p.client.exchangeCodeForToken( code );
+			var profile     = p.client.getUserInfo( accessToken );
 
 			if ( !profile.emailVerified || !len( profile.email ) ){
-				flashSet( req, { loginError: "That Google account's email isn't verified." } );
+				flashSet( req, { loginError: "That " & p.label & " account's primary email isn't verified." } );
 				res.redirect( "/manage/login" );
 				return;
 			}
 
-			var user = variables.authService.findOrCreateGoogleUser( profile.email, profile.name, profile.pictureUrl );
+			var user = variables.authService.findOrCreateOAuthUser( profile.email, profile.name, profile.pictureUrl );
 			if ( user.isEmpty() ){
 				flashSet( req, { loginError: "This account has been deactivated." } );
 				res.redirect( "/manage/login" );
 				return;
 			}
 
-			req.regenerateSession();
-
-			if ( user.role == "admin" || user.role == "author" ){
-				req.session.manage_user = {
-					"id"           : user.id,
-					"display_name" : user.display_name,
-					"email"        : user.email,
-					"role"         : user.role
-				};
-				println( "[auth] successful Google sign-in for '" & user.email & "' from " & req.ip );
+			if ( _signIn( req, user, p.label ) ){
 				res.redirect( len( trim( redirectTo ) ) && redirectTo != "/" ? redirectTo : "/manage" );
 				return;
 			}
-
-			req.session.commenter = {
-				"id"          : user.id,
-				"display_name": user.display_name,
-				"email"       : user.email,
-				"avatar_url"  : user.avatar_url ?: ""
-			};
-			println( "[auth] Google sign-in (commenter) for '" & user.email & "' from " & req.ip );
 			res.redirect( redirectTo );
 
 		} catch ( any e ){
-			println( "[error] Google OAuth callback failed: " & e.message );
+			println( "[error] " & p.label & " OAuth callback failed: " & e.message );
 			flashSet( req, { loginError: "Sign-in failed — please try again." } );
 			res.redirect( "/manage/login" );
 		}
+	}
+
+	// POST /auth/passkey/options — no body. The browser's passkey sheet
+	// offers whichever passkeys it holds for this site.
+	function passkeySignInOptions( req, res ){
+		res.json( variables.passkeys.signInOptions( req.session ) );
+	}
+
+	// POST /auth/passkey — body: what signWithPasskey() returned, plus
+	// redirect (the post to come back to).
+	function passkeySignIn( req, res ){
+		var body = req.body ?: {};
+		try {
+			var result = variables.passkeys.verify( req.session, body );
+		} catch ( "Passkeys.Invalid" e ){
+			println( "[auth] passkey sign-in refused from " & req.ip & ": " & e.message );
+			res.status( 401 ).json( { success: false, error: e.message } );
+			return;
+		}
+
+		var user = variables.authService.findActiveUserById( result.userId );
+		if ( user.isEmpty() ){
+			res.status( 401 ).json( { success: false, error: "This account has been deactivated." } );
+			return;
+		}
+
+		var redirectTo = _safeRedirect( body.redirect ?: "/" );
+		var isStaff    = _signIn( req, user, "passkey" );
+		res.json( { success: true, redirect: isStaff && redirectTo == "/" ? "/manage" : redirectTo } );
+	}
+
+	// GET /account
+	function account( req, res ){
+		var flash = req.session._flash ?: {};
+		structDelete( req.session, "_flash" );
+		res.render( "account/index", {
+			pageTitle     : "Your account",
+			commenter     : req.session.commenter,
+			passkeys      : variables.passkeys.getStore().listForUser( req.session.commenter.id ),
+			accountNotice : flash.accountNotice ?: "",
+			csrfToken     : req.csrfToken()
+		} );
+	}
+
+	// POST /account/passkeys/options
+	function passkeyRegistrationOptions( req, res ){
+		var c = req.session.commenter;
+		try {
+			res.json( variables.passkeys.registrationOptions( { id: c.id, name: c.email, displayName: c.display_name }, req.session ) );
+		} catch ( "Passkeys.Invalid" e ){
+			res.status( 400 ).json( { success: false, error: e.message } );
+		}
+	}
+
+	// POST /account/passkeys — body: what createPasskey() returned.
+	function passkeyRegister( req, res ){
+		var body = req.body ?: {};
+		body.name = left( trim( body.name ?: "" ), 100 );
+		try {
+			var credential = variables.passkeys.register( { id: req.session.commenter.id }, req.session, body );
+		} catch ( "Passkeys.Invalid" e ){
+			res.status( 400 ).json( { success: false, error: e.message } );
+			return;
+		}
+		println( "[auth] passkey added for '" & req.session.commenter.email & "' from " & req.ip );
+		res.json( { success: true, name: credential.name } );
+	}
+
+	// POST /account/passkeys/:id/delete — a plain form post.
+	function passkeyRemove( req, res ){
+		var store      = variables.passkeys.getStore();
+		var credential = store.findByCredentialId( req.params.id ?: "" );
+		if ( !isNull( credential ) && credential.userId == req.session.commenter.id ){
+			store.remove( credential.credentialId );
+			req.session._flash = { accountNotice: "Passkey removed." };
+		}
+		res.redirect( "/account" );
 	}
 
 	// GET /auth/logout?redirect=<internal path> — clears a commenter
@@ -123,6 +216,44 @@ class {
 	function logout( req, res ){
 		structDelete( req.session, "commenter" );
 		res.redirect( _safeRedirect( req.query.redirect ?: "/" ) );
+	}
+
+	// Starts a fresh session for `user` (a struct from AuthService). Staff get
+	// the CMS session, everyone else the commenter one. Returns true for staff.
+	private boolean function _signIn( req, required struct user, required string method ){
+		req.regenerateSession();
+
+		if ( user.role == "admin" || user.role == "author" ){
+			req.session.manage_user = {
+				"id"           : user.id,
+				"display_name" : user.display_name,
+				"email"        : user.email,
+				"role"         : user.role
+			};
+			println( "[auth] successful " & arguments.method & " sign-in for '" & user.email & "' from " & req.ip );
+			return true;
+		}
+
+		req.session.commenter = {
+			"id"          : user.id,
+			"display_name": user.display_name,
+			"email"       : user.email,
+			"avatar_url"  : user.avatar_url ?: ""
+		};
+		println( "[auth] " & arguments.method & " sign-in (commenter) for '" & user.email & "' from " & req.ip );
+		return false;
+	}
+
+	private function _requireCommenter( req, res, next ){
+		if ( !len( req.session.commenter ?: "" ) ){
+			if ( req.method == "GET" ){
+				res.redirect( "/" );
+			} else {
+				res.status( 401 ).json( { success: false, error: "Sign in first." } );
+			}
+			return;
+		}
+		next();
 	}
 
 	// Only an internal, same-origin path is ever safe to redirect to after

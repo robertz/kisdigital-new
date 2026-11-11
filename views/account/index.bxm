@@ -1,0 +1,51 @@
+<bx:include template="../partials/_head.bxm">
+<bx:output>
+<section class="py-5 posts-section">
+	<div class="container">
+		<div class="row justify-content-center">
+			<div class="col-lg-8">
+
+				<h1 class="c-post__title">Your account</h1>
+				<p class="c-post__description">Signed in as <strong>#encodeForHTML( data.commenter.display_name )#</strong> (#encodeForHTML( data.commenter.email )#) &middot; <a href="/auth/logout">Sign out</a></p>
+
+				<div class="c-post__body c-account">
+					<h2>Passkeys</h2>
+					<p>A passkey lets you sign in to comment with your device's fingerprint, face or PIN, without going through Google or GitHub.</p>
+
+					<bx:if len( data.accountNotice )>
+						<div class="c-comment-form__notice" role="status">#encodeForHTML( data.accountNotice )#</div>
+					</bx:if>
+					<div class="c-comment-form__error" role="alert" data-passkey-error hidden></div>
+
+					<bx:if data.passkeys.len()>
+						<ul class="c-account__passkeys">
+							<bx:loop array="#data.passkeys#" item="pk">
+								<li class="c-account__passkey">
+									<div>
+										<strong>#encodeForHTML( pk.name )#</strong>
+										<span class="c-account__meta">
+											added #dateFormat( pk.createdAt, "mmm d, yyyy" )#<bx:if !isNull( pk.lastUsedAt )> &middot; last used #dateFormat( pk.lastUsedAt, "mmm d, yyyy" )#</bx:if>
+										</span>
+									</div>
+									<form method="post" action="/account/passkeys/#encodeForURL( pk.credentialId )#/delete" onsubmit="return confirm('Remove this passkey?')">
+										<input type="hidden" name="_csrf" value="#encodeForHTMLAttribute( data.csrfToken )#">
+										<button type="submit" class="c-account__remove">Remove</button>
+									</form>
+								</li>
+							</bx:loop>
+						</ul>
+					<bx:else>
+						<p class="c-account__meta">You haven't added a passkey yet.</p>
+					</bx:if>
+
+					<button type="button" class="c-comments__signin-btn" data-passkey-add data-csrf="#encodeForHTMLAttribute( data.csrfToken )#" hidden>Add a passkey</button>
+					<p class="c-account__meta" data-passkey-unsupported hidden>This browser doesn't support passkeys.</p>
+				</div>
+
+			</div>
+		</div>
+	</div>
+</section>
+<script type="module" src="/assets/js/passkey-ui.js"></script>
+</bx:output>
+<bx:include template="../partials/_foot.bxm">

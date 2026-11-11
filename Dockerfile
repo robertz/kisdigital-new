@@ -1,5 +1,6 @@
-# Same shape as dt-next's Dockerfile. App Platform builds the last stage, so
-# the test stage sits in the middle and the app is rebuilt from it at the end.
+# Same shape as dt-next's Dockerfile. production/docker-compose.yml builds the
+# "app" stage; "test" is what deploy.sh runs the specs in. Always pass a
+# --target: the last stage is "test", not the app.
 
 # ── Assets ───────────────────────────────────────────────────────────────
 # esbuild bundles and hashes CSS/JS into public/assets/dist/, and Vite builds
@@ -41,11 +42,11 @@ RUN rm -rf /app/* /app/.[!.]*
 # bx-compat-cfml gives dateFormat()/dateTimeFormat() their CF mask meanings
 # ("mmm d, yyyy", "h:nn tt"); without it the masks silently become java.time
 # patterns. bx-activitypub's moduleName is bxactivitypub.
-ARG BOXLANG_MODULES=boxlang-express,bx-mysql,bx-markdown,bx-password-encrypt,bx-esapi,bx-compat-cfml,bx-activitypub,bx-jsoup,bx-mail
+ARG BOXLANG_MODULES=boxlang-express,bx-mysql,bx-markdown,bx-password-encrypt,bx-esapi,bx-compat-cfml,bx-activitypub,bx-jsoup,bx-mail,bx-passkeys
 # install-bx-module always takes the latest from ForgeBox, but this line never
-# changes, so Docker and App Platform's Kaniko builder reuse the cached layer.
+# changes, so Docker reuses the cached layer.
 # Change this to force a fresh pull, e.g. right after publishing a module fix.
-ARG MODULE_CACHE_BUST=2026-11-06-boxlang-express-0.2.25
+ARG MODULE_CACHE_BUST=2026-11-11-bx-passkeys
 RUN install-bx-module "$BOXLANG_MODULES" --local
 
 COPY app.bxs .boxlang.json ./
@@ -69,16 +70,14 @@ ENV HOME=/home/app
 ENV PORT=3005
 EXPOSE 3005
 
-# Fixed sizes, not dt-next's share of the container limit: on App Platform the
-# JVM doesn't see the instance's allocation (availableProcessors() has reported
-# the host's 8 cores on apps-s-1vcpu-1gb), so a percentage of "RAM" could be a
-# percentage of the host's.
+# Fixed defaults for running the image on its own (1 vCPU / 1GB);
+# production/docker-compose.yml replaces them with sizes from the container limit.
 # - Xmx600m + SerialGC: a bounded heap and the low-overhead collector for 1 vCPU / 1GB.
 # - ActiveProcessorCount=1: Undertow sizes its I/O threads from availableProcessors().
 # - MaxDirectMemorySize=64m: Undertow's buffer pool is off-heap direct memory once
 #   the heap passes ~128MB; capped, a spike is a loud OutOfMemoryError rather
 #   than a silent OOM-kill.
-# - ExitOnOutOfMemoryError: a JVM out of memory exits and App Platform restarts it.
+# - ExitOnOutOfMemoryError: a JVM out of memory exits and the container restarts.
 # - user.timezone=UTC: publish dates are stored as UTC and compared to MySQL's NOW().
 # - sun.net.inetaddr.ttl=30: a looked-up address is kept 30 seconds, so the
 #   address SafeHttp checks is the one it connects to (models/util/SafeHttp.bx).
@@ -116,7 +115,3 @@ COPY --from=testbox --chown=app:app /deps/testbox testbox/
 COPY --chown=app:app tests/ tests/
 COPY --chown=app:app run-tests.bxs ./
 CMD ["boxlang", "run-tests.bxs"]
-
-# ── Production ───────────────────────────────────────────────────────────
-# The last stage is what App Platform builds and deploys.
-FROM app AS production

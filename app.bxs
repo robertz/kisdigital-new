@@ -100,6 +100,28 @@ googleOAuthClient = new models.util.GoogleOAuthClient(
 	getSystemSetting( "SITEURL", "https://kisdigital.com" ) & "/auth/google/callback"
 )
 
+// "Sign in with GitHub" — same pattern; the GitHub OAuth App lists both
+// the localhost and kisdigital.com callbacks as redirect URIs.
+githubOAuthClient = new models.util.GitHubOAuthClient(
+	getSystemSetting( "GITHUB_CLIENT_ID", "" ),
+	getSystemSetting( "GITHUB_CLIENT_SECRET", "" ),
+	getSystemSetting( "SITEURL", "https://kisdigital.com" ) & "/auth/github/callback"
+)
+
+// Passkeys for commenters (bx-passkeys, routes/Auth.bx). The rpId is
+// SITEURL's host and can never change once people have passkeys. In
+// development the module allows http on localhost at any port.
+passkeySiteUrl = getSystemSetting( "SITEURL", "https://kisdigital.com" )
+passkeys = passkeyRelyingParty(
+	{
+		rpId       : listFirst( reReplace( passkeySiteUrl, "^https?://", "" ), ":/" ),
+		rpName     : "KISDigital",
+		origins    : getSystemSetting( "ENV", "production" ) == "production" ? [ passkeySiteUrl ] : [],
+		maxPerUser : 10
+	},
+	new bxModules.bxPasskeys.models.TableCredentialStore( { datasource: "chron", table: "Passkey" } )
+)
+
 // Apache-style access log (RequestLog table) — see models/util/RequestLogger.bx.
 // requestLogger fills the table in asynchronously; insightsService reads it
 // back out for /manage/insights and the dashboard's insights summary card.
@@ -129,8 +151,7 @@ app.schedule( 60 * 1000, () => subscriptionService.run(), { name: "post-emails" 
 // static assets included, same scope as an actual Apache access log.
 app.use( requestLogger.middleware() )
 
-// Production is only ever reached over HTTPS (Cloudflare and DigitalOcean's
-// ingress terminate it); local dev is plain HTTP, where a Secure cookie
+// Production is only ever reached over HTTPS (Cloudflare terminates it); local dev is plain HTTP, where a Secure cookie
 // would never be sent back.
 servedOverHttps = getSystemSetting( "ENV", "production" ) == "production"
 
@@ -162,25 +183,16 @@ app.use(
 app.use( "/assets/dist", boxExpressStatic( expandPath( "./public/assets/dist" ), { maxAge: 31536000, immutable: true } ) )
 app.use( boxExpressStatic( expandPath( "./public" ), { maxAge: 86400 } ) )
 
-// Resolves the real visitor IP behind DO App Platform's ingress + Cloudflare
-// (kisdigital.com is Cloudflare-proxied) for req.ip everywhere, including
-// boxlang-express's own per-request access-log line. Not app.set("trust
-// proxy", true) + X-Forwarded-For: confirmed by testing directly against
-// production with a forged header that Cloudflare and DO's ingress both
-// APPEND to that header rather than replacing it, so a client can prepend a
-// fake entry and have it survive to the app — trust proxy would make req.ip
-// attacker-controlled there, not just wrong. DO-Connecting-IP (falling back
-// to Cloudflare's own CF-Connecting-IP) is set by the edge itself from the
-// actual TCP connection it observed, not from anything the client sent, so
-// those are trustworthy where X-Forwarded-For's leftmost entry is not — see
-// Request.bx's _resolveIp() in boxlang-express (>=0.1.16) for the check
-// itself. Neither header exists in local dev, so req.ip there stays the
-// direct connection address, which is already correct.
-//
-// TRUST_PROXY_HEADER replaces the list. Behind the Cloudflare tunnel
-// (production/docker-compose.yml) nothing sets DO-Connecting-IP, so a client
-// could send its own; there it's CF-Connecting-IP alone.
-app.set( "trust proxy header", listToArray( getSystemSetting( "TRUST_PROXY_HEADER", "DO-Connecting-IP,CF-Connecting-IP" ) ) )
+// Resolves the real visitor IP behind the Cloudflare tunnel for req.ip
+// everywhere, including boxlang-express's own per-request access-log line.
+// Not app.set("trust proxy", true) + X-Forwarded-For: Cloudflare appends to
+// that header rather than replacing it, so a client can prepend a fake entry
+// and have it survive to the app. CF-Connecting-IP is set by Cloudflare from
+// the TCP connection it observed, so it's trustworthy — but only because
+// nothing reaches the app except through cloudflared. See Request.bx's
+// _resolveIp() in boxlang-express (>=0.1.16). In local dev the header isn't
+// present, so req.ip stays the direct connection address.
+app.set( "trust proxy header", listToArray( getSystemSetting( "TRUST_PROXY_HEADER", "CF-Connecting-IP" ) ) )
 
 // [M1] Legacy XSS filter hint — a no-op in modern browsers, harmless to send.
 // (Everything else from the old app's security header set is covered by helmet above.)
@@ -194,6 +206,7 @@ app.locals.siteName = "KISDigital"
 app.locals.cssHref  = cssHref
 app.locals.jsHref   = jsHref
 app.locals.codeJsHref = codeJsHref
+app.locals.githubSignInEnabled = githubOAuthClient.isConfigured()
 
 app.use( ( req, res, next ) => {
 	res.locals.manageUser = req.session.manage_user ?: ""
@@ -205,18 +218,14 @@ app.set( "views", expandPath( "./views" ) )
 app.set( "env", getSystemSetting( "ENV", "production" ) )
 app.set( "reloadOnChange", app.getSetting( "env" ) == "development" )
 
-// DigitalOcean App Platform's readiness/liveness probe. Deliberately touches
-// no datasource and renders no view — a MySQL blip shouldn't fail the whole
-// service's health check when the process itself is fine. See .do/app.yaml.
-// Registered before the host-lockdown middleware below so health checks
-// (which hit the app directly, not through kisdigital.com) are handled here
-// and never reach it.
+// The container's health check (production/docker-compose.yml). Deliberately
+// touches no datasource and renders no view — a MySQL blip shouldn't fail the
+// health check when the process itself is fine. Registered before the
+// host-lockdown middleware below so health checks (which hit the app directly,
+// not through kisdigital.com) are handled here and never reach it.
 app.get( "/health", ( req, res ) => res.send( "ok" ) )
 
-// DO App Platform's own *.ondigitalocean.app URL stays live at the
-// infrastructure level for as long as the app exists — there's no spec
-// setting to turn it off. This is the practical lockdown instead: any
-// request not addressed to the real domain gets redirected there, same
+// Any request not addressed to the real domain gets redirected there, same
 // path and query string intact. Skipped outside production so local dev
 // (Host: localhost:3005) isn't caught by it.
 if ( app.getSetting( "env" ) == "production" ){
@@ -327,7 +336,7 @@ app.use( ( req, res, next ) => {
 	}
 	next();
 } )
-app.use( new routes.Auth( authService, googleOAuthClient ).router )
+app.use( new routes.Auth( authService, googleOAuthClient, githubOAuthClient, passkeys ).router )
 app.use( new routes.Main( postService, authorService, siteDefaults ).router )
 // Before Posts: its router checks CSRF on every request that reaches it,
 // which would refuse a mail client's one-click unsubscribe POST (and the

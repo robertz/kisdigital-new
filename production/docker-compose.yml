@@ -18,8 +18,7 @@ name: kisdigital
 
 services:
   app:
-    # deploy.sh's clone of the repo. The Dockerfile's "app" stage: its last
-    # stage is the same image, there only for App Platform.
+    # deploy.sh's clone of the repo, built to the Dockerfile's "app" stage.
     build:
       context: src
       target: app
@@ -36,11 +35,9 @@ services:
     environment:
       ENV: production
       PORT: "3005"
-      # DO-Connecting-IP isn't set by anything here, so a client could send its own
       TRUST_PROXY_HEADER: CF-Connecting-IP
-      # Replaces the image's App Platform settings (fixed heap, SerialGC, one
-      # processor), which are there because App Platform's JVM can't see its
-      # instance's limits. Here it can, so it sizes itself from mem_limit and cpus.
+      # Replaces the image's fixed defaults (heap, SerialGC, one processor) so
+      # the JVM sizes itself from mem_limit and cpus.
       JAVA_OPTS: >-
         -Duser.timezone=UTC
         -XX:MaxRAMPercentage=75 -XX:InitialRAMPercentage=25

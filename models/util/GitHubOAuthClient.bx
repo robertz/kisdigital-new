@@ -1,0 +1,130 @@
+/**
+ * Minimal GitHub OAuth client for "Sign in with GitHub" — same shape as
+ * GoogleOAuthClient.bx. GitHub isn't OpenID Connect, so the profile comes
+ * from two REST calls: /user (name, avatar) and /user/emails (the email
+ * list with verified flags — /user's own `email` is only the public one,
+ * often null, and carries no verification flag).
+ */
+class {
+
+	variables.clientId     = "";
+	variables.clientSecret = "";
+	variables.redirectUri  = "";
+
+	function init( required string clientId, required string clientSecret, required string redirectUri ){
+		variables.clientId     = arguments.clientId;
+		variables.clientSecret = arguments.clientSecret;
+		variables.redirectUri  = arguments.redirectUri;
+		return this;
+	}
+
+	function isConfigured(){
+		return len( variables.clientId ) > 0 && len( variables.clientSecret ) > 0;
+	}
+
+	function buildAuthorizationUrl( required string state ){
+		return "https://github.com/login/oauth/authorize?" & _toFormBody( {
+			"client_id"   : variables.clientId,
+			"redirect_uri": variables.redirectUri,
+			"scope"       : "read:user user:email",
+			"state"       : arguments.state,
+			"allow_signup": "true"
+		} );
+	}
+
+	/**
+	 * @throws {GitHubOAuthError} GitHub answers a bad/expired code with
+	 *         HTTP 200 and an `error` field, so both are checked.
+	 */
+	function exchangeCodeForToken( required string code ){
+		var body = _toFormBody( {
+			"code"         : arguments.code,
+			"client_id"    : variables.clientId,
+			"client_secret": variables.clientSecret,
+			"redirect_uri" : variables.redirectUri
+		} );
+
+		var response = _client().send(
+			createObject( "java", "java.net.http.HttpRequest" )
+				.newBuilder()
+				.uri( _uri( "https://github.com/login/oauth/access_token" ) )
+				.header( "Content-Type", "application/x-www-form-urlencoded" )
+				.header( "Accept", "application/json" )
+				.header( "User-Agent", "KISDigital" )
+				.POST( createObject( "java", "java.net.http.HttpRequest$BodyPublishers" ).ofString( body ) )
+				.build(),
+			createObject( "java", "java.net.http.HttpResponse$BodyHandlers" ).ofString()
+		);
+		if ( response.statusCode() != 200 ){
+			throw( type: "GitHubOAuthError", message: "Token exchange failed (HTTP " & response.statusCode() & "): " & response.body() );
+		}
+
+		var parsed = JSONDeserialize( response.body() );
+		if ( !len( parsed.access_token ?: "" ) ){
+			throw( type: "GitHubOAuthError", message: "Token exchange failed: " & ( parsed.error_description ?: parsed.error ?: response.body() ) );
+		}
+		return parsed.access_token;
+	}
+
+	/**
+	 * @return {struct} { email, emailVerified, name, pictureUrl } — same
+	 *         keys as GoogleOAuthClient.getUserInfo(). email is the
+	 *         account's primary address, and emailVerified is GitHub's own
+	 *         flag for it.
+	 */
+	function getUserInfo( required string accessToken ){
+		var user   = _apiGet( "https://api.github.com/user", arguments.accessToken );
+		var emails = _apiGet( "https://api.github.com/user/emails", arguments.accessToken );
+
+		var primary = emails.find( ( e ) => e.primary ?: false );
+		var entry   = primary ? emails[ primary ] : {};
+
+		var name = trim( user.name ?: "" );
+		if ( !len( name ) ) name = user.login ?: "";
+
+		return {
+			"email"        : entry.email ?: "",
+			"emailVerified": entry.verified ?: false,
+			"name"         : name,
+			"pictureUrl"   : user.avatar_url ?: ""
+		};
+	}
+
+	private function _apiGet( required string apiUrl, required string accessToken ){
+		var response = _client().send(
+			createObject( "java", "java.net.http.HttpRequest" )
+				.newBuilder()
+				.uri( _uri( arguments.apiUrl ) )
+				.header( "Authorization", "Bearer " & arguments.accessToken )
+				.header( "Accept", "application/vnd.github+json" )
+				.header( "User-Agent", "KISDigital" )
+				.GET()
+				.build(),
+			createObject( "java", "java.net.http.HttpResponse$BodyHandlers" ).ofString()
+		);
+		if ( response.statusCode() != 200 ){
+			throw( type: "GitHubOAuthError", message: arguments.apiUrl & " failed (HTTP " & response.statusCode() & "): " & response.body() );
+		}
+		return JSONDeserialize( response.body() );
+	}
+
+	private function _toFormBody( required struct params ){
+		var encoder = createObject( "java", "java.net.URLEncoder" );
+		var parts   = [];
+		for ( var key in arguments.params ){
+			parts.append( encoder.encode( key, "UTF-8" ) & "=" & encoder.encode( arguments.params[ key ], "UTF-8" ) );
+		}
+		return parts.toList( "&" );
+	}
+
+	// See GoogleOAuthClient._client(): the HttpRequest must be built inline
+	// as the .send() argument, never stored in a local var first.
+	private function _client(){
+		return createObject( "java", "java.net.http.HttpClient" ).newBuilder().build();
+	}
+
+	private function _uri( required string target ){
+		return createObject( "java", "java.net.URI" ).init( arguments.target );
+	}
+
+}

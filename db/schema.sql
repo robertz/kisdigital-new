@@ -62,11 +62,11 @@ create table TagPost
         foreign key (tag_id) references Tag (id)
 );
 
--- role='commenter' (0007) is a Google-only account tier with no /manage
--- access, created by AuthService.findOrCreateGoogleUser() for anyone
+-- role='commenter' (0007) is a Google/GitHub-only account tier with no /manage
+-- access, created by AuthService.findOrCreateOAuthUser() for anyone
 -- signing in whose email doesn't match an existing author/admin row —
 -- built as groundwork for the Comment table below. avatar_url (0008) is
--- that same Google account's profile photo, synced on every login.
+-- that same account's profile photo, synced on every login.
 create table User
 (
     id           varchar(36)                          default (uuid())          not null
@@ -414,4 +414,21 @@ create table PostEmailDelivery
     subscriber_id varchar(36) not null,
     sent          timestamp   default CURRENT_TIMESTAMP not null,
     primary key (post_id, subscriber_id)
+);
+
+-- Passkeys for commenters (bx-passkeys' TableCredentialStore, shape from its
+-- sql/mysql.sql). user_id is User.id. The binary collations make
+-- credential_id and user_id compare case-sensitively, which the module needs.
+create table Passkey
+(
+    credential_id varchar(1400) character set ascii collate ascii_bin     not null primary key,
+    user_id       varchar(255)  character set utf8mb4 collate utf8mb4_bin not null,
+    public_key    text                                                    not null,
+    algorithm     int                                                     not null,
+    sign_count    bigint        default 0                                 not null,
+    transports    varchar(255)                                            null,
+    name          varchar(100)  character set utf8mb4                     not null,
+    created_at    datetime                                                not null,
+    last_used_at  datetime                                                null,
+    key ix_passkey_user (user_id)
 );
