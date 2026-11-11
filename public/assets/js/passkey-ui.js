@@ -37,6 +37,31 @@ document.querySelectorAll('[data-passkey-signin]').forEach((button) => {
   })
 })
 
+document.querySelectorAll('[data-passkey-step]').forEach((button) => {
+  if (!supported) {
+    document.querySelector('[data-passkey-unsupported]')?.removeAttribute('hidden')
+    return
+  }
+  button.hidden = false
+  const errorBox = document.querySelector('[data-passkey-error]')
+  const csrf = button.dataset.csrf
+  button.addEventListener('click', async () => {
+    button.disabled = true
+    if (errorBox) errorBox.hidden = true
+    try {
+      const step = await post('/manage/passkey/options', {}, csrf)
+      const answer = step.mode === 'enroll' ? await createPasskey(step.options) : await signWithPasskey(step.options)
+      if (!answer) return
+      const result = await post('/manage/passkey', answer, csrf)
+      window.location.assign(result.redirect)
+    } catch (error) {
+      showError(errorBox, error.message)
+    } finally {
+      button.disabled = false
+    }
+  })
+})
+
 document.querySelectorAll('[data-passkey-add]').forEach((button) => {
   if (!supported) {
     document.querySelector('[data-passkey-unsupported]')?.removeAttribute('hidden')

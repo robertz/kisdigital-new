@@ -208,6 +208,16 @@ app.locals.jsHref   = jsHref
 app.locals.codeJsHref = codeJsHref
 app.locals.githubSignInEnabled = githubOAuthClient.isConfigured()
 
+// /manage needs a passkey (routes/Auth.bx). A staff session from before that
+// rule, or from any other way in, is dropped here.
+app.use( ( req, res, next ) => {
+	var staff = req.session.manage_user ?: ""
+	if ( len( staff ) && !( staff.passkey ?: false ) ){
+		structDelete( req.session, "manage_user" )
+	}
+	next()
+} )
+
 app.use( ( req, res, next ) => {
 	res.locals.manageUser = req.session.manage_user ?: ""
 	res.locals.currentPath = req.path

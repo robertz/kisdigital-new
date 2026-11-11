@@ -12,7 +12,7 @@
 
 		<!--- Heading --->
 		<h1 class="c-auth__title">Sign in</h1>
-		<p class="c-auth__subtitle mb-4">Sign in to manage your content.</p>
+		<p class="c-auth__subtitle mb-4">Sign in to manage your content. The dashboard needs a passkey: sign in with one below, or with your password and then your passkey.</p>
 
 		<!--- Error message --->
 		<bx:if len( data.error )>

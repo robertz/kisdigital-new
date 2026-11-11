@@ -114,17 +114,18 @@ class {
 		_clearLoginAttempts( accountKey );
 
 		// A new session id at sign-in, so one planted in the browser beforehand
-		// never becomes a signed-in session.
+		// never becomes a signed-in session. The password only gets as far as
+		// the passkey step (routes/Auth.bx): /manage needs a passkey.
 		req.regenerateSession();
-		req.session.manage_user = {
+		req.session.pending_staff = {
 			"id"           : user.id,
 			"display_name" : user.display_name,
 			"email"        : user.email,
 			"role"         : user.role
 		};
 
-		println( "[auth] successful login for '" & userEmail & "' from " & req.ip );
-		res.redirect( "/manage" );
+		println( "[auth] password accepted for '" & userEmail & "' from " & req.ip & ", passkey step next" );
+		res.redirect( "/manage/passkey" );
 	}
 
 	// Fixed-window counter in the same "default" cache other services here

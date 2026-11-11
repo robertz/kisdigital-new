@@ -158,6 +158,8 @@
 }
 
 .c-auth__passkey-btn[hidden],
+.c-auth__submit[hidden],
+.c-auth__subtitle[hidden],
 .c-auth__error[hidden] {
 	display: none;
 }

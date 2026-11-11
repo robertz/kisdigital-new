@@ -1,0 +1,31 @@
+<bx:include template="../partials/_head.bxm">
+<bx:output>
+<div class="c-auth-page">
+	<div class="c-auth-card">
+
+		<div class="text-center mb-4">
+			<a href="/" class="c-auth__logo">
+				<span class="c-auth__bracket">[</span>KISDigital<span class="c-auth__bracket">]</span>
+			</a>
+		</div>
+
+		<bx:if data.enroll>
+			<h1 class="c-auth__title">Add a passkey</h1>
+			<p class="c-auth__subtitle">The dashboard needs a passkey. Add one for #encodeForHTML( data.pending.email )# with your device's fingerprint, face or PIN. You'll use it every time you sign in.</p>
+		<bx:else>
+			<h1 class="c-auth__title">Confirm with your passkey</h1>
+			<p class="c-auth__subtitle">Signed in as #encodeForHTML( data.pending.email )#. Use your passkey to open the dashboard.</p>
+		</bx:if>
+
+		<div class="c-auth__error mb-3" role="alert" data-passkey-error hidden></div>
+		<button type="button" class="c-auth__submit" data-passkey-step data-csrf="#encodeForHTMLAttribute( data.csrfToken )#" hidden>
+			#data.enroll ? "Add a passkey and continue" : "Use my passkey"#
+		</button>
+		<p class="c-auth__subtitle" data-passkey-unsupported hidden>This browser doesn't support passkeys. Use one that does to sign in.</p>
+
+		<p class="text-center mt-4"><a href="/manage/logout">Cancel</a></p>
+	</div>
+</div>
+<script type="module" src="/assets/js/passkey-ui.js"></script>
+</bx:output>
+<bx:include template="../partials/_foot.bxm">

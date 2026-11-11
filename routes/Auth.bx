@@ -54,6 +54,16 @@ class {
 		this.router.post( "/account/passkeys", requireAccount, ( req, res ) => passkeyRegister( req, res ) );
 		this.router.post( "/account/passkeys/:id/delete", requireAccount, ( req, res ) => passkeyRemove( req, res ) );
 
+		// /manage needs a passkey. A password or Google/GitHub sign-in for staff
+		// stops at pending_staff and lands here: confirm with one of the
+		// account's passkeys, or add the first one if it has none.
+		var requirePending = ( req, res, next ) => _requirePendingStaff( req, res, next );
+		var stepLimit      = boxExpressRateLimit( { windowMs: 15 * 60000, max: 20 } );
+		this.router.use( "/manage/passkey", boxExpressCsrf() );
+		this.router.get( "/manage/passkey", requirePending, ( req, res ) => staffPasskeyPage( req, res ) );
+		this.router.post( "/manage/passkey/options", requirePending, stepLimit, ( req, res ) => staffPasskeyOptions( req, res ) );
+		this.router.post( "/manage/passkey", requirePending, stepLimit, ( req, res ) => staffPasskeyFinish( req, res ) );
+
 		return this;
 	}
 
@@ -117,8 +127,8 @@ class {
 				return;
 			}
 
-			if ( _signIn( req, user, p.label ) ){
-				res.redirect( len( trim( redirectTo ) ) && redirectTo != "/" ? redirectTo : "/manage" );
+			if ( _signIn( req, user, p.label ) == "pending" ){
+				res.redirect( "/manage/passkey" );
 				return;
 			}
 			res.redirect( redirectTo );
@@ -155,8 +165,8 @@ class {
 		}
 
 		var redirectTo = _safeRedirect( body.redirect ?: "/" );
-		var isStaff    = _signIn( req, user, "passkey" );
-		res.json( { success: true, redirect: isStaff && redirectTo == "/" ? "/manage" : redirectTo } );
+		var outcome    = _signIn( req, user, "passkey" );
+		res.json( { success: true, redirect: outcome == "staff" && redirectTo == "/" ? "/manage" : redirectTo } );
 	}
 
 	// GET /account
@@ -202,11 +212,76 @@ class {
 	function passkeyRemove( req, res ){
 		var store      = variables.passkeys.getStore();
 		var credential = store.findByCredentialId( req.params.id ?: "" );
-		if ( !isNull( credential ) && credential.userId == _accountUser( req ).id ){
-			store.remove( credential.credentialId );
-			req.session._flash = { accountNotice: "Passkey removed." };
+		var me         = _accountUser( req );
+		if ( !isNull( credential ) && credential.userId == me.id ){
+			// Staff with no passkey could add one with just a password, so
+			// they always keep at least one.
+			if ( me.isStaff && store.listForUser( me.id ).len() <= 1 ){
+				req.session._flash = { accountNotice: "This is your only passkey, and the dashboard needs one. Add another before removing it." };
+			} else {
+				store.remove( credential.credentialId );
+				req.session._flash = { accountNotice: "Passkey removed." };
+			}
 		}
 		res.redirect( "/account" );
+	}
+
+	// GET /manage/passkey
+	function staffPasskeyPage( req, res ){
+		var pending = req.session.pending_staff;
+		res.render( "manage/passkey", {
+			pageTitle : "Confirm with your passkey",
+			pending   : pending,
+			enroll    : !variables.passkeys.getStore().listForUser( pending.id ).len(),
+			csrfToken : req.csrfToken()
+		} );
+	}
+
+	// POST /manage/passkey/options
+	function staffPasskeyOptions( req, res ){
+		var pending = req.session.pending_staff;
+		try {
+			if ( variables.passkeys.getStore().listForUser( pending.id ).len() ){
+				res.json( { mode: "confirm", options: variables.passkeys.signInOptions( req.session, pending.id ) } );
+			} else {
+				res.json( {
+					mode   : "enroll",
+					options: variables.passkeys.registrationOptions( { id: pending.id, name: pending.email, displayName: pending.display_name }, req.session )
+				} );
+			}
+		} catch ( "Passkeys.Invalid" e ){
+			res.status( 400 ).json( { success: false, error: e.message } );
+		}
+	}
+
+	// POST /manage/passkey — body: what signWithPasskey() returned (confirm)
+	// or what createPasskey() returned (enroll, only while the account has
+	// no passkey).
+	function staffPasskeyFinish( req, res ){
+		var pending = req.session.pending_staff;
+		var body    = req.body ?: {};
+		try {
+			if ( variables.passkeys.getStore().listForUser( pending.id ).len() ){
+				variables.passkeys.verify( req.session, body );
+			} else {
+				body.name = left( trim( body.name ?: "" ), 100 );
+				variables.passkeys.register( { id: pending.id }, req.session, body );
+				println( "[auth] first passkey added for '" & pending.email & "' from " & req.ip );
+			}
+		} catch ( "Passkeys.Invalid" e ){
+			println( "[auth] staff passkey step refused for '" & pending.email & "' from " & req.ip & ": " & e.message );
+			res.status( 401 ).json( { success: false, error: e.message } );
+			return;
+		}
+
+		var user = variables.authService.findActiveUserById( pending.id );
+		if ( user.isEmpty() || ( user.role != "admin" && user.role != "author" ) ){
+			structDelete( req.session, "pending_staff" );
+			res.status( 401 ).json( { success: false, error: "This account can't sign in." } );
+			return;
+		}
+		_signIn( req, user, "passkey" );
+		res.json( { success: true, redirect: "/manage" } );
 	}
 
 	// GET /auth/logout?redirect=<internal path> — clears a commenter
@@ -221,20 +296,28 @@ class {
 		res.redirect( _safeRedirect( req.query.redirect ?: "/" ) );
 	}
 
-	// Starts a fresh session for `user` (a struct from AuthService). Staff get
-	// the CMS session, everyone else the commenter one. Returns true for staff.
-	private boolean function _signIn( req, required struct user, required string method ){
+	// Starts a fresh session for `user` (a struct from AuthService). Returns
+	// "staff" (CMS session, only ever via a passkey), "pending" (staff who
+	// signed in another way: next is /manage/passkey) or "commenter".
+	private string function _signIn( req, required struct user, required string method ){
 		req.regenerateSession();
 
 		if ( user.role == "admin" || user.role == "author" ){
-			req.session.manage_user = {
+			var staff = {
 				"id"           : user.id,
 				"display_name" : user.display_name,
 				"email"        : user.email,
 				"role"         : user.role
 			};
-			println( "[auth] successful " & arguments.method & " sign-in for '" & user.email & "' from " & req.ip );
-			return true;
+			if ( arguments.method != "passkey" ){
+				req.session.pending_staff = staff;
+				println( "[auth] " & arguments.method & " accepted for '" & user.email & "' from " & req.ip & ", passkey step next" );
+				return "pending";
+			}
+			staff[ "passkey" ] = true;
+			req.session.manage_user = staff;
+			println( "[auth] successful passkey sign-in for '" & user.email & "' from " & req.ip );
+			return "staff";
 		}
 
 		req.session.commenter = {
@@ -244,7 +327,7 @@ class {
 			"avatar_url"  : user.avatar_url ?: ""
 		};
 		println( "[auth] " & arguments.method & " sign-in (commenter) for '" & user.email & "' from " & req.ip );
-		return false;
+		return "commenter";
 	}
 
 	// Staff (manage_user) or commenter: { id, email, display_name, isStaff }.
@@ -255,6 +338,18 @@ class {
 		}
 		var c = req.session.commenter;
 		return { "id": c.id, "email": c.email, "display_name": c.display_name, "isStaff": false };
+	}
+
+	private function _requirePendingStaff( req, res, next ){
+		if ( !len( req.session.pending_staff ?: "" ) ){
+			if ( req.method == "GET" ){
+				res.redirect( len( req.session.manage_user ?: "" ) ? "/manage" : "/manage/login" );
+			} else {
+				res.status( 401 ).json( { success: false, error: "Sign in again." } );
+			}
+			return;
+		}
+		next();
 	}
 
 	private function _requireAccount( req, res, next ){
