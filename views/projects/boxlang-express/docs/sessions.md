@@ -88,6 +88,10 @@ app.use( boxExpressSession( { store: boxExpressCacheStore( "sessions" ) } ) )
 
 `boxExpressSession( { cache: "sessions" } )` is shorthand for the same thing.
 
+Entries are stored under `boxexpress-session-<id>`, so a session id can never address anything else kept in the same cache — another feature's data, or the rate limiter's own counters. The session middleware also only looks up cookie values shaped like the ids it issues (64 hex characters); anything else gets a new, empty session.
+
+> **Upgrading to 0.2.26** signs out existing cache-backed sessions once: their entries are under the old, unprefixed keys, which are no longer read.
+
 The named cache (`"sessions"` here) should already be registered in your BoxLang config (`.boxlang.json`) — this doesn't create one, it just talks to it (if it's missing, the app keeps serving — see [Falling back without durable storage](#falling-back-without-durable-storage)). Point that cache's `objectStore` at `"JDBCStore"` and session data lands in a real SQL table instead of memory, surviving a restart and shared across every process pointed at the same database. `JDBCStore` auto-detects the database vendor from the JDBC driver (MySQL, Postgres, SQL Server, Oracle, SQLite, Derby, HSQLDB, MariaDB) to generate the right SQL for each:
 
 ```json

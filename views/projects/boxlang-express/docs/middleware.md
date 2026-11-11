@@ -88,7 +88,7 @@ app.use( boxExpressJSON( { limit: 5000000 } ) )  // 5MB
 
 A body over the limit gets a `413` response and never reaches your route handler.
 
-A JSON body that doesn't parse gets a `400` (`{ error: true, message: "Malformed JSON body" }`), answered directly like the `413`. Before 0.2.21 the parse exception went to `next()` and surfaced as a `500`; error-handling middleware no longer sees it, so an app that turned it into its own `400` can drop that.
+A JSON body that doesn't parse gets a `400` (`{ error: true, message: "Malformed JSON body" }`), answered directly like the `413`. So does a urlencoded body with a malformed `%` escape (since 0.2.26). Before 0.2.21 the parse exception went to `next()` and surfaced as a `500`; error-handling middleware no longer sees it, so an app that turned it into its own `400` can drop that.
 
 ## Serving static files
 

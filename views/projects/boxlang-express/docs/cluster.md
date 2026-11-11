@@ -35,7 +35,7 @@ Off by default — an app that never opts in pays nothing for any of this. Confi
 | `name` | when enabled | This instance's own identity, written to the shared cache as its heartbeat key — typically a reachable `ws://` URL for the relay mesh to dial. |
 | `cacheProvider` | when enabled | The name of a cache from your BoxLang config, backed by a genuinely durable/shared object store. |
 | `secretKey` | for STOMP relay | Gates the relay mesh's `/__cluster` endpoint. Required (at least 16 characters) whenever a STOMP broker is given `{ cluster: ... }` — see below. Every instance must share the same value, sourced from an environment variable, never a literal in source. |
-| `peerIdleTimeoutSeconds` | — | Default `30`. How long a missed heartbeat is tolerated before a peer is considered gone. |
+| `peerIdleTimeoutSeconds` | — | Default `30`, minimum `1`. How long a missed heartbeat is tolerated before a peer is considered gone. Heartbeats are written every third of it (250ms minimum). |
 
 The `/__cluster` endpoint is on the app's public port, and anything that connects to it can publish to every subscriber in the cluster — so a clustered STOMP broker won't start without a `secretKey` (before 0.2.20, leaving it unset left the endpoint open). It's compared in constant time. The secret travels in a handshake header over `ws://`, so keep peer traffic on a private network. Clustering used only for `app.schedule({ clustered: true })` doesn't open the endpoint and doesn't need a secret.
 
@@ -49,7 +49,20 @@ app.schedule( 60000, () => {
 }, { clustered: true } )
 ```
 
-Only the elected instance actually runs a clustered job's tick; every other instance does nothing for it, not even the overlap bookkeeping a normal job gets. Failover is passive: if the elected instance goes down, the next instance to check discovers its heartbeat has gone stale and promotes itself, within roughly one heartbeat cycle. See [Scheduler](/projects/boxlang-express/docs/scheduler) for everything else about `app.schedule()`.
+Only the elected instance actually runs a clustered job's tick; every other instance does nothing for it, not even the overlap bookkeeping a normal job gets. If the manager goes down, the others elect a replacement once its heartbeat is `peerIdleTimeoutSeconds` old — see below. See [Scheduler](/projects/boxlang-express/docs/scheduler) for everything else about `app.schedule()`.
+
+A clustered `app.schedule()` builds the cluster manager on the calling thread, so a misconfigured cluster throws `BoxExpress.ClusterConfigError` there rather than on a later tick. After `app.close()`, `app.schedule()` and `app.getClusterManager()` throw `BoxExpress.AppClosed`.
+
+## How the manager is elected
+
+The shared cache has no compare-and-set, so election isn't "first instance to write the manager key wins" — two instances that both found it empty would both win. Instead:
+
+- An instance becomes an **election candidate** the first time it checks who the manager is (a clustered job's tick does this), and says so on its heartbeat. An instance with no clustered jobs is never elected.
+- A manager that is still a live candidate **keeps the role**; a new instance joining doesn't take it over. The manager renews its claim on every heartbeat, so the role doesn't lapse while it's healthy. A holder that restarted without clustered jobs is no longer a candidate and loses the role straight away.
+- A manager whose own last successful heartbeat is more than half of `peerIdleTimeoutSeconds` old **steps down**: it stops running clustered jobs and stops renewing its claim. Peers only elect a replacement once that heartbeat is a full `peerIdleTimeoutSeconds` old, so the old and new manager don't overlap.
+- With no live manager, every instance picks the **same winner from the same heartbeat data** — the live candidate with the lowest name (case-sensitive) — and only the winner writes the claim. A check that can't read every peer counts as not-manager for that round rather than electing from a partial view.
+
+Two instances can only both act as manager if they disagree about who is live: briefly, as a candidate's heartbeat crosses `peerIdleTimeoutSeconds` while no manager holds the claim, or when the nodes' clocks differ by more than half of `peerIdleTimeoutSeconds`. That makes a double-run rare, not impossible: a clustered job is at-most-almost-once, so don't use one where a double-run is unacceptable (charging a customer, a one-time notification that matters).
 
 ## STOMP relay mesh
 

@@ -164,7 +164,7 @@ Prefer a hop count or an address list. With `true`, the left-most entry is whate
 Platforms like this typically also inject their own edge-set header carrying the real client IP — set from the connection the edge itself observed, not anything the client sent. `"trust proxy header"` checks one or more of those by name, in order, and uses the first one present:
 
 ```bxs
-app.set( "trust proxy header", [ "DO-Connecting-IP", "CF-Connecting-IP" ] )
+app.set( "trust proxy header", [ "CF-Connecting-IP" ] )
 ```
 
-This is what this site itself runs behind (DO App Platform, Cloudflare-proxied) — see `app.bxs`. Other platforms set their own equivalent (`Fastly-Client-IP`, etc.) — check with your host.
+This site runs behind a Cloudflare tunnel and trusts `CF-Connecting-IP` alone — see `app.bxs`. On DO App Platform the header is `DO-Connecting-IP`; other platforms set their own equivalent (`Fastly-Client-IP`, etc.) — check with your host. Only trust a header that your edge always sets: if requests can reach the app some other way, a client can send the header itself.

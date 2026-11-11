@@ -25,6 +25,8 @@ The `req.*` API available inside every handler.
 
 `req.body` is populated by body-parsing middleware and `req.files` by the upload middleware — see [Middleware](/projects/boxlang-express/docs/middleware) and [File Uploads](/projects/boxlang-express/docs/uploads).
 
+Cookie and query values are URL-decoded. One with a malformed escape (`discount=50%`, `%zz`) is kept as its raw text rather than failing the request — a cookie can be set by any script or sibling subdomain, so a bad one shouldn't lock a visitor out. (Before 0.2.26 it failed every request carrying it with a `500`.)
+
 ## req.ip behind a proxy
 
 `req.ip` is always the direct TCP peer by default — safe, since a client can't spoof it, but wrong behind a reverse proxy (it reports the proxy's IP). `app.set( "trust proxy", ... )` says which proxies to believe, with the same meanings as Express: `false` (the default), a hop count, a list of proxy addresses, or `true`. On platforms where `X-Forwarded-For` can be forged, `"trust proxy header"` reads an edge-set header instead. Both are covered in full under [Configuration](/projects/boxlang-express/docs/config#app-level-settings).

@@ -12,6 +12,8 @@ app.schedule( 60000, () => {
 
 This is the `setInterval` equivalent, not a cron scheduler — deliberately no cron-expression parsing in this pass (see the non-goals below). Lazily creates one internal `Scheduler` instance on the first call; an app that never calls `schedule()` pays nothing for it.
 
+`intervalMs` must be a whole number of milliseconds, 1 or more; anything else throws `BoxExpress.InvalidArgument` and nothing is scheduled. `schedule()` is safe to call from concurrent requests, and after `app.close()` it throws `BoxExpress.AppClosed`.
+
 ## Job handles and self-cancelling jobs
 
 `schedule()` returns a job handle — `{ cancel(), name }` — the same handle passed as the callback's own (optional) argument, so a job that needs to stop itself doesn't have to hang onto the return value of `schedule()` to do it:
@@ -24,6 +26,8 @@ app.schedule( 60000, ( job ) => {
 }, { name: "poll-external-api", immediate: true } )
 ```
 
+A job can cancel itself at any time, including from inside its first `immediate: true` run, before `schedule()` has returned.
+
 ## Options
 
 | Option | Default | Effect |
@@ -31,6 +35,8 @@ app.schedule( 60000, ( job ) => {
 | `name` | an internal id like `"job-3"` | Labels the job for `getScheduledJobs()` and the `[Scheduler] job '...' threw` error log |
 | `immediate` | `false` | Runs the first tick right away instead of waiting a full interval first |
 | `allowOverlap` | `false` | Whether a tick that comes due while the previous run is still in flight should run anyway |
+| `clustered` | `false` | Runs the job on only one instance of a cluster — see [Cluster Support](/projects/boxlang-express/docs/cluster) |
+| `stallThresholdMs` | 10x the interval, at least 30000 | How long a run may stay active before it's treated as hung (see below) |
 
 `allowOverlap: false` (the default) skips a tick entirely — not queued, not delayed — rather than letting an occasionally-slow job (a slow query, a network call) pile up an unbounded number of concurrent runs. Pass `allowOverlap: true` only for a job that's actually safe to run concurrently with itself.
 
@@ -40,7 +46,7 @@ Every job's tick is driven by one shared `ScheduledExecutorService` per app, but
 
 A thrown error inside a job is caught and logged (`[Scheduler] job 'name' threw: ...`), never left to kill future ticks of that job or any other — same posture as the STOMP broker's server-side listener guard (see [STOMP](/projects/boxlang-express/docs/stomp)).
 
-A job body that never returns at all (blocks forever with no timeout of its own) is a separate failure mode from a thrown error — nothing throws, so the catch above never fires, and with `allowOverlap: false` every future tick would otherwise be skipped forever thinking the previous run is still in flight. A stall watchdog guards against this: a run still marked active past `max(intervalMs * 10, 30000)`ms has its `runningFlag` force-reset (logged as `[Scheduler] job '...' has been running for ...ms ... — forcing it open...`) so future ticks aren't blocked permanently. If the stalled run does eventually finish, it harmlessly resets a flag that's already been reset.
+A job body that never returns at all (blocks forever with no timeout of its own) is a separate failure mode from a thrown error — nothing throws, so the catch above never fires, and with `allowOverlap: false` every future tick would otherwise be skipped forever thinking the previous run is still in flight. A stall watchdog guards against this: once a run has been active longer than its stall threshold (`stallThresholdMs`, default 10x the interval with a 30s minimum), the next tick logs it and starts a new run in its place. Each run owns the job by id, so if the hung run does return later it doesn't clear the new run's active state, and the overlap guard still holds.
 
 ## Introspection and shutdown
 
@@ -50,7 +56,7 @@ app.get( "/admin/jobs", ( req, res ) => {
 } )
 ```
 
-`app.getScheduledJobs()` returns a struct of live job state (`name`, `allowOverlap`, `running`) — an introspection getter for debugging/ops, not a stable data API to build app logic against, same pattern as the STOMP broker's `getConnections()`/`getSubscriptions()`.
+`app.getScheduledJobs()` returns a struct of live job state (`name`, `allowOverlap`, `clustered`, `running`, where `running` counts runs actually in flight) — an introspection getter for debugging/ops, not a stable data API to build app logic against, same pattern as the STOMP broker's `getConnections()`/`getSubscriptions()`.
 
 `app.close()` cancels every job and shuts the scheduler down, the same teardown block that already stops the reload watcher and the HTTP server — no separate cleanup call needed.
 

@@ -30,6 +30,8 @@ app.post(
 
 `boxExpressUpload()` parses a `multipart/form-data` request: non-file fields land in `req.body` same as any other body parser. `req.files` is a struct keyed by field name, each value an _array_ of file structs — a field can carry more than one file — with shape `{ fieldName, filename, contentType, size, buffer, path }`. `path` is only present when `dest` was given; the client-supplied filename is never used to build it, sidestepping path-traversal/collision entirely. The file's extension is kept only if it's 1–10 letters or digits (lower-cased); anything else is dropped.
 
+A part with no `name` in its `Content-Disposition` is answered with a `400` (`Malformed multipart body`), and a part's `name` is never read out of its `filename="..."`, whichever order the client sends them in.
+
 > [!WARNING] Keep uploads out of your static directory
 > Don't point `dest` inside a directory `boxExpressStatic()` serves. An uploaded `.html` or `.svg` would then be served back as a page on your own origin.
 

@@ -47,7 +47,7 @@ An `authenticate`, `authorize` or `onSend` callback that throws doesn't leave th
 
 Application headers on a client `SEND` (`reply-to`, `correlation-id`, anything custom) are forwarded on the `MESSAGE` frame. The headers the protocol or broker owns (`destination`, `transaction`, `receipt`, `content-length`, `message-id`, `subscription`, `ack`) are not copied, so a client can't forge them. Frames may use `\n` or `\r\n` line endings, and `content-length` is an octet count, so multi-byte bodies round-trip.
 
-Header values are escaped per the STOMP spec (backslash, newline, colon), not just stripped, so a destination or login value built from request-derived input can't break a frame's structure.
+Header values are escaped per the STOMP spec (backslash, newline, colon), not just stripped, so a destination or login value built from request-derived input can't break a frame's structure. STOMP 1.0 has no escapes, so line breaks are dropped from headers sent to a 1.0 subscriber, CR from 1.1 headers, and NUL from all of them.
 
 ## Protocol versions
 
@@ -95,7 +95,7 @@ stomp = boxExpressStomp( {
 
 ## Targeted delivery
 
-`stomp.sendToUser( login, destination, data, headers )` publishes to `destination` (through the exchanges, like any publish) but only to subscriptions whose connection authenticated with that `login` — every connection the user has open, no one else's. `stomp.sendToConnection( connectionId, destination, data, headers )` does the same for one connection (a key of `getConnections()`). Both return how many subscriptions on this node received it, don't invoke server-side `listeners`, and, with `options.cluster`, are relayed so the recipient is reached on whichever node holds their connection.
+`stomp.sendToUser( login, destination, data, headers )` publishes to `destination` (through the exchanges, like any publish) but only to subscriptions whose connection authenticated with that `login`, compared exactly (case included, so `alice` doesn't reach `ALICE`, nor `7` reach `007`) — every connection the user has open, no one else's. `stomp.sendToConnection( connectionId, destination, data, headers )` does the same for one connection (a key of `getConnections()`). Both return how many subscriptions on this node received it, don't invoke server-side `listeners`, and, with `options.cluster`, are relayed so the recipient is reached on whichever node holds their connection.
 
 ## Presence
 
@@ -170,7 +170,9 @@ A listener's own exception is caught and logged, not allowed to break delivery t
 
 ## What's still not built
 
-This is a real, if intentionally smaller, first version — not the whole STOMP ecosystem some brokers support. Deliberately not built: **binary bodies** — inbound frames may arrive as binary WebSocket messages (decoded as UTF-8), but outbound frames are always text, and `content-length` is honored on read/write so a body containing an embedded NUL byte round-trips correctly while genuinely non-UTF-8 octets can't. Also not built: message **redelivery** (`NACK` and unacknowledged messages just clear bookkeeping — there is no queue to redeliver into). Destination matching (both the subscriber registry and exchange bindings) is exact-string only — `/topic/a` and `/topic/a/` are different destinations.
+This is a real, if intentionally smaller, first version — not the whole STOMP ecosystem some brokers support. Deliberately not built: **binary bodies** — inbound frames may arrive as binary WebSocket messages (decoded as UTF-8), but outbound frames are always text, and `content-length` is honored on read/write so a body containing an embedded NUL byte round-trips correctly while genuinely non-UTF-8 octets can't. Also not built: message **redelivery** (`NACK` and unacknowledged messages just clear bookkeeping — there is no queue to redeliver into). Destination matching (both the subscriber registry and exchange bindings) is exact-string only — `/topic/a` and `/topic/a/` are different destinations, and so are `/topic/a` and `/Topic/A`. Destinations, subscription ids, exchange bindings, topic patterns and listeners all match case-sensitively, so an `authorize()` rule can't be sidestepped by changing a destination's case.
+
+> **Upgrading to 0.2.26:** matching used to ignore case. Apps that relied on that need to normalize destinations themselves.
 
 ## Clustering
 

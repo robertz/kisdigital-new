@@ -28,7 +28,7 @@ The default key is `req.ip`, so the same caveat as `req.ip` itself applies: behi
 
 ## Sharing the count across instances
 
-By default the store is in-memory on each `RateLimit` instance (same trade-off as `Session`'s default `MemoryStore` — fine for a single-process app, not a cluster). To share the count across instances, name a registered BoxLang cache:
+By default the store is in-memory (counted atomically, so concurrent requests can't slip past the limit) on each `RateLimit` instance (same trade-off as `Session`'s default `MemoryStore` — fine for a single-process app, not a cluster). To share the count across instances, name a registered BoxLang cache:
 
 ```bxs
 app.use( "/login", boxExpressRateLimit( { max: 5, windowMs: 15 * 60000, cache: "shared" } ) )
