@@ -151,6 +151,17 @@
 	color: var(--post-anchor);
 }
 
+.c-auth__passkey-btn {
+	margin-bottom: var(--space-3);
+	cursor: pointer;
+	font-family: inherit;
+}
+
+.c-auth__passkey-btn[hidden],
+.c-auth__error[hidden] {
+	display: none;
+}
+
 /* ── Error alert ── */
 
 .c-auth__error {

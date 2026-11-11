@@ -6,11 +6,15 @@
 			<div class="col-lg-8">
 
 				<h1 class="c-post__title">Your account</h1>
-				<p class="c-post__description">Signed in as <strong>#encodeForHTML( data.commenter.display_name )#</strong> (#encodeForHTML( data.commenter.email )#) &middot; <a href="/auth/logout">Sign out</a></p>
+				<p class="c-post__description">Signed in as <strong>#encodeForHTML( data.me.display_name )#</strong> (#encodeForHTML( data.me.email )#)<bx:if data.me.isStaff> &middot; <a href="/manage">Dashboard</a> &middot; <a href="/manage/logout">Sign out</a><bx:else> &middot; <a href="/auth/logout">Sign out</a></bx:if></p>
 
 				<div class="c-post__body c-account">
 					<h2>Passkeys</h2>
-					<p>A passkey lets you sign in to comment with your device's fingerprint, face or PIN, without going through Google or GitHub.</p>
+					<bx:if data.me.isStaff>
+						<p>A passkey lets you sign in to the dashboard with your device's fingerprint, face or PIN, instead of a password. Use &ldquo;Sign in with a passkey&rdquo; on the sign-in page or under any post.</p>
+					<bx:else>
+						<p>A passkey lets you sign in to comment with your device's fingerprint, face or PIN, without going through Google or GitHub.</p>
+					</bx:if>
 
 					<bx:if len( data.accountNotice )>
 						<div class="c-comment-form__notice" role="status">#encodeForHTML( data.accountNotice )#</div>

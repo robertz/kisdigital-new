@@ -15,6 +15,7 @@ import useMediaQuery from "@mui/material/useMediaQuery";
 import type { Theme } from "@mui/material/styles";
 import ChevronLeft from "@mui/icons-material/ChevronLeft";
 import ChevronRight from "@mui/icons-material/ChevronRight";
+import KeyOutlined from "@mui/icons-material/KeyOutlined";
 import LogoutOutlined from "@mui/icons-material/LogoutOutlined";
 import Search from "@mui/icons-material/Search";
 import { boot, isAdmin } from "./boot";
@@ -195,6 +196,10 @@ function Nav({ onSearch }: { onSearch: () => void }) {
 			</List>
 
 			<List sx={{ px: 1.5, pb: 2 }} disablePadding>
+				<NavItem
+					collapsed={collapsed}
+					item={{ id: "passkeys", label: "Passkeys", icon: KeyOutlined, href: "/account" }}
+				/>
 				<NavItem
 					collapsed={collapsed}
 					item={{ id: "signout", label: "Sign out", icon: LogoutOutlined, href: "/manage/logout" }}

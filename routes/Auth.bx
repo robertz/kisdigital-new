@@ -39,19 +39,20 @@ class {
 		this.router.post( "/auth/passkey/options", signInLimit, ( req, res ) => passkeySignInOptions( req, res ) );
 		this.router.post( "/auth/passkey", signInLimit, ( req, res ) => passkeySignIn( req, res ) );
 
-		// A commenter's own account page: their passkeys. Scoped so the token
-		// is only minted for requests that reach it.
-		var requireCommenter = ( req, res, next ) => _requireCommenter( req, res, next );
+		// The signed-in person's own account page: their passkeys. Commenters
+		// and staff alike. Scoped so the token is only minted for requests
+		// that reach it.
+		var requireAccount = ( req, res, next ) => _requireAccount( req, res, next );
 		this.router.use( "/account", boxExpressCsrf() );
-		this.router.get( "/account", requireCommenter, ( req, res ) => account( req, res ) );
+		this.router.get( "/account", requireAccount, ( req, res ) => account( req, res ) );
 		this.router.post(
 			"/account/passkeys/options",
-			requireCommenter,
+			requireAccount,
 			boxExpressRateLimit( { windowMs: 15 * 60000, max: 20 } ),
 			( req, res ) => passkeyRegistrationOptions( req, res )
 		);
-		this.router.post( "/account/passkeys", requireCommenter, ( req, res ) => passkeyRegister( req, res ) );
-		this.router.post( "/account/passkeys/:id/delete", requireCommenter, ( req, res ) => passkeyRemove( req, res ) );
+		this.router.post( "/account/passkeys", requireAccount, ( req, res ) => passkeyRegister( req, res ) );
+		this.router.post( "/account/passkeys/:id/delete", requireAccount, ( req, res ) => passkeyRemove( req, res ) );
 
 		return this;
 	}
@@ -162,10 +163,11 @@ class {
 	function account( req, res ){
 		var flash = req.session._flash ?: {};
 		structDelete( req.session, "_flash" );
+		var me = _accountUser( req );
 		res.render( "account/index", {
 			pageTitle     : "Your account",
-			commenter     : req.session.commenter,
-			passkeys      : variables.passkeys.getStore().listForUser( req.session.commenter.id ),
+			me            : me,
+			passkeys      : variables.passkeys.getStore().listForUser( me.id ),
 			accountNotice : flash.accountNotice ?: "",
 			csrfToken     : req.csrfToken()
 		} );
@@ -173,9 +175,9 @@ class {
 
 	// POST /account/passkeys/options
 	function passkeyRegistrationOptions( req, res ){
-		var c = req.session.commenter;
+		var me = _accountUser( req );
 		try {
-			res.json( variables.passkeys.registrationOptions( { id: c.id, name: c.email, displayName: c.display_name }, req.session ) );
+			res.json( variables.passkeys.registrationOptions( { id: me.id, name: me.email, displayName: me.display_name }, req.session ) );
 		} catch ( "Passkeys.Invalid" e ){
 			res.status( 400 ).json( { success: false, error: e.message } );
 		}
@@ -183,15 +185,16 @@ class {
 
 	// POST /account/passkeys — body: what createPasskey() returned.
 	function passkeyRegister( req, res ){
+		var me   = _accountUser( req );
 		var body = req.body ?: {};
 		body.name = left( trim( body.name ?: "" ), 100 );
 		try {
-			var credential = variables.passkeys.register( { id: req.session.commenter.id }, req.session, body );
+			var credential = variables.passkeys.register( { id: me.id }, req.session, body );
 		} catch ( "Passkeys.Invalid" e ){
 			res.status( 400 ).json( { success: false, error: e.message } );
 			return;
 		}
-		println( "[auth] passkey added for '" & req.session.commenter.email & "' from " & req.ip );
+		println( "[auth] passkey added for '" & me.email & "' from " & req.ip );
 		res.json( { success: true, name: credential.name } );
 	}
 
@@ -199,7 +202,7 @@ class {
 	function passkeyRemove( req, res ){
 		var store      = variables.passkeys.getStore();
 		var credential = store.findByCredentialId( req.params.id ?: "" );
-		if ( !isNull( credential ) && credential.userId == req.session.commenter.id ){
+		if ( !isNull( credential ) && credential.userId == _accountUser( req ).id ){
 			store.remove( credential.credentialId );
 			req.session._flash = { accountNotice: "Passkey removed." };
 		}
@@ -244,8 +247,18 @@ class {
 		return false;
 	}
 
-	private function _requireCommenter( req, res, next ){
-		if ( !len( req.session.commenter ?: "" ) ){
+	// Staff (manage_user) or commenter: { id, email, display_name, isStaff }.
+	private struct function _accountUser( req ){
+		var staff = req.session.manage_user ?: "";
+		if ( len( staff ) ){
+			return { "id": staff.id, "email": staff.email, "display_name": staff.display_name, "isStaff": true };
+		}
+		var c = req.session.commenter;
+		return { "id": c.id, "email": c.email, "display_name": c.display_name, "isStaff": false };
+	}
+
+	private function _requireAccount( req, res, next ){
+		if ( !len( req.session.manage_user ?: "" ) && !len( req.session.commenter ?: "" ) ){
 			if ( req.method == "GET" ){
 				res.redirect( "/" );
 			} else {
