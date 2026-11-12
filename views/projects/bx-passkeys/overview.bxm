@@ -4,7 +4,7 @@
 	<div class="c-project-hero">
 		<p class="c-project-hero__eyebrow">Project</p>
 		<h1 class="c-project-hero__title">bx-passkeys</h1>
-		<p class="c-project-hero__tagline"><a href="https://www.w3.org/TR/webauthn-3/" target="_blank" rel="noopener" class="c-post-link">WebAuthn</a> passkeys for <a href="https://boxlang.io" target="_blank" rel="noopener" class="c-post-link">BoxLang</a>: let people register a passkey and sign in with it, no password. It uses only JDK crypto (<code>java.security</code>), with no third-party jars, and has no routes of its own — you call four methods from your own handlers. The ColdBox edition is <a href="/projects/cbpasskeys" class="c-post-link">cbpasskeys</a>.</p>
+		<p class="c-project-hero__tagline"><a href="https://www.w3.org/TR/webauthn-3/" target="_blank" rel="noopener" class="c-post-link">WebAuthn</a> passkeys for <a href="https://boxlang.io" target="_blank" rel="noopener" class="c-post-link">BoxLang</a>: let people register a passkey and sign in with it, no password. Every browser answer is verified by <a href="https://github.com/webauthn4j/webauthn4j" target="_blank" rel="noopener" class="c-post-link">webauthn4j</a>, the library behind Spring Security's and Keycloak's passkey support. The module adds what webauthn4j leaves to you: one-time challenges, the options the browser needs, a credential store, and a sign counter that can't be raced. It has no routes of its own — you call four methods from your own handlers. The ColdBox edition is <a href="/projects/cbpasskeys" class="c-post-link">cbpasskeys</a>.</p>
 		<div class="c-project-hero__actions">
 			<a href="https://github.com/robertz/bx-passkeys" target="_blank" rel="noopener" class="btn btn-primary-custom">View on GitHub</a>
 		</div>
@@ -12,8 +12,8 @@
 
 	<div class="c-project-features">
 		<div class="c-project-feature">
-			<p class="c-project-feature__title"><i class="bi bi-cpu"></i> JDK crypto only</p>
-			<p class="c-project-feature__body">ES256, Ed25519 and RS256 — the three algorithms browsers actually use — verified with <code>java.security</code>. A small CBOR decoder is built in for the COSE key.</p>
+			<p class="c-project-feature__title"><i class="bi bi-cpu"></i> Verified by webauthn4j</p>
+			<p class="c-project-feature__body">ES256, Ed25519 and RS256 — the three algorithms browsers actually use. The jars ship in <code>libs/</code>, with Jackson 3, whose packages don't clash with the Jackson 2 inside BoxLang.</p>
 		</div>
 		<div class="c-project-feature">
 			<p class="c-project-feature__title"><i class="bi bi-plug"></i> Framework-agnostic</p>
@@ -33,7 +33,7 @@
 
 		<h2>Install</h2>
 		<pre class="bx-code"><span class="bx-code-label">bash</span><code>install-bx-module bx-passkeys</code></pre>
-		<p>Requires BoxLang <strong>1.19+</strong>. Attestation is <code class="bx-inline">"none"</code>: it trusts the key the authenticator hands over and doesn't check where the authenticator came from, which is what nearly every site wants.</p>
+		<p>Requires BoxLang <strong>1.19+</strong> (Java 21). Attestation is <code class="bx-inline">"none"</code>: it trusts the key the authenticator hands over and doesn't check where the authenticator came from, which is what nearly every site wants. Attestation statements that do arrive are still checked for consistency.</p>
 
 		<h2>Settings</h2>
 		<pre class="bx-code"><span class="bx-code-label">json</span><code>"modules": {
@@ -45,7 +45,8 @@
 		}
 	}
 }</code></pre>
-		<p>Or pass them straight in: <code class="bx-inline">passkeyRelyingParty( { rpId: "example.com" } )</code>. Without <code class="bx-inline">origins</code>, sign-ins are allowed over <code class="bx-inline">https</code> on the rpId itself, and plain <code class="bx-inline">http</code> only on <code class="bx-inline">localhost</code>.</p>
+		<p>Or pass them straight in: <code class="bx-inline">passkeyRelyingParty( { rpId: "example.com" } )</code>. Without <code class="bx-inline">origins</code>, sign-ins are allowed over <code class="bx-inline">https</code> on the rpId itself, and plain <code class="bx-inline">http</code> only on <code class="bx-inline">localhost</code>. Subdomains are allowed only with <code class="bx-inline">allowSubdomains: true</code>; leave it off if anyone else can serve pages on a subdomain.</p>
+		<p>Other settings: <code class="bx-inline">challengeSeconds</code> (300), <code class="bx-inline">algorithms</code> (<code class="bx-inline">[ -7, -8, -257 ]</code>), <code class="bx-inline">userVerification</code> (<code class="bx-inline">"preferred"</code>), <code class="bx-inline">residentKey</code> (<code class="bx-inline">"required"</code>), <code class="bx-inline">maxPerUser</code> (0, no limit) and <code class="bx-inline">sessionKey</code>. A bad setting throws <code class="bx-inline">Passkeys.Configuration</code> when the RelyingParty is built.</p>
 
 		<h2>Registering a passkey</h2>
 		<p>The user is already signed in some other way:</p>
@@ -60,6 +61,7 @@ try {
 } catch ( "Passkeys.Invalid" e ) {
 	// 400, e.message is safe to show
 }</code></pre>
+		<p><code class="bx-inline">register()</code> returns the stored credential plus <code class="bx-inline">backupEligible</code> and <code class="bx-inline">backedUp</code>, so you can tell a synced passkey from a device-bound one. <code class="bx-inline">user.id</code> is sent to the authenticator as UTF-8 bytes (at most 64), so don't put names or emails in it.</p>
 
 		<h2>Signing in</h2>
 		<pre class="bx-code"><span class="bx-code-label">javascript</span><code>// POST /sign-in/passkey/options
@@ -68,7 +70,7 @@ return passkeyRelyingParty().signInOptions( session )
 // POST /sign-in/passkey   body = what signWithPasskey() returned
 try {
 	result = passkeyRelyingParty().verify( session, requestBody )
-	// result = { userId, credentialId, userVerified, signCount, credential }
+	// result = { userId, credentialId, userVerified, backupEligible, backedUp, signCount, credential }
 	// sign result.userId in; rotate the session id
 } catch ( "Passkeys.Invalid" e ) {
 	// 401
@@ -90,19 +92,29 @@ const assertion = await signWithPasskey(await post('/sign-in/passkey/options'))
 if (assertion) await post('/sign-in/passkey', assertion)</code></pre>
 		<p>Both functions return <code class="bx-inline">null</code> when the person closes the browser's sheet.</p>
 
+		<h2>Credential stores</h2>
+		<p><code class="bx-inline">TableCredentialStore( { datasource, table } )</code> uses one table; create it from <code class="bx-inline">sql/mssql.sql</code>, <code class="bx-inline">sql/mysql.sql</code> or <code class="bx-inline">sql/postgres.sql</code>, and keep the binary collations on <code class="bx-inline">credential_id</code> and <code class="bx-inline">user_id</code>. <code class="bx-inline">MemoryCredentialStore()</code> is for tests and demos. To list or remove a user's passkeys on an account page, call the store directly: <code class="bx-inline">rp.getStore().listForUser( user.id )</code>.</p>
+
+		<h2>Going to production</h2>
+		<ul>
+			<li>Set <code class="bx-inline">rpId</code> to your registrable domain and list <code class="bx-inline">origins</code> exactly. Passkeys can't move to another rpId later.</li>
+			<li>Serve over HTTPS, rotate the session id after a passkey sign-in, and rate-limit the options and verify endpoints.</li>
+			<li>Keep a second way in until people have more than one passkey.</li>
+			<li>Upgrading from 0.2: registration now needs <code class="bx-inline">attestationObject</code> (every browser and <code class="bx-inline">client/passkeys.js</code> send it). Stored credentials keep working; the table is unchanged.</li>
+		</ul>
+
 		<h2>Not included</h2>
 		<ul>
-			<li>Attestation verification</li>
+			<li>Attestation trust chains</li>
 			<li>Authenticator metadata (MDS)</li>
 			<li>WebAuthn extensions</li>
 		</ul>
 
 		<h2>Tests</h2>
-		<p><a href="https://testbox.ortusbooks.com/" target="_blank" rel="noopener" class="c-post-link">TestBox</a> specs, run headlessly. <code class="bx-inline">examples/flow.bxs</code> registers a passkey, signs in with it and shows a replay being refused, with a test authenticator standing in for the browser:</p>
+		<p><a href="https://testbox.ortusbooks.com/" target="_blank" rel="noopener" class="c-post-link">TestBox</a> specs, run in two BoxLang homes of their own: one plain and one with bx-compat-cfml loaded, so an installed copy of the module can't stand in for the checkout. <code class="bx-inline">examples/flow.bxs</code> registers a passkey, signs in with it and shows a replay being refused, with a test authenticator standing in for the browser:</p>
 		<pre class="bx-code"><span class="bx-code-label">bash</span><code>box install
-boxlang setup-tests.bxs   ## once per checkout
-boxlang run-tests.bxs
-boxlang examples/flow.bxs</code></pre>
+bash scripts/test.sh
+boxlang --bx-home .tmp/bxhome examples/flow.bxs</code></pre>
 
 	</div>
 </div>
