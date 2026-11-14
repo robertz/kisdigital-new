@@ -1,0 +1,5 @@
+<bx:output>
+<canvas id="seasonal-canvas" class="seasonal-canvas" data-season="#encodeForHTMLAttribute( data.season )#" aria-hidden="true"></canvas>
+<p class="seasonal-toggle-row"><button type="button" id="seasonal-toggle" class="seasonal-toggle" aria-pressed="true" hidden></button></p>
+<script defer src="#data.seasonalJsHref#"></script>
+</bx:output>

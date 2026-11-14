@@ -1,0 +1,37 @@
+/**
+ * Which seasonal effect the home page shows: "autumn" (falling leaves) through
+ * November, "winter" (snow) from December 1 to January 6, otherwise "".
+ * SEASONAL_EFFECT overrides the calendar: "off", "autumn" or "winter";
+ * anything else (or unset) follows the date.
+ */
+class {
+
+	variables.override = "";
+
+	function init( string override = "" ){
+		variables.override = lCase( trim( arguments.override ) );
+		return this;
+	}
+
+	string function current( date today = now() ){
+		switch ( variables.override ) {
+			case "off":
+				return "";
+			case "autumn":
+			case "winter":
+				return variables.override;
+		}
+
+		var m = month( arguments.today );
+		var d = day( arguments.today );
+
+		if ( m == 11 ) {
+			return "autumn";
+		}
+		if ( m == 12 || ( m == 1 && d <= 6 ) ) {
+			return "winter";
+		}
+		return "";
+	}
+
+}

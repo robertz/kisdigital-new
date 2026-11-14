@@ -21,6 +21,7 @@ assetManifest = fileExists( manifestPath ) ? jsonDeserialize( fileRead( manifest
 cssHref = assetManifest[ "site.css" ] ?: "/assets/css/site.css"
 jsHref  = assetManifest[ "global.js" ] ?: "/assets/js/global.js"
 codeJsHref = assetManifest[ "code.js" ] ?: ""
+seasonalJsHref = assetManifest[ "seasonal.js" ] ?: "/assets/js/seasonal.js"
 
 // ── Services (manual DI — no WireBox container in boxlang-express) ─────────
 postService     = new models.services.PostService()
@@ -206,6 +207,7 @@ app.locals.siteName = "KISDigital"
 app.locals.cssHref  = cssHref
 app.locals.jsHref   = jsHref
 app.locals.codeJsHref = codeJsHref
+app.locals.seasonalJsHref = seasonalJsHref
 app.locals.githubSignInEnabled = githubOAuthClient.isConfigured()
 
 // /manage needs a passkey (routes/Auth.bx). A staff session from before that

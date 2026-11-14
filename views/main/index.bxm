@@ -32,6 +32,10 @@
 			</div>
 		</section>
 
+		<bx:if len( data.season )>
+			<bx:include template="../partials/seasonal.bxm">
+		</bx:if>
+
 	</div>
 </div>
 </bx:output>

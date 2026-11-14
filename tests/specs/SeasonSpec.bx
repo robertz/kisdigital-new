@@ -1,0 +1,47 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "Season", function(){
+
+			describe( "current() by date", function(){
+				beforeEach( function(){
+					variables.season = new models.util.Season()
+				} )
+
+				it( "is autumn through November", function(){
+					expect( variables.season.current( createDate( 2026, 11, 1 ) ) ).toBe( "autumn" )
+					expect( variables.season.current( createDate( 2026, 11, 30 ) ) ).toBe( "autumn" )
+				} )
+
+				it( "is winter from December 1 to January 6", function(){
+					expect( variables.season.current( createDate( 2026, 12, 1 ) ) ).toBe( "winter" )
+					expect( variables.season.current( createDate( 2026, 12, 31 ) ) ).toBe( "winter" )
+					expect( variables.season.current( createDate( 2027, 1, 6 ) ) ).toBe( "winter" )
+				} )
+
+				it( "is blank the rest of the year", function(){
+					expect( variables.season.current( createDate( 2027, 1, 7 ) ) ).toBe( "" )
+					expect( variables.season.current( createDate( 2026, 10, 31 ) ) ).toBe( "" )
+					expect( variables.season.current( createDate( 2026, 7, 4 ) ) ).toBe( "" )
+				} )
+			} )
+
+			describe( "current() with an override", function(){
+				it( "is blank when turned off, whatever the date", function(){
+					expect( new models.util.Season( "off" ).current( createDate( 2026, 12, 25 ) ) ).toBe( "" )
+				} )
+
+				it( "forces a season out of its dates, ignoring case and spaces", function(){
+					expect( new models.util.Season( " Winter " ).current( createDate( 2026, 7, 4 ) ) ).toBe( "winter" )
+					expect( new models.util.Season( "autumn" ).current( createDate( 2026, 7, 4 ) ) ).toBe( "autumn" )
+				} )
+
+				it( "follows the date for an unknown value", function(){
+					expect( new models.util.Season( "spring" ).current( createDate( 2026, 11, 14 ) ) ).toBe( "autumn" )
+				} )
+			} )
+
+		} )
+	}
+
+}
