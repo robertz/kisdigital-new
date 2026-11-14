@@ -1,0 +1,107 @@
+<bx:include template="../../partials/_head.bxm">
+<bx:output>
+<div class="container py-5">
+	<div class="c-project-hero">
+		<p class="c-project-hero__eyebrow">Project</p>
+		<h1 class="c-project-hero__title">BoxPress</h1>
+		<p class="c-project-hero__tagline">An open-source blogging platform on <a href="https://boxlang.io" target="_blank" rel="noopener" class="c-post-link">BoxLang</a> and <a href="/projects/boxlang-express" class="c-post-link">boxlang-express</a>, and a complete, working app to install and make your own. Readers get fast, server-rendered pages. Writers get a composer with visual and Markdown editing that never loses a draft. Admins get the site's traffic and the running server's health in the same place. It's one process and one MySQL database, with nothing hosted elsewhere and no third-party analytics.</p>
+		<div class="c-project-hero__actions">
+			<a href="https://github.com/robertz/boxpress" target="_blank" rel="noopener" class="btn btn-primary-custom">View on GitHub</a>
+		</div>
+	</div>
+
+	<div class="c-project-features">
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-pencil-square"></i> A composer for writers</p>
+			<p class="c-project-feature__body">Visual editing (Tiptap) or plain Markdown (CodeMirror), with a preview the server renders. Paste or drop images to upload them. Unsaved work is kept in the browser and sent to the server every minute, and every save is kept as a revision.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-code-slash"></i> Built to be changed</p>
+			<p class="c-project-feature__body">One class per area of the API, one service per concern, numbered SQL migrations applied at startup, and a spec suite that builds the whole app. Open any file and follow what it does.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-graph-up"></i> Insights without a tracker</p>
+			<p class="c-project-feature__body">Page views, top posts, referrers, searches and broken links from the site's own access log, with bots flagged and no IP addresses stored. Server memory, CPU, garbage collection, per-route timings and the database pool, charted over 90 days.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-shield-lock"></i> Safe by default</p>
+			<p class="c-project-feature__body">Post bodies are rendered from Markdown when saved and sanitized, so an author's account can't put script on the site. Password and passkey sign-in with rate limits, and in production an admin's powers need a session confirmed with a passkey.</p>
+		</div>
+	</div>
+
+	<div class="c-post__body c-docs-body">
+
+		<h2>What's in it</h2>
+		<ul>
+			<li><strong>Writing:</strong> a visual or Markdown editor with a live preview, tags, cover images (cropped to the shape the site shows them in), excerpts, custom addresses, and scheduled posts that go live on their own at their time.</li>
+			<li><strong>History:</strong> the latest 30 saves of every post, plus the editor's unsaved work, so a draft can be picked up on another device.</li>
+			<li><strong>Media library:</strong> uploads lose their location and camera details on the way in, can be resized and converted to WebP in the browser first, and carry alt text that's filled in when an image is inserted. Files go on local disk or in any S3-compatible bucket (R2, S3, MinIO, B2).</li>
+			<li><strong>The site:</strong> a quiet, reading-first design with self-hosted fonts and one accent colour from Admin › Settings. Tag, author and search pages, an RSS feed, <code class="bx-inline">sitemap.xml</code>, <code class="bx-inline">robots.txt</code>, Open Graph and Twitter cards, and light and dark modes.</li>
+			<li><strong>People:</strong> admins manage everything; authors write and manage their own posts.</li>
+		</ul>
+
+		<h2>Stack</h2>
+		<ul>
+			<li><strong>Server:</strong> BoxLang 1.18+ with boxlang-express, serving the JSON API, the public pages (<code class="bx-inline">.bxm</code> templates) and the built admin from one process.</li>
+			<li><strong>Database:</strong> MySQL 8, with numbered migrations in <code class="bx-inline">server/migrations</code> applied at startup.</li>
+			<li><strong>Admin:</strong> React 19, MUI, TanStack Router and Query, Tiptap and CodeMirror, built with Vite.</li>
+		</ul>
+
+		<h2>How it's put together</h2>
+		<p><code class="bx-inline">server/routes/Api.bx</code> builds the app, and each area of the API is a class with a static <code class="bx-inline">register()</code> that takes the router and the services it needs. This is the whole tags API:</p>
+		<pre class="bx-code"><span class="bx-code-label">boxlang</span><code>class {
+
+	static void function register( required router, required struct svc ) {
+		var tags = arguments.svc.tags
+
+		arguments.router.get( "/tags", ( req, res ) => res.json( tags.all() ) )
+
+		arguments.router.patch( "/tags/:id", ( req, res ) => {
+			if ( !req.user.isAdmin ) {
+				ApiError::forbidden()
+			}
+			res.json( tags.rename( Http::pathId( req.params ), Http::requiredString( Http::body( req ), "name", 50 ) ) )
+		} )
+	}
+
+}</code></pre>
+		<p>Closures don't inherit the enclosing function's <code class="bx-inline">arguments</code> scope, so anything a handler needs is copied into a local variable first. <code class="bx-inline">server/services/Bootstrap.bx</code> loads the settings and wires the services: <code class="bx-inline">Posts</code>, <code class="bx-inline">Revisions</code>, <code class="bx-inline">Media</code>, <code class="bx-inline">Sanitizer</code>, <code class="bx-inline">Insights</code>, <code class="bx-inline">ServerMonitor</code> and the rest. Background work uses <code class="bx-inline">app.schedule()</code>: flushing the request log, summarizing each finished day for Insights, pruning sessions and recording server history.</p>
+		<p>Some ways to make it your own:</p>
+		<ul>
+			<li>Change the public templates in <code class="bx-inline">server/views/site/</code>.</li>
+			<li>Add a route class next to the others in <code class="bx-inline">server/routes/</code> and register it in <code class="bx-inline">Api.bx</code>.</li>
+			<li>Add a numbered migration and a service for a new feature.</li>
+			<li>Add a section to the admin under <code class="bx-inline">web/src/admin/modules/</code>.</li>
+		</ul>
+
+		<h2>Running it locally</h2>
+		<p>You need BoxLang 1.18+, Node 20.19+ (or 22), MySQL 8, and CommandBox for the tests. Create <code class="bx-inline">boxpress_development</code> and <code class="bx-inline">boxpress_test</code> databases with the <code class="bx-inline">utf8mb4</code> character set, then:</p>
+		<pre class="bx-code"><span class="bx-code-label">bash</span><code>install-bx-module boxlang-express bx-mysql bx-password-encrypt bx-markdown bx-esapi bx-passkeys
+cp server/.env.example server/.env   ## then set BOXPRESS_DB_PASSWORD
+cd web &amp;&amp; npm install &amp;&amp; npm run build &amp;&amp; cd ..
+server/start.sh</code></pre>
+		<p>The site is at <code class="bx-inline">http://localhost:8080</code> and the admin at <code class="bx-inline">/admin</code>. A new site has one account, <strong>admin</strong> with the password <strong>admin</strong>; change it under Account, or set <code class="bx-inline">BOXPRESS_ADMIN_*</code> in <code class="bx-inline">.env</code> before the first start to begin with your own. For hot reload while working on the admin, run <code class="bx-inline">npm run dev</code> in <code class="bx-inline">web/</code> as well.</p>
+
+		<h2>Production with Docker</h2>
+		<p><code class="bx-inline">docker-compose.yml</code> runs the app, MySQL 8.4 and a nightly database backup:</p>
+		<pre class="bx-code"><span class="bx-code-label">bash</span><code>cp .env.example .env   ## set SITE_URL, MYSQL_PASSWORD and MYSQL_ROOT_PASSWORD
+docker compose up -d --build</code></pre>
+		<ul>
+			<li>The default <strong>admin</strong> account can't sign in in production until it has a password of its own: <code class="bx-inline">docker compose exec app boxlang scripts/users.bxs password admin</code>.</li>
+			<li>The app listens on <code class="bx-inline">127.0.0.1:8080</code>. Put a reverse proxy that terminates HTTPS in front of it, such as Caddy or nginx.</li>
+			<li>Set <code class="bx-inline">TRUST_PROXY_HEADER</code> to the header your proxy puts the visitor's address in (<code class="bx-inline">X-Real-IP</code>, or <code class="bx-inline">CF-Connecting-IP</code> behind Cloudflare), so the sign-in and search limits count real visitors instead of the proxy.</li>
+			<li>Passkeys belong to the domain in <code class="bx-inline">SITE_URL</code>, so changing the domain later leaves every one behind.</li>
+			<li>Backups go to <code class="bx-inline">./backups</code> every night and are kept for 14 days. They're on the same disk as the database, so copy them elsewhere too.</li>
+		</ul>
+
+		<h2>Tests</h2>
+		<p>The specs build the whole app against the <code class="bx-inline">boxpress_test</code> database and empty it before each one: signing in and CSRF, roles, posts and scheduling, sanitizing, revisions, search, feeds, uploads, settings, accounts and server metrics.</p>
+		<pre class="bx-code"><span class="bx-code-label">bash</span><code>cd server &amp;&amp; box install &amp;&amp; boxlang run-tests.bxs</code></pre>
+
+		<h2>Licence</h2>
+		<p>MIT.</p>
+
+	</div>
+</div>
+</bx:output>
+<bx:include template="../../partials/_foot.bxm">

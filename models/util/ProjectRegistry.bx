@@ -11,12 +11,22 @@
 class {
 
 	variables.GROUPS = [
+		{ id: "apps",    title: "Apps",                     text: "Complete apps to clone, run and make your own." },
 		{ id: "boxlang", title: "BoxLang modules",          text: "Installable with install-bx-module or CommandBox." },
 		{ id: "coldbox", title: "ColdBox and CFML modules", text: "For Lucee and Adobe ColdFusion." },
 		{ id: "archive", title: "Experiments and archive",  text: "Demos, games and earlier versions of things above." }
 	];
 
 	variables.projects = [
+		{
+			slug     : "boxpress",
+			name     : "BoxPress",
+			icon     : "bi-journal-richtext",
+			tagline  : "An open-source blogging platform on BoxExpress, built to install and change: a composer that never loses a draft, self-hosted insights and passkeys.",
+			group    : "apps",
+			status   : "Beta",
+			language : "BoxLang"
+		},
 		{
 			slug     : "boxlang-express",
 			name     : "boxlang-express",
@@ -137,6 +147,7 @@ class {
 	];
 
 	// The hosted apps lead; boxlang-express is what they and this site run on.
+	// BoxPress follows it as the app to clone and build on.
 	variables.featured = [
 		{
 			name   : "Feedhouse",
@@ -161,6 +172,14 @@ class {
 			icon   : "bi-boxes",
 			pitch  : "An Express.js-style web framework for BoxLang: routing, middleware, sessions, WebSockets and STOMP. Both apps above, and this site, run on it.",
 			stack  : "BoxLang module"
+		},
+		{
+			name   : "BoxPress",
+			url    : "/projects/boxpress",
+			label  : "Overview",
+			icon   : "bi-journal-richtext",
+			pitch  : "An open-source blogging platform to install and make your own: a composer with visual and Markdown editing that never loses a draft, self-hosted insights, and passkeys.",
+			stack  : "BoxLang · BoxExpress · React"
 		}
 	];
 
