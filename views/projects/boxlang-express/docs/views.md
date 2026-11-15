@@ -1,6 +1,6 @@
 # Views
 
-res.render(), `.bxm` templates, and sharing layout across pages.
+res.render(), `.bxm` templates, layouts and partials.
 
 ## Setting up a views directory
 
@@ -30,23 +30,74 @@ Output isn't escaped for you: wrap anything that came from a user in `encodeForH
 > [!NOTE] Handlebars was removed in 0.2.20
 > `.hbs` views, and the vendored `handlebars-4.3.1.jar` that carried an unrelated advisory, are gone. Rendering an `.hbs` view now throws `BoxExpress.UnsupportedViewEngine` — convert those views to `.bxm`.
 
-## Sharing layout with partials
+## Layouts
 
-`.bxm` templates are just BoxLang, so ordinary `<bx:include>` works for shared header/footer/nav — this documentation section is built exactly this way, with every page including the same head/foot partials:
+A layout is an ordinary view that wraps another one: the page shell (`<html>`, navigation, footer) written once instead of at the top and bottom of every view. Name one for the whole app (0.2.27+):
 
-```html
-<!-- views/docs/some-page.bxm -->
-<bx:include template="../partials/_head.bxm">
-<bx:output>
-  <h1>Page content#data.title#</h1>
-</bx:output>
-<bx:include template="../partials/_foot.bxm">
+```bxs
+app.set( "views", expandPath( "./views" ) )
+app.set( "view layout", "layouts/main" )      // views/layouts/main.bxm
 ```
 
-Included paths resolve relative to the including template's own directory, same as a plain CFML/BoxLang `include` — no special wiring from the framework is needed.
+`res.render()` then renders the view first, and renders the layout with the view's HTML available as `data.body`:
+
+```html
+<!-- views/layouts/main.bxm -->
+<bx:output>
+<!doctype html>
+<html>
+<head><title>#encodeForHTML( data.title ?: "My Site" )#</title></head>
+<body>
+  #partial( "partials/nav" )#
+  <main>#data.body#</main>
+</body>
+</html>
+</bx:output>
+```
+
+`data.body` is already-rendered HTML, so output it as is. The layout sees the same `data` as the view (`app.locals`, `res.locals` and what was passed to `render()`).
+
+Because the view runs before the layout, a view can hand values up to it by setting them on `data`: a page title, a body class, a flag for extra scripts:
+
+```html
+<!-- views/report.bxm -->
+<bx:set data.title = "Quarterly report">
+<bx:output><h1>#encodeForHTML( data.report.name )#</h1> ...</bx:output>
+```
+
+One render can choose differently with a `layout` key in its data (or in `res.locals`):
+
+```bxs
+res.render( "login", { layout: "layouts/bare" } )   // a different layout
+res.render( "fragment", { layout: false } )         // none, just the view
+```
+
+With no `"view layout"` set, nothing changes: a view is rendered alone unless a render names a layout itself.
+
+> [!WARNING] `layout` is a reserved key
+> Since 0.2.27, `layout` in render data picks the layout. A view that was being passed its own `layout` value for some other purpose needs that key renamed.
+
+## Partials
+
+`partial( view, data )` renders another view and returns its HTML, for the pieces shared between pages. Call it inside a view or layout:
+
+```html
+<bx:output>
+#partial( "partials/nav" )#
+<bx:loop array="#data.orders#" index="order">
+	#partial( "partials/order-row", { order: order } )#
+</bx:loop>
+</bx:output>
+```
+
+A partial sees everything the calling view does, plus what you pass it; what you pass is gone again when it returns, so it can't leak into the rest of the page. It resolves against the views directory with the same containment check as `render()`, and a partial can call `partial()` itself.
+
+A partial sees `data`, not the caller's local variables: a loop's `order` above reaches the partial only because it's passed in, and the partial reads it as `data.order`.
+
+`<bx:include template="partials/nav.bxm">` also works, as it always has: it's plain BoxLang. The differences: an include's path is relative to the file it's written in rather than to the views directory, and it can't be handed data of its own.
 
 > [!NOTE] How this page is put together
-> This doc page's sidebar isn't hardcoded per page — the route handler reads an ordered array of `{page_slug, title}` topics from a static per-project registry and passes it, along with which one is current, into a single shared `_docsShell.bxm` shell. The shell loops the array to render the sidebar's active-state links, then interpolates the current page's pre-rendered HTML — pre-rendered once server-side through the markdown renderer, not `<bx:include>`d per page, since the content itself is stored as a `.md` file (read via `fileRead()`) rather than a `.bxm` file — the same "shared shell, dynamic content" pattern shown above, just sourced from a markdown file instead of an inline template.
+> This site sets `"view layout"` to one shell that pulls in its head and foot partials, so no page view includes them itself. Each docs page is rendered through a single `projects/_docsShell` view: the route handler passes it the project's ordered `{page_slug, title}` registry, which the shell loops for the sidebar, and the page's HTML, rendered once server-side from a `.md` file. The layout then wraps the result like any other page.
 
 ## app.locals / res.locals
 

@@ -55,6 +55,8 @@ Every request gets a line on stdout as soon as it's received:
 
 Turn it off with `app.set( "log", false )` — useful for a high-throughput deployment that doesn't want a synchronous stdout write on every request. With [request IDs](/projects/boxlang-express/docs/observability) on, the id is added to the line.
 
+That line can't say how the request went. `app.set( "log", "access" )` (0.2.27+) logs each request once it's answered instead, with its status, duration and bytes sent; `"json"` does the same as one JSON object per line, and a function receives each entry to send wherever you like. See [Access log](/projects/boxlang-express/docs/observability#access-log).
+
 ## Monitoring the running server
 
 `app.getConnectorStatistics()` returns live HTTP-layer metrics straight from Undertow's own listener — active connections/requests, total request count, bytes sent/received, error count, processing time. Returns `null` before `listen()` has run or after `close()`.

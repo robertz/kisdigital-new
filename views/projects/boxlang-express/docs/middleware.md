@@ -48,6 +48,8 @@ Each is opt-in, with its own global function mirroring the Express one of the sa
 |---|---|
 | `boxExpressJSON()` | Parses `application/json` request bodies into `req.body` |
 | `boxExpressUrlencoded()` | Parses `application/x-www-form-urlencoded` bodies into `req.body` |
+| `boxExpressText()` / `boxExpressRaw()` | `text/plain` as a string / `application/octet-stream` as bytes — see [Text and raw bodies](#text-and-raw-bodies) |
+| `boxExpressValidate(schema)` | Checks `req.body`, `req.query` and `req.params` against a schema — see [Request Validation](/projects/boxlang-express/docs/validation) |
 | `boxExpressStatic(dir)` | Serves static files from `dir` — see [Serving static files](#serving-static-files) below |
 | `boxExpressUpload(options)` | Parses `multipart/form-data` — see [File Uploads](/projects/boxlang-express/docs/uploads) |
 | `boxExpressSession()` | Cookie-based sessions, `req.session` — see [Sessions](/projects/boxlang-express/docs/sessions) |
@@ -80,7 +82,7 @@ app.use( "/public", staticFiles.serve( expandPath( "./public" ) ) )
 
 ## Body size limits
 
-`boxExpressJSON()` and `boxExpressUrlencoded()` cap the request body at 100KB by default, to keep a slow or malicious client from buffering an unbounded body into memory. Override with `{ limit: bytes }`:
+All four body parsers (`boxExpressJSON()`, `boxExpressUrlencoded()`, `boxExpressText()`, `boxExpressRaw()`) cap the request body at 100KB by default, to keep a slow or malicious client from buffering an unbounded body into memory. Override with `{ limit: bytes }`:
 
 ```bxs
 app.use( boxExpressJSON( { limit: 5000000 } ) )  // 5MB
@@ -88,7 +90,70 @@ app.use( boxExpressJSON( { limit: 5000000 } ) )  // 5MB
 
 A body over the limit gets a `413` response and never reaches your route handler.
 
+These limits apply only where a parser is mounted and to the content type it parses; `app.set( "maxBodySize", bytes )` caps every request — see [Timeouts & Size Limits](/projects/boxlang-express/docs/limits).
+
 A JSON body that doesn't parse gets a `400` (`{ error: true, message: "Malformed JSON body" }`), answered directly like the `413`. So does a urlencoded body with a malformed `%` escape (since 0.2.26). Before 0.2.21 the parse exception went to `next()` and surfaced as a `500`; error-handling middleware no longer sees it, so an app that turned it into its own `400` can drop that.
+
+## Text and raw bodies
+
+`boxExpressText()` puts the body on `req.body` as a string, and `boxExpressRaw()` as the exact bytes received (a Java `byte[]`):
+
+```bxs
+app.post( "/notes", boxExpressText(), ( req, res ) => {
+	notes.add( req.body )                    // a string
+	res.sendStatus( 201 )
+} )
+
+app.put( "/avatars/:id", boxExpressRaw( { type: "image/*", limit: 2000000 } ), ( req, res ) => {
+	fileWrite( avatarPath( req.params.id ), req.body )   // a byte[]
+	res.sendStatus( 204 )
+} )
+```
+
+By default `text()` parses `text/plain` and `raw()` parses `application/octet-stream`; anything else is passed over and `req.body` stays `{}`. `text()` decodes with the charset the `Content-Type` names, `options.defaultCharset` (UTF-8) when it names none, and answers `415` for a charset the JVM doesn't have. `raw()`'s bytes aren't valid input to `res.json()` — encode them (`binaryEncode( req.body, "base64" )`) first.
+
+## Choosing what a parser handles (`type`)
+
+Every parser takes a `type` option: a MIME type, a file extension, a wildcard or a `+suffix` — the same patterns as [`req.is()`](/projects/boxlang-express/docs/request#content-negotiation) — or an array of those, or a function `( req ) => boolean`:
+
+```bxs
+app.use( boxExpressJSON( { type: [ "json", "+json" ] } ) )   // also application/vnd.api+json
+app.use( boxExpressText( { type: [ "text/*", "xml" ] } ) )
+app.use( boxExpressRaw( { type: "*/*" } ) )                  // whatever nothing above parsed
+```
+
+A request body can only be read once, so a parser skips any request an earlier parser (or `boxExpressUpload()`) already handled. That makes a catch-all like the last line safe to put at the end of the list — it only sees what the others passed over — and it means order is how you resolve an overlap.
+
+## Checking a signature over the raw body (`verify`)
+
+Webhook senders (Stripe, GitHub, Slack) sign the exact bytes they send. Re-serializing the parsed JSON doesn't reproduce those bytes, so the check has to see the body before it's parsed. Every parser takes a `verify` option for this — `( req, res, bodyBytes ) => {...}`, called with the bytes as received. Throw to reject the request:
+
+```bxs
+app.post( "/webhooks/billing",
+	boxExpressJSON( { verify: ( req, res, bodyBytes ) => {
+		var expected = lCase( hmac( bodyBytes, webhookSecret, "HmacSHA256" ) )
+		var given = req.get( "X-Signature" ) ?: ""
+		// A constant-time comparison: == stops at the first difference,
+		// which leaks how much of a guess was right.
+		if ( !createObject( "java", "java.security.MessageDigest" ).isEqual( expected.getBytes( "UTF-8" ), given.getBytes( "UTF-8" ) ) ) {
+			throw( "signature mismatch" )
+		}
+	} } ),
+	( req, res ) => {
+		handleEvent( req.body )   // parsed as usual, and known to be authentic
+		res.sendStatus( 204 )
+	}
+)
+```
+
+A `verify` that throws gets the client a `403` (`{ error: true, message: "Request body failed verification" }`) and the route never runs; the thrown message isn't sent. `verify` can also send its own response instead of throwing. It isn't called for a body over the `limit`, which is refused first.
+
+Mount the verifying parser on the webhook route itself, *before* any app-wide `app.use( boxExpressJSON() )` — whichever parser reaches the body first is the one that reads it, and an app-wide parser registered earlier would parse the body with no check, leaving the route's parser nothing to verify. Each sender has its own header name and signature format (some prefix `sha256=`, some sign a timestamp along with the body); follow theirs.
+
+
+`boxExpressStatic()`/`StaticFiles.serve()` resolve requested files against the real (symlink-resolved) served directory, so a symlink placed inside it can't be used to read files from outside it.
+
+Static files ignore dotfiles by default: a path with any segment starting with `.` (`/.env`, `/.git/config`) falls through to the next handler as if the file weren't there, so a stray secret in the public directory isn't served. `{ dotfiles: "deny" }` answers `403` instead, and `{ dotfiles: "allow" }` serves them; `/.well-known/` is always served. Files are streamed from disk rather than read into memory, so a large file costs the same memory as a small one, `HEAD` never reads the file, and files over 2 GB (including `Range` requests into them) work — the same applies to `res.sendFile()` and `res.download()`.
 
 ## Serving static files
 

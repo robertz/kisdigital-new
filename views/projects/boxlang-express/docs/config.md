@@ -121,9 +121,12 @@ Separate from the CLI/runtime config above, BoxLang Express has its own small se
 | Setting | Effect |
 |---|---|
 | `"views"` | Directory `res.render()` resolves view files from. See [Views](/projects/boxlang-express/docs/views). |
+| `"view layout"` | A view that wraps every `res.render()`, receiving the rendered view as `data.body` (0.2.27+). See [Views](/projects/boxlang-express/docs/views#layouts). |
 | `"env"` | When set to `"development"`, the default 500 handler exposes the real error message instead of a generic one. Custom error middleware can read this the same way — see [Error Handling](/projects/boxlang-express/docs/error-handling). |
 | `"trust proxy"` | Which proxies' `X-Forwarded-*` headers to believe: `false` (default), a hop count, a list of proxy addresses/CIDRs, or `true`. See below. |
 | `"trust proxy header"` | A header name, or an ordered array of candidates, checked before `X-Forwarded-For` and independent of `"trust proxy"` — see below. |
+| `"subdomain offset"` | How many labels at the end of the hostname are the domain, for `req.subdomains` (default `2`; `3` for `example.co.uk`). See [Request](/projects/boxlang-express/docs/request#more-request-properties). |
+| `"cookie secret"` | Secret (or an array, newest first, for rotation) that signs cookies set with `{ signed: true }` (0.2.27+). See [Signed cookies](/projects/boxlang-express/docs/response#signed-cookies). |
 | `"requestId"` | When `true`, gives every request an id — `req.id`, an `X-Request-Id` response header, and the id in log lines. Off by default. See [Observability](/projects/boxlang-express/docs/observability). |
 | `"requestIdHeader"` | Renames the request-id header (default `"X-Request-Id"`). |
 | `"wsOrigins"` | Browser origins allowed to open any `app.ws()` route (default: same-origin only; `"*"` allows every origin). See [WebSockets](/projects/boxlang-express/docs/websockets). |
@@ -131,7 +134,9 @@ Separate from the CLI/runtime config above, BoxLang Express has its own small se
 | `"wsMaxMessageSize"` | Maximum size in bytes of one incoming WebSocket message (default `1048576`, 1 MB). A larger message is refused and the connection closed with code `1009`. Set it before `listen()` — see [WebSockets](/projects/boxlang-express/docs/websockets). |
 | `"wsIdleTimeoutMs"` | Drops a WebSocket connection that has sent nothing for this many milliseconds (default `0`, off). See [WebSockets](/projects/boxlang-express/docs/websockets). |
 | `"shutdownTimeoutMs"` | How long `SIGTERM`/Ctrl-C wait for in-flight requests to finish (default `5000`); `0` stops immediately. See [Health Checks & Graceful Shutdown](/projects/boxlang-express/docs/health-and-shutdown). |
-| `"log"` | When `false`, turns off the per-request stdout line (`[2026-08-10 10:45:41] GET /users/42 127.0.0.1`) every request otherwise gets — useful for a high-throughput deployment that doesn't want a synchronous stdout write on every request. On by default. |
+| `"log"` | `true` (default) prints a line as each request arrives (`[2026-08-10 10:45:41] GET /users/42 127.0.0.1`); `"access"` prints one once it's answered, with status, duration and bytes; `"json"` prints that as JSON; a function receives each entry; `false` prints nothing. Any other value throws at `app.set()`. See [Access log](/projects/boxlang-express/docs/observability#access-log). |
+| `"requestTimeoutMs"` / `"maxBodySize"` | How long a handler has to start responding (`503` after), and the largest request body for the whole app (`413` over). Both `0`, off, by default (0.2.27+). See [Timeouts & Size Limits](/projects/boxlang-express/docs/limits). |
+| `"headerTimeoutMs"` / `"keepAliveTimeoutMs"` / `"maxHeaderSize"` | How long a client has to send its headers (default `60000`), how long an idle keep-alive connection stays open (default `60000`), and the largest request line plus headers (default `65536`; `400` over). See [Timeouts & Size Limits](/projects/boxlang-express/docs/limits). |
 
 ```bxs
 app.set( "env", "development" )

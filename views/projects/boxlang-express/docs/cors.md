@@ -25,4 +25,7 @@ app.use( boxExpressCors( { origin: [ "https://a.com", "https://b.com" ], credent
 
 A CORS preflight — an `OPTIONS` request carrying `Access-Control-Request-Method` — is answered directly by this middleware (`204`, the relevant headers, no body) rather than falling through to the router, since nothing would otherwise be registered to handle `OPTIONS` on an arbitrary route. Pass `{ preflightContinue: true }` if a later handler needs to see the preflight request itself instead.
 
-`Vary: Origin` is sent whenever the response depends on the request's `Origin`, so a shared cache doesn't serve one origin's CORS headers to another.
+`Vary: Origin` is sent whenever the response depends on the request's `Origin`, so a shared cache doesn't serve one origin's CORS headers to another. Since 0.2.27 it's added with `res.vary()`, so it no longer overwrites a `Vary` set earlier in the chain.
+
+> [!NOTE] Unit tests with a fake `res`
+> Because the middleware now calls `res.vary()`, a hand-written fake `res` passed to it in a unit test needs a `vary()` method.

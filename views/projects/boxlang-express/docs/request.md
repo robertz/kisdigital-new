@@ -11,14 +11,19 @@ The `req.*` API available inside every handler.
 | `req.originalUrl` | Path plus query string as received |
 | `req.query` | Struct of parsed query-string parameters |
 | `req.params` | Struct of captured route params (`:id` segments) |
-| `req.body` | Parsed request body — populated by `boxExpressJSON()`/`boxExpressUrlencoded()`/`boxExpressUpload()`, empty struct otherwise |
+| `req.body` | Parsed request body — a struct from `boxExpressJSON()`/`boxExpressUrlencoded()`/`boxExpressUpload()`, a string from `boxExpressText()`, a `byte[]` from `boxExpressRaw()`, empty struct otherwise |
+| `req.valid` | The fields a `boxExpressValidate()` schema names, converted — see [Request Validation](/projects/boxlang-express/docs/validation) |
 | `req.files` | Uploaded files, populated by `boxExpressUpload()` |
 | `req.headers` | Struct of request headers |
 | `req.get(name)` | Read a single header by name — returns null if absent |
 | `req.cookies` | Struct of parsed cookies |
+| `req.signedCookies` | Cookies set with `{ signed: true }` that passed verification (`false` for one that didn't) — see [Signed cookies](/projects/boxlang-express/docs/response#signed-cookies) |
 | `req.ip` | Direct TCP peer address by default; prefers an edge-set header named via `"trust proxy header"`, else the `X-Forwarded-For` entry `"trust proxy"` selects — see [Configuration](/projects/boxlang-express/docs/config) |
 | `req.protocol` / `req.secure` | Always `"http"` / `false` — BoxExpress's own `HttpServer` never terminates TLS — unless the directly connected peer is a trusted proxy and the request carries `X-Forwarded-Proto: https` |
 | `req.hostname` | The `Host` header (or `X-Forwarded-Host`, from a trusted proxy) with any `:port` stripped |
+| `req.subdomains` / `req.xhr` / `req.baseUrl` | See [More request properties](#more-request-properties) |
+| `req.accepts(...)` / `req.acceptsLanguages(...)` / `req.is(...)` | See [Content negotiation](#content-negotiation) |
+| `req.setTimeout(ms)` / `req.timedOut` | One request's own timeout, and whether it hit it — see [Timeouts & Size Limits](/projects/boxlang-express/docs/limits) |
 | `req.id` | The request's id when `app.set("requestId", true)` is on — see [Observability](/projects/boxlang-express/docs/observability) |
 | `req.session` / `req.sessionID` | Populated by `boxExpressSession()` — see [Sessions](/projects/boxlang-express/docs/sessions) |
 | `req.rawExchange()` | Escape hatch to the underlying `io.undertow.server.HttpServerExchange` |
@@ -36,6 +41,53 @@ Cookie and query values are URL-decoded. One with a malformed escape (`discount=
 These follow the same trust model. BoxExpress's own `HttpServer` never terminates TLS itself, so `req.protocol` is always `"http"` (and `req.secure` always `false`) unless the directly connected peer is a trusted proxy _and_ the request carries `X-Forwarded-Proto: https` — the shape you'd see behind a TLS-terminating reverse proxy.
 
 `req.hostname` is the `Host` header (or, from a trusted proxy, `X-Forwarded-Host` if present) with any `:port` suffix stripped. An IPv6 host (`[::1]:3000`) is left bracketed rather than mangled at the first colon.
+
+## Content negotiation
+
+`req.accepts( types )` returns whichever of the types you offer the request's `Accept` header prefers, or `false` if it accepts none of them. Offer extensions or full MIME types, as separate arguments or one array; you get back the same string you passed:
+
+```bxs
+app.get( "/report", ( req, res ) => {
+	switch ( req.accepts( "html", "json", "csv" ) ) {
+		case "json": return res.json( report )
+		case "csv": return res.attachment( "report.csv" ).send( toCsv( report ) )
+		case "html": return res.render( "report", report )
+		default: return res.sendStatus( 406 )
+	}
+} )
+```
+
+The client's `q` weights decide, then how specific its range is (`text/html` over `text/*` over `*/*`), then the order you offered them in. A request with no `Accept` header accepts anything, so it gets your first offer. Called with no arguments, `req.accepts()` returns the types the client listed, most preferred first. For the common "one handler per type" case, [`res.format()`](/projects/boxlang-express/docs/response#resformat) does the switch for you.
+
+`req.acceptsLanguages( "fr", "en" )` is the same against `Accept-Language`. `en` satisfies a client asking for `en-US`, and `en-GB` satisfies one asking for `en`; an exact tag wins over either.
+
+`req.is( types )` checks the request's own `Content-Type` — what the client *sent*, not what it wants back:
+
+```bxs
+app.post( "/hook", ( req, res ) => {
+	if ( !req.is( "json", "+json" ) ) {
+		return res.sendStatus( 415 )
+	}
+	...
+} )
+```
+
+It returns the first type that matches, or `false`. A type can be an extension (`"json"`), a full type, a wildcard (`"text/*"`, `"*/xml"`), a suffix (`"+json"`, matching `application/vnd.api+json`), or the shorthands `"urlencoded"` and `"multipart"`. A wildcard or suffix match returns the actual type. A request with no `Content-Type` is always `false` — Express returns `null` for a request with no body; here it's `false` either way.
+
+Two limits: media-type parameters other than `q` are ignored (`text/html;level=1` is treated as `text/html`), and there's no `req.acceptsEncodings()`/`req.acceptsCharsets()`, since BoxExpress doesn't compress or transcode responses.
+
+## More request properties
+
+- `req.xhr` — `true` when `X-Requested-With` is `XMLHttpRequest`, which jQuery and axios send and `fetch()` doesn't.
+- `req.subdomains` — the labels in front of the domain, nearest the domain first: `tobi.ferrets.example.com` gives `[ "ferrets", "tobi" ]`. The last two labels are taken to be the domain; for `example.co.uk` set `app.set( "subdomain offset", 3 )`. Empty for an IP address. It's built from `req.hostname`, so it follows `trust proxy` the same way.
+- `req.baseUrl` — the path the current router or path-scoped middleware is mounted at, `""` at the top level. Inside a router mounted with `app.use( "/api", apiRouter )`, a request for `/api/users/42` has `req.baseUrl` `"/api"`, `req.path` `"/users/42"` and `req.originalUrl` `"/api/users/42"`. Nested mounts add up (`/api/v2`), and a param in the mount path shows its value, not `:name`. Use it to build links that keep working wherever the router is mounted:
+
+  ```bxs
+  apiRouter.post( "/users", ( req, res ) => {
+  	var user = users.create( req.body )
+  	res.status( 201 ).location( req.baseUrl & "/users/" & user.id ).json( user )
+  } )
+  ```
 
 ## Reading the request
 

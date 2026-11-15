@@ -16,6 +16,44 @@ Every request gets an id: it's available as `req.id`, echoed on the response as 
 
 A well-formed `X-Request-Id` from the client (up to 128 characters of letters, digits, `.`, `_` and `-`) is reused, so an id minted at the edge carries through. Anything else is replaced with a generated one, since it's client-controlled and ends up in logs and a response header. `app.set( "requestIdHeader", "X-Correlation-Id" )` renames the header. Off by default, so existing log output is unchanged.
 
+## Access log
+
+By default each request prints one line as it *arrives* — method, path and client address. That tells you a request came in, but not how it went. Three other settings log each request once it's *answered*, with its status and how long it took:
+
+| `app.set( "log", ... )` | Output |
+|---|---|
+| `true` (default) | A line on arrival: `[2026-11-15 12:00:00] GET /users/42 127.0.0.1` |
+| `"access"` | A line on completion: `[2026-11-15 12:00:00] GET /users/42 200 12.5ms 340b 127.0.0.1` |
+| `"json"` | One JSON object per line on completion, for a log collector |
+| a function | Called with the entry on completion; prints nothing itself |
+| `false` | Nothing |
+
+```bxs
+app.set( "log", "json" )
+// {"time":"2026-11-15T12:00:00-05:00","method":"GET","path":"/users/42","status":200,
+//  "durationMs":12.5,"bytes":340,"ip":"127.0.0.1","userAgent":"curl/8.4.0","referer":"","id":"..."}
+```
+
+The entry's fields: `time` (ISO 8601), `method`, `path`, `status`, `durationMs`, `bytes` (body bytes sent), `ip`, `userAgent`, `referer`, plus `id` when request IDs (above) are on and `timedOut: true` for a request that hit its [timeout](/projects/boxlang-express/docs/limits#request-timeout). `status` is what the client actually received, including the framework's own `404`, `500`, `413` and `503` responses.
+
+A function gets the same entry, and the request and response, to send wherever you like — or to add fields of your own:
+
+```bxs
+app.set( "log", ( entry, req, res ) => {
+	entry.user = req.session.userId ?: ""
+	writeLog( text = JSONSerialize( entry ), log = "access" )
+} )
+```
+
+Things worth knowing:
+
+- **`path` never includes the query string.** Query strings carry tokens and search terms often enough that they stay out of the log by default. A function sink can read `req.originalUrl` if you want them.
+- **Control characters can't forge a line.** `"access"` prints them as `?`, and JSON escapes them.
+- **A streamed response is logged when it ends**, so an SSE connection open for an hour logs one entry with a duration of an hour.
+- **WebSocket connections aren't logged**; they don't pass through the request pipeline.
+- A sink that throws is reported on stdout and otherwise ignored — the response has already been sent.
+- Printing is a synchronized write. `"access"` and `"json"` cost the same one line per request as the default.
+
 ## Prometheus metrics (app.metrics())
 
 ```bxs
