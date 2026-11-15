@@ -1,0 +1,49 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "ApiValidation", function(){
+
+			beforeEach( function(){
+				variables.middleware = new models.util.ApiValidation().body( {
+					title  : { type: "string", required: true, trim: true, message: "Title is required." },
+					status : { type: "string", oneOf: [ "draft", "published" ], default: "draft" },
+					tags   : { type: "array", items: { type: "string" }, default: [] },
+					featured: { type: "boolean", default: false }
+				} )
+				variables.sent = {}
+				variables.res = {
+					status: ( code ) => { sent.status = code; return res; },
+					json  : ( payload ) => { sent.json = payload; return res; }
+				}
+			} )
+
+			it( "answers 422 with the rule's own message as `error`", function(){
+				var called = false
+				middleware( { body: { title: "   " } }, res, () => called = true )
+				expect( called ).toBeFalse()
+				expect( sent.status ).toBe( 422 )
+				expect( sent.json.error ).toBe( "Title is required." )
+			} )
+
+			it( "names the field in a built-in message and reports every problem", function(){
+				middleware( { body: { title: "Hi", status: "deleted", featured: "maybe" } }, res, () => {} )
+				expect( sent.json.error ).toInclude( "status must be one of: draft, published" )
+				expect( sent.json.error ).toInclude( "featured must be true or false" )
+			} )
+
+			it( "fills defaults, converts and trims, and keeps undeclared fields out of req.valid", function(){
+				var req = { body: { title: "  Hello  ", tags: [ " boxlang " ], featured: "true", isAdmin: true } }
+				var called = false
+				middleware( req, res, () => called = true )
+				expect( called ).toBeTrue()
+				expect( req.valid.body.title ).toBe( "Hello" )
+				expect( req.valid.body.status ).toBe( "draft" )
+				expect( req.valid.body.tags ).toBe( [ " boxlang " ] )
+				expect( req.valid.body.featured ).toBeTrue()
+				expect( structKeyExists( req.valid.body, "isAdmin" ) ).toBeFalse()
+			} )
+
+		} )
+	}
+
+}

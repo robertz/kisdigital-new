@@ -13,10 +13,19 @@ class {
 	}
 
 	function register( required router, required auth, required admin ){
+		var validAuthor = new models.util.ApiValidation().body( {
+			displayName: { type: "string", required: true, trim: true, message: "Display name is required." },
+			email      : { type: "email", required: true, trim: true, message: "A valid email is required." },
+			password   : { type: "string", trim: true, default: "" },
+			role       : { type: "string", trim: true, default: "author" },
+			about      : { type: "string", default: "" },
+			avatarLabel: { type: "string", trim: true, default: "" }
+		} );
+
 		arguments.router.get( "/manage/api/authors", arguments.admin, ( req, res ) => listAuthors( req, res ) );
-		arguments.router.post( "/manage/api/authors", arguments.admin, ( req, res ) => saveAuthor( req, res ) );
+		arguments.router.post( "/manage/api/authors", arguments.admin, validAuthor, ( req, res ) => saveAuthor( req, res ) );
 		arguments.router.get( "/manage/api/authors/:id", arguments.auth, ( req, res ) => getAuthor( req, res ) );
-		arguments.router.put( "/manage/api/authors/:id", arguments.auth, ( req, res ) => saveAuthor( req, res ) );
+		arguments.router.put( "/manage/api/authors/:id", arguments.auth, validAuthor, ( req, res ) => saveAuthor( req, res ) );
 	}
 
 	// GET /manage/api/authors
@@ -37,8 +46,8 @@ class {
 	function saveAuthor( req, res ){
 		var authorId    = trim( req.params.id ?: "" );
 		var isNew       = !len( authorId );
-		var payload     = isStruct( req.body ?: "" ) ? req.body : {};
-		var newPassword = trim( payload.password ?: "" );
+		var payload     = req.valid.body;
+		var newPassword = payload.password;
 		var existing    = javacast( "null", "" );
 
 		if ( !isNew ){
@@ -46,33 +55,26 @@ class {
 			if ( isNull( existing ) ) return;
 		}
 
-		if ( !len( trim( payload.displayName ?: "" ) ) ){
-			res.status( 422 ).json( { "error": "Display name is required." } );
-			return;
-		}
-		if ( !isValid( "email", trim( payload.email ?: "" ) ) ){
-			res.status( 422 ).json( { "error": "A valid email is required." } );
-			return;
-		}
 		if ( isNew && !len( newPassword ) ){
 			res.status( 422 ).json( { "error": "Password is required for new authors." } );
 			return;
 		}
 
-		var requestedRole = lCase( trim( payload.role ?: "author" ) );
+		var requestedRole = lCase( payload.role );
 
 		var bean = new models.AuthorBean();
 		bean.setId(          authorId );
-		bean.setDisplayName( trim( payload.displayName ) );
-		bean.setEmail(       trim( payload.email ) );
-		bean.setAbout(       payload.about ?: "" );
-		bean.setAvatarLabel( left( trim( payload.avatarLabel ?: "" ), 2 ).uCase() );
+		bean.setDisplayName( payload.displayName );
+		bean.setEmail(       payload.email );
+		bean.setAbout(       payload.about );
+		bean.setAvatarLabel( left( payload.avatarLabel, 2 ).uCase() );
 		// Only admins may assign or change roles; anyone else keeps the one they have.
 		bean.setRole( req.session.manage_user.role == "admin"
 			? ( listFind( "admin,author", requestedRole ) ? requestedRole : "author" )
 			: existing.getRole() );
 
 		var savedId = variables.authorService.saveAuthor( bean, newPassword );
+		if ( isNew ) res.location( "/manage/api/authors/" & encodeForURL( savedId ) );
 		res.status( isNew ? 201 : 200 ).json( { "author": authorJson( variables.authorService.getAuthorById( savedId ) ) } );
 	}
 

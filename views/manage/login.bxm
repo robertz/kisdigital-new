@@ -1,4 +1,3 @@
-<bx:include template="../partials/_head.bxm">
 <bx:output>
 <div class="c-auth-page">
 	<div class="c-auth-card">
@@ -81,4 +80,3 @@
 	</div>
 </div>
 </bx:output>
-<bx:include template="../partials/_foot.bxm">

@@ -9,8 +9,8 @@
  *
  * Both routes serve a plain POST-and-redirect form (no-JS fallback) and,
  * when public/assets/js/comments.js intercepts the submit, an AJAX JSON
- * response instead — detected the same way routes/Manage.bx's isAjax()
- * does, via the X-Requested-With header. The AJAX create response renders
+ * response instead — detected by req.xhr (the X-Requested-With header
+ * comments.js sends). The AJAX create response renders
  * the new comment through the same views/partials/commentThread.bxm
  * partial the full page uses (via bx:savecontent, mirroring
  * boxlang-express's own Response.bx:render()), so there's exactly one
@@ -56,7 +56,7 @@ class {
 	// straight back to their new comment), _csrf.
 	function create( req, res ){
 		var redirectTo = _safeRedirect( req.body.redirect ?: "/" );
-		var ajax       = isAjax( req );
+		var ajax       = req.xhr;
 
 		if ( variables.botDetector.isBot( req.headers[ "User-Agent" ] ?: "" ) ){
 			// Silently drop rather than error — telling a bot *why* it
@@ -126,7 +126,7 @@ class {
 		var comment = variables.commentService.getComment( req.params.id );
 		var deleted = variables.commentService.deleteComment( req.params.id, user.id, user.role );
 
-		if ( isAjax( req ) ){
+		if ( req.xhr ){
 			res.json( {
 				success: deleted,
 				count  : isNull( comment ) ? javacast( "null", "" ) : variables.commentService.getCommentCount( comment.postId ?: "" )
@@ -158,14 +158,13 @@ class {
 	// Renders a single comment through the same partial the full comment
 	// list uses, for the AJAX create response — see this file's header
 	// comment for why (one template for what a comment looks like).
-	// commentThread.bxm reads data.currentUser/data.csrfToken/data.post and
-	// a `comment` variable, all of which this builds standalone since a raw
-	// route handler (unlike res.render()) has none of that already in scope.
+	// commentThread.bxm reads data.currentUser/data.csrfToken/data.post/
+	// data.comment, all of which this builds standalone: the fragment goes
+	// out inside a JSON response, so res.render() can't produce it.
 	private function _renderCommentFragment( required struct comment, required string postId, required string postUrl, required req ){
 		var postId  = arguments.postId;
 		var postUrl = arguments.postUrl;
-		var data    = { "currentUser": _currentUser( req ), "csrfToken": req.csrfToken(), "post": { "getId": () => postId, "getPostUrl": () => postUrl } };
-		var comment = arguments.comment;
+		var data    = { "currentUser": _currentUser( req ), "csrfToken": req.csrfToken(), "post": { "getId": () => postId, "getPostUrl": () => postUrl }, "comment": arguments.comment };
 		var output  = "";
 		// expandPath() resolves from the app root, not this file's directory (same as
 		// routes/Projects.bx) — "../views" pointed one level above the app.
@@ -174,13 +173,6 @@ class {
 			include "#templatePath#";
 		}
 		return output;
-	}
-
-	// Same check as routes/Manage.bx's own isAjax() — not shared between the
-	// two files, matching this codebase's small-duplication-over-premature-
-	// abstraction style elsewhere (flashSet/_currentUser/_safeRedirect).
-	private function isAjax( req ){
-		return ( req.headers[ "X-Requested-With" ] ?: "" ) == "XMLHttpRequest";
 	}
 
 	function _requireCommenter( req, res, next ){

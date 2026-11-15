@@ -164,22 +164,28 @@ class {
 
 	/**
 	 * Starts the background job that summarizes each completed day into
-	 * RequestLogDaily: a minute after startup, then every 30 minutes. Called
-	 * once from app.bxs (not init(), so scripts that construct this service
-	 * don't start a thread). Insights still builds any missing day on demand,
-	 * so this only keeps that from ever happening while someone waits.
+	 * RequestLogDaily: at startup, then five past every hour UTC, so a day is
+	 * built minutes after it ends and a failed run is retried within the hour.
+	 * Called once from app.bxs (not init(), so scripts that construct this
+	 * service don't start a job). Insights still builds any missing day on
+	 * demand, so this only keeps that from ever happening while someone waits.
 	 */
-	function startDailySummaries(){
-		var scheduler = createObject( "java", "java.util.concurrent.Executors" ).newSingleThreadScheduledExecutor();
-		var runnable  = createDynamicProxy( new models.util.Runnable( () => {
-			try {
-				_ensureDailySummaries( variables.summaryDays );
-			} catch ( any e ){
-				println( "[InsightsService] daily summary build failed: " & e.message );
-			}
-		} ), [ "java.lang.Runnable" ] );
-		var minutes   = createObject( "java", "java.util.concurrent.TimeUnit" ).MINUTES;
-		scheduler.scheduleWithFixedDelay( runnable, 1, 30, minutes );
+	function startDailySummaries( required app ){
+		var insights = this;
+		arguments.app.schedule( "5 * * * *", () => insights.buildScheduledSummaries(), {
+			name     : "insights-daily-summaries",
+			timezone : "UTC",
+			immediate: true
+		} );
+	}
+
+	/** The scheduled job's body; public only so the job's closure can reach it. */
+	function buildScheduledSummaries(){
+		try {
+			_ensureDailySummaries( variables.summaryDays );
+		} catch ( any e ){
+			println( "[InsightsService] daily summary build failed: " & e.message );
+		}
 	}
 
 	/**

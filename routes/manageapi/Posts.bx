@@ -16,20 +16,32 @@ class {
 	}
 
 	function register( required router, required auth, required admin ){
+		var validPost = new models.util.ApiValidation().body( {
+			title      : { type: "string", required: true, trim: true, message: "Title is required." },
+			slug       : { type: "string", trim: true, default: "" },
+			description: { type: "string", default: "" },
+			coverImage : { type: "string", trim: true, default: "" },
+			body       : { type: "string", default: "" },
+			status     : { type: "string", trim: true, oneOf: [ "draft", "published", "archived" ], default: "draft" },
+			featured   : { type: "boolean", default: false },
+			publishDate: { type: "string", trim: true, default: "" },
+			tags       : { type: "array", items: { type: "string" }, default: [] }
+		} );
+
 		arguments.router.get( "/manage/api/tags", arguments.auth, ( req, res ) => tags( req, res ) );
 		arguments.router.get( "/manage/api/posts", arguments.auth, ( req, res ) => listPosts( req, res ) );
-		arguments.router.post( "/manage/api/posts", arguments.auth, ( req, res ) => savePost( req, res ) );
+		arguments.router.post( "/manage/api/posts", arguments.auth, validPost, ( req, res ) => savePost( req, res ) );
 		// Before /:id, which would otherwise take "search" and "calendar" for ids.
 		arguments.router.get( "/manage/api/posts/search", arguments.auth, ( req, res ) => searchPosts( req, res ) );
 		arguments.router.get( "/manage/api/posts/calendar", arguments.auth, ( req, res ) => calendar( req, res ) );
 		arguments.router.get( "/manage/api/posts/:id", arguments.auth, ( req, res ) => getPost( req, res ) );
-		arguments.router.put( "/manage/api/posts/:id", arguments.auth, ( req, res ) => savePost( req, res ) );
+		arguments.router.put( "/manage/api/posts/:id", arguments.auth, validPost, ( req, res ) => savePost( req, res ) );
 		arguments.router.delete( "/manage/api/posts/:id", arguments.auth, ( req, res ) => deletePost( req, res ) );
 		arguments.router.post( "/manage/api/posts/:id/featured", arguments.admin, ( req, res ) => toggleFeatured( req, res ) );
 		arguments.router.post( "/manage/api/posts/:id/schedule", arguments.auth, ( req, res ) => schedulePost( req, res ) );
 		arguments.router.put( "/manage/api/posts/:id/autosave", arguments.auth, ( req, res ) => autosavePost( req, res ) );
 		arguments.router.get( "/manage/api/posts/:id/revisions", arguments.auth, ( req, res ) => listRevisions( req, res ) );
-		arguments.router.get( "/manage/api/posts/:id/revisions/:revisionId", arguments.auth, ( req, res ) => getRevision( req, res ) );
+		arguments.router.get( "/manage/api/posts/:id/revisions/:revisionId(\d+)", arguments.auth, ( req, res ) => getRevision( req, res ) );
 		arguments.router.post( "/manage/api/preview", arguments.auth, ( req, res ) => preview( req, res ) );
 	}
 
@@ -128,7 +140,7 @@ class {
 		var post = loadEditablePost( req, res );
 		if ( isNull( post ) ) return;
 
-		var revision = isNumeric( req.params.revisionId ?: "" ) ? variables.revisionService.getRevision( post.getId(), int( req.params.revisionId ) ) : {};
+		var revision = variables.revisionService.getRevision( post.getId(), int( req.params.revisionId ) );
 		if ( revision.isEmpty() ){
 			res.status( 404 ).json( { "error": "That version no longer exists." } );
 			return;
@@ -184,23 +196,13 @@ class {
 	function savePost( req, res ){
 		var postId  = trim( req.params.id ?: "" );
 		var isNew   = !len( postId );
-		var payload = isStruct( req.body ?: "" ) ? req.body : {};
+		var payload = req.valid.body;
 
 		if ( !isNew && isNull( loadEditablePost( req, res ) ) ) return;
 
-		if ( !len( trim( payload.title ?: "" ) ) ){
-			res.status( 422 ).json( { "error": "Title is required." } );
-			return;
-		}
-
-		var postTags = [];
-		for ( var tag in ( isArray( payload.tags ?: "" ) ? payload.tags : [] ) ){
-			if ( isSimpleValue( tag ) && len( trim( tag ) ) ) postTags.append( trim( tag ) );
-		}
-		var postStatus = lCase( trim( payload.status ?: "draft" ) );
-		var rawDate    = trim( payload.publishDate ?: "" );
-		var publishAt  = parseUtc( rawDate );
-		if ( len( rawDate ) && isNull( publishAt ) ){
+		var postTags  = payload.tags.map( ( tag ) => trim( tag ) ).filter( ( tag ) => len( tag ) );
+		var publishAt = parseUtc( payload.publishDate );
+		if ( len( payload.publishDate ) && isNull( publishAt ) ){
 			res.status( 422 ).json( { "error": "The publish date isn't a valid date." } );
 			return;
 		}
@@ -208,12 +210,12 @@ class {
 		var bean = new models.PostBean();
 		bean.setId(          postId );
 		bean.setTitle(       payload.title );
-		bean.setSlug(        payload.slug ?: "" );
-		bean.setDescription( payload.description ?: "" );
-		bean.setCoverImage(  payload.coverImage ?: "" );
-		bean.setBody(        payload.body ?: "" );
-		bean.setStatus(      listFind( "draft,published,archived", postStatus ) ? postStatus : "draft" );
-		bean.setFeatured(    isBoolean( payload.featured ?: false ) && payload.featured );
+		bean.setSlug(        payload.slug );
+		bean.setDescription( payload.description );
+		bean.setCoverImage(  payload.coverImage );
+		bean.setBody(        payload.body );
+		bean.setStatus(      payload.status );
+		bean.setFeatured(    payload.featured );
 		bean.setPublishDate( isNull( publishAt ) ? "" : publishAt );
 		bean.setTags(        postTags );
 
@@ -226,6 +228,7 @@ class {
 
 		// Reloaded rather than echoed back: savePost() resolves a blank slug
 		// and a blank publish date itself, and the post URL depends on both.
+		if ( isNew ) res.location( "/manage/api/posts/" & encodeForURL( saved.id ) );
 		res.status( isNew ? 201 : 200 ).json( { "post": postJson( variables.postService.getPostById( saved.id ), true ) } );
 	}
 

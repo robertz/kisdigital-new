@@ -43,6 +43,10 @@ class {
 			return res.status( 501 ).json( { "error": "Image hosting isn't configured (missing R2 env vars)." } );
 		}
 
+		// Past the app's 30 s timeout: an interruption between moving the file
+		// and rewriting the posts that link to it would leave those links broken.
+		req.setTimeout( 120 * 1000 );
+
 		var payload = isStruct( req.body ?: "" ) ? req.body : {};
 		var fromKey = trim( payload.key ?: "" );
 		if ( !isSafeKey( fromKey ) ){
@@ -114,9 +118,11 @@ class {
 			// own address could run as a page in the admin's session.
 			var storedType = lCase( trim( listFirst( object.contentType, ";" ) ) );
 			var isImage    = listFind( "image/jpeg,image/png,image/webp,image/gif", storedType ) > 0;
-			res.set( "Cache-Control", "no-store" );
-			res.set( "Content-Security-Policy", "default-src 'none'; sandbox" );
-			if ( !isImage ) res.set( "Content-Disposition", "attachment" );
+			res.set( {
+				"Cache-Control"          : "no-store",
+				"Content-Security-Policy": "default-src 'none'; sandbox"
+			} );
+			if ( !isImage ) res.attachment();
 			res.sendBytes( object.bytes, isImage ? storedType : "application/octet-stream" );
 		} catch ( any e ) {
 			println( "[error] media read failed for '" & key & "': " & e.message );

@@ -102,10 +102,10 @@ class {
 		}
 	}
 
-	/** Records now and then every hour, on boxlang-express's scheduler. */
+	/** Records now and then at the top of every hour (UTC), on boxlang-express's scheduler. */
 	function startHourly( required app ){
 		var history = this;
-		arguments.app.schedule( 60 * 60 * 1000, () => history.record(), { name: "server-history", immediate: true } );
+		arguments.app.schedule( "0 * * * *", () => history.record(), { name: "server-history", timezone: "UTC", immediate: true } );
 	}
 
 }

@@ -42,7 +42,7 @@ class {
 
 		this.router.get( "/posts", ( req, res ) => index( req, res ) );
 		this.router.get( "/search", ( req, res ) => search( req, res ) );
-		this.router.get( "/posts/:year/:month/:slug", ( req, res ) => show( req, res ) );
+		this.router.get( "/posts/:year(\d{4})/:month(\d{1,2})/:slug", ( req, res ) => show( req, res ) );
 
 		return this;
 	}
@@ -136,7 +136,7 @@ class {
 
 		var webmentionEndpoint = isNull( variables.webmentionService ) ? "" : variables.webmentionService.endpointUrl();
 		if ( len( webmentionEndpoint ) ){
-			res.set( "Link", "<#webmentionEndpoint#>; rel=""webmention""" );
+			res.links( { webmention: webmentionEndpoint } );
 		}
 
 		res.render( "posts/show", {

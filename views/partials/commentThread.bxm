@@ -1,76 +1,76 @@
 <bx:output>
 <!--- Renders one row from CommentService.getCommentThread()'s flat,
-      depth-annotated list — indentation comes from `comment.depth` alone,
+      depth-annotated list — indentation comes from `data.comment.depth` alone,
       no nesting/recursion needed since the list is already in display
-      order. Included once per item from a plain <bx:loop item="comment">
-      in views/posts/show.bxm; data.currentUser/data.csrfToken/data.post
-      come from that same view's own render data.
+      order. Rendered once per item with partial( ..., { comment: comment } )
+      from views/posts/show.bxm; data.currentUser/data.csrfToken/data.post
+      come from that view's own render data, which a partial inherits.
 
       Also used standalone by routes/Comments.bx to render a single new
       comment's fragment for the AJAX response (see public/assets/js/
       comments.js) — data-depth mirrors --comment-depth so that script can
       find the right insertion point without parsing inline CSS.
 
-      Remote comments (comment.isRemote — replies from the fediverse) render
+      Remote comments (data.comment.isRemote — replies from the fediverse) render
       their body as HTML: it was sanitized at import by
       CommentService.sanitizeRemoteHtml(), which is the only writer of it.
       Local comments stay escaped plain text. --->
-<div class="c-comment" id="comment-#encodeForHTMLAttribute( comment.id )#" data-depth="#comment.depth#" style="--comment-depth: #min( comment.depth, 6 )#">
+<div class="c-comment" id="comment-#encodeForHTMLAttribute( data.comment.id )#" data-depth="#data.comment.depth#" style="--comment-depth: #min( data.comment.depth, 6 )#">
 	<div class="c-comment__row">
-		<bx:if len( comment.avatarUrl ) && !comment.isDeleted>
-			<img src="#encodeForHTMLAttribute( comment.avatarUrl )#" alt="" class="c-comment__avatar">
-		<bx:elseif !comment.isDeleted>
-			<div class="c-comment__avatar">#encodeForHTML( len( comment.avatarLabel ) ? comment.avatarLabel : left( comment.displayName, 2 ).uCase() )#</div>
+		<bx:if len( data.comment.avatarUrl ) && !data.comment.isDeleted>
+			<img src="#encodeForHTMLAttribute( data.comment.avatarUrl )#" alt="" class="c-comment__avatar">
+		<bx:elseif !data.comment.isDeleted>
+			<div class="c-comment__avatar">#encodeForHTML( len( data.comment.avatarLabel ) ? data.comment.avatarLabel : left( data.comment.displayName, 2 ).uCase() )#</div>
 		</bx:if>
 
 		<div class="c-comment__body-col">
-			<bx:if comment.isDeleted>
+			<bx:if data.comment.isDeleted>
 				<p class="c-comment__deleted">[deleted]</p>
 			<bx:else>
 				<div class="c-comment__meta">
-					<span class="c-comment__author">#encodeForHTML( comment.displayName )#</span>
-					<bx:if comment.isRemote>
-						<bx:if len( comment.remoteProfileUrl )>
-							<a class="c-comment__handle" href="#encodeForHTMLAttribute( comment.remoteProfileUrl )#" rel="nofollow ugc noopener" target="_blank">#encodeForHTML( comment.remoteHandle )#</a>
+					<span class="c-comment__author">#encodeForHTML( data.comment.displayName )#</span>
+					<bx:if data.comment.isRemote>
+						<bx:if len( data.comment.remoteProfileUrl )>
+							<a class="c-comment__handle" href="#encodeForHTMLAttribute( data.comment.remoteProfileUrl )#" rel="nofollow ugc noopener" target="_blank">#encodeForHTML( data.comment.remoteHandle )#</a>
 						<bx:else>
-							<span class="c-comment__handle">#encodeForHTML( comment.remoteHandle )#</span>
+							<span class="c-comment__handle">#encodeForHTML( data.comment.remoteHandle )#</span>
 						</bx:if>
 					</bx:if>
-					<time datetime="#encodeForHTMLAttribute( dateTimeFormat( comment.created, "yyyy-mm-dd'T'HH:nn:ss'Z'" ) )#" data-local-time data-local-format="relative">#dateFormat( comment.created, "mmm d, yyyy" )#</time>
-					<bx:if comment.isPending ?: false>
+					<time datetime="#encodeForHTMLAttribute( dateTimeFormat( data.comment.created, "yyyy-mm-dd'T'HH:nn:ss'Z'" ) )#" data-local-time data-local-format="relative">#dateFormat( data.comment.created, "mmm d, yyyy" )#</time>
+					<bx:if data.comment.isPending ?: false>
 						<span class="c-comment__pending">awaiting approval</span>
 					</bx:if>
-					<bx:if comment.isRemote && len( comment.remoteUrl )>
-						<a class="c-comment__via" href="#encodeForHTMLAttribute( comment.remoteUrl )#" rel="nofollow ugc noopener" target="_blank">via #encodeForHTML( comment.remoteHost )#</a>
+					<bx:if data.comment.isRemote && len( data.comment.remoteUrl )>
+						<a class="c-comment__via" href="#encodeForHTMLAttribute( data.comment.remoteUrl )#" rel="nofollow ugc noopener" target="_blank">via #encodeForHTML( data.comment.remoteHost )#</a>
 					</bx:if>
 				</div>
-				<bx:if comment.isRemote>
-					<bx:if len( comment.contentWarning )>
+				<bx:if data.comment.isRemote>
+					<bx:if len( data.comment.contentWarning )>
 						<details class="c-comment__cw">
-							<summary>#encodeForHTML( comment.contentWarning )#</summary>
-							<div class="c-comment__text c-comment__text--remote">#comment.body#</div>
+							<summary>#encodeForHTML( data.comment.contentWarning )#</summary>
+							<div class="c-comment__text c-comment__text--remote">#data.comment.body#</div>
 						</details>
 					<bx:else>
-						<div class="c-comment__text c-comment__text--remote">#comment.body#</div>
+						<div class="c-comment__text c-comment__text--remote">#data.comment.body#</div>
 					</bx:if>
-					<bx:if comment.attachmentCount gt 0 && len( comment.remoteUrl )>
+					<bx:if data.comment.attachmentCount gt 0 && len( data.comment.remoteUrl )>
 						<p class="c-comment__attachments">
-							#comment.attachmentCount# #comment.attachmentCount == 1 ? "attachment" : "attachments"# &middot;
-							<a href="#encodeForHTMLAttribute( comment.remoteUrl )#" rel="nofollow ugc noopener" target="_blank">view on #encodeForHTML( comment.remoteHost )#</a>
+							#data.comment.attachmentCount# #data.comment.attachmentCount == 1 ? "attachment" : "attachments"# &middot;
+							<a href="#encodeForHTMLAttribute( data.comment.remoteUrl )#" rel="nofollow ugc noopener" target="_blank">view on #encodeForHTML( data.comment.remoteHost )#</a>
 						</p>
 					</bx:if>
 				<bx:else>
-					<p class="c-comment__text">#encodeForHTML( comment.body )#</p>
+					<p class="c-comment__text">#encodeForHTML( data.comment.body )#</p>
 				</bx:if>
 
 				<div class="c-comment__actions">
 					<bx:if !isNull( data.currentUser )>
 						<details class="c-comment__reply-toggle">
 							<summary>Reply</summary>
-							<form method="post" action="/comments" class="c-comment-form c-comment-form--reply" data-comment-form data-parent-id="#encodeForHTMLAttribute( comment.id )#">
+							<form method="post" action="/comments" class="c-comment-form c-comment-form--reply" data-comment-form data-parent-id="#encodeForHTMLAttribute( data.comment.id )#">
 								<input type="hidden" name="_csrf" value="#encodeForHTMLAttribute( data.csrfToken )#">
 								<input type="hidden" name="post_id" value="#encodeForHTMLAttribute( data.post.getId() )#">
-								<input type="hidden" name="parent_id" value="#encodeForHTMLAttribute( comment.id )#">
+								<input type="hidden" name="parent_id" value="#encodeForHTMLAttribute( data.comment.id )#">
 								<input type="hidden" name="redirect" value="#encodeForHTMLAttribute( data.post.getPostUrl() )#">
 								<textarea name="body" class="c-comment-form__input" rows="2" required></textarea>
 								<div class="c-comment-form--reply__row">
@@ -81,8 +81,8 @@
 							</form>
 						</details>
 					</bx:if>
-					<bx:if !isNull( data.currentUser ) && ( data.currentUser.id == comment.userId || data.currentUser.role == "admin" )>
-						<form method="post" action="/comments/#encodeForURL( comment.id )#/delete" class="c-comment__delete-form" data-comment-delete-form>
+					<bx:if !isNull( data.currentUser ) && ( data.currentUser.id == data.comment.userId || data.currentUser.role == "admin" )>
+						<form method="post" action="/comments/#encodeForURL( data.comment.id )#/delete" class="c-comment__delete-form" data-comment-delete-form>
 							<input type="hidden" name="_csrf" value="#encodeForHTMLAttribute( data.csrfToken )#">
 							<input type="hidden" name="redirect" value="#encodeForHTMLAttribute( data.post.getPostUrl() )#">
 							<button type="submit" class="c-comment__delete-btn">Delete</button>

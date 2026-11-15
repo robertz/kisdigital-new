@@ -1,4 +1,3 @@
-<bx:include template="../partials/_head.bxm">
 <bx:output>
 <div class="container">
 	<div class="narrow">
@@ -37,7 +36,7 @@
 				<bx:defaultcase>
 					<h1 class="page-head__title">Get new posts by email</h1>
 					<p class="page-head__lede">One email when a post goes up: the title, a summary and a link. No tracking, and you can unsubscribe from any email.</p>
-					<bx:include template="../partials/subscribeForm.bxm">
+					#partial( "partials/subscribeForm" )#
 					<bx:if len( data.error )>
 						<p class="subscribe-error" role="alert">#encodeForHTML( data.error )#</p>
 					</bx:if>
@@ -47,4 +46,3 @@
 	</div>
 </div>
 </bx:output>
-<bx:include template="../partials/_foot.bxm">

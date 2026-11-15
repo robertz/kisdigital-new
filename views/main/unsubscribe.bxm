@@ -1,4 +1,3 @@
-<bx:include template="../partials/_head.bxm">
 <bx:output>
 <section class="py-5 posts-section">
 	<div class="container">
@@ -18,4 +17,3 @@
 	</div>
 </section>
 </bx:output>
-<bx:include template="../partials/_foot.bxm">

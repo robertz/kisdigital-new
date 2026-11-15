@@ -1,4 +1,3 @@
-<bx:include template="../partials/_head.bxm">
 <bx:output>
 <!--- The React app (manage-app/) renders the sidebar and the page into this
       element, side by side at every width. --->
@@ -25,4 +24,3 @@
 	<script type="module" src="#encodeForHTMLAttribute( data.manageAssets.entry )#"></script>
 </bx:if>
 </bx:output>
-<bx:include template="../partials/_foot.bxm">

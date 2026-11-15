@@ -1,4 +1,3 @@
-<bx:include template="../partials/_head.bxm">
 <bx:output>
 <div class="container">
 	<div class="narrow">
@@ -7,20 +6,18 @@
 			<p class="page-head__lede">#data.paging.total# #( data.paging.total == 1 ? "article" : "articles" )# on BoxLang, CFML, the JVM and the tools around them.</p>
 		</header>
 
-		<bx:include template="../partials/topicFilter.bxm">
+		#partial( "partials/topicFilter" )#
 
 		<bx:if data.paging.posts.len()>
 			<div class="entry-list">
 				<bx:loop array="#data.paging.posts#" item="post">
-					<bx:include template="../partials/postEntry.bxm">
+					#partial( "partials/postEntry", { post: post } )#
 				</bx:loop>
 			</div>
-			<bx:set pageBase = "/posts">
-			<bx:include template="../partials/pagination.bxm">
+			#partial( "partials/pagination", { pageBase: "/posts" } )#
 		<bx:else>
 			<p class="page-head__lede">No articles published yet.</p>
 		</bx:if>
 	</div>
 </div>
 </bx:output>
-<bx:include template="../partials/_foot.bxm">

@@ -1,4 +1,3 @@
-<bx:include template="../partials/_head.bxm">
 <bx:output>
 <section class="py-5 posts-section">
 	<div class="container">
@@ -114,7 +113,7 @@
 					<div class="subscribe-card">
 						<p class="subscribe-card__title">Get new posts by email</p>
 						<p class="subscribe-card__text">One email per post, nothing else. Unsubscribe from any of them.</p>
-						<bx:include template="../partials/subscribeForm.bxm">
+						#partial( "partials/subscribeForm" )#
 					</div>
 					</bx:if>
 				</footer>
@@ -186,7 +185,7 @@
 				<div class="c-comment-list" data-comment-list>
 					<p class="c-comments__empty" data-comment-empty #( data.commentThread.len() ? 'hidden' : '' )#>No comments yet &mdash; be the first.</p>
 					<bx:loop array="#data.commentThread#" item="comment">
-						<bx:include template="../partials/commentThread.bxm">
+						#partial( "partials/commentThread", { comment: comment } )#
 					</bx:loop>
 				</div>
 			</section>
@@ -196,7 +195,7 @@
 				<h2 class="block-head__title">Related</h2>
 				<div class="entry-list">
 					<bx:loop array="#data.relatedPosts#" item="post">
-						<bx:include template="../partials/postEntry.bxm">
+						#partial( "partials/postEntry", { post: post } )#
 					</bx:loop>
 				</div>
 			</section>
@@ -209,4 +208,3 @@
 </bx:output>
 <script src="/assets/js/comments.js"></script>
 <script type="module" src="/assets/js/passkey-ui.js"></script>
-<bx:include template="../partials/_foot.bxm">

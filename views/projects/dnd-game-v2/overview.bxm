@@ -1,4 +1,3 @@
-<bx:include template="../../partials/_head.bxm">
 <bx:output>
 <div class="container py-5">
 	<div class="c-project-hero">
@@ -124,4 +123,3 @@ export DB_DRIVER=MySQL   ## or MSSQL, Postgres, etc.</code></pre>
 	</div>
 </div>
 </bx:output>
-<bx:include template="../../partials/_foot.bxm">

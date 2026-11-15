@@ -1,4 +1,3 @@
-<bx:include template="../partials/_head.bxm">
 <bx:output>
 <div class="c-auth-page">
 	<div class="c-auth-card">
@@ -28,4 +27,3 @@
 </div>
 <script type="module" src="/assets/js/passkey-ui.js"></script>
 </bx:output>
-<bx:include template="../partials/_foot.bxm">

@@ -1,0 +1,1 @@
+<bx:output>#partial( "partials/_head" )##data.body##partial( "partials/_foot" )#</bx:output>

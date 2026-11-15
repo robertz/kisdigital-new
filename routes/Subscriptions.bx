@@ -30,7 +30,7 @@ class {
 		this.router.post( "/subscribe/confirm/:id/:token", ( req, res ) => confirm( req, res ) );
 		this.router.get( "/unsubscribe/posts/:id/:token", ( req, res ) => _page( res, "unsubscribe", _linkPath( "/unsubscribe/posts", req ) ) );
 		this.router.post( "/unsubscribe/posts/:id/:token", ( req, res ) => unsubscribe( req, res ) );
-		this.router.post( "/email/ses-feedback", ( req, res ) => sesFeedback( req, res ) );
+		this.router.post( "/email/ses-feedback", boxExpressText( { limit: variables.MAX_SNS_BYTES, type: "*/*" } ), ( req, res ) => sesFeedback( req, res ) );
 
 		return this;
 	}
@@ -59,15 +59,15 @@ class {
 		_page( res, "unsubscribed" );
 	}
 
-	// POST /email/ses-feedback — SNS sends text/plain JSON, so the body is read
-	// here rather than by boxExpressJSON().
+	// POST /email/ses-feedback — SNS sends JSON as text/plain, so the route's
+	// own boxExpressText() reads it (answering 413 past MAX_SNS_BYTES), not
+	// boxExpressJSON().
 	function sesFeedback( req, res ){
 		if ( !variables.sns.isConfigured() ) return res.status( 404 ).send( "" );
+		if ( !isSimpleValue( req.body ) ) return res.status( 400 ).send( "" );
 
-		var bytes = req.bodyStream().readNBytes( variables.MAX_SNS_BYTES + 1 );
-		if ( arrayLen( bytes ) > variables.MAX_SNS_BYTES ) return res.status( 413 ).send( "" );
 		try {
-			var message = jsonDeserialize( createObject( "java", "java.lang.String" ).init( bytes, "UTF-8" ) );
+			var message = jsonDeserialize( req.body );
 		} catch ( any e ){
 			return res.status( 400 ).send( "" );
 		}

@@ -1,4 +1,3 @@
-<bx:include template="../partials/_head.bxm">
 <bx:output>
 <div class="container">
 	<div class="narrow">
@@ -15,7 +14,7 @@
 			</div>
 			<div class="entry-list">
 				<bx:loop array="#data.recentPosts#" item="post">
-					<bx:include template="../partials/postEntry.bxm">
+					#partial( "partials/postEntry", { post: post } )#
 				</bx:loop>
 			</div>
 		</section>
@@ -27,16 +26,15 @@
 			</div>
 			<div class="feature-list">
 				<bx:loop array="#data.featuredProjects#" item="project">
-					<bx:include template="../partials/projectFeature.bxm">
+					#partial( "partials/projectFeature", { project: project } )#
 				</bx:loop>
 			</div>
 		</section>
 
 		<bx:if len( data.season )>
-			<bx:include template="../partials/seasonal.bxm">
+			#partial( "partials/seasonal" )#
 		</bx:if>
 
 	</div>
 </div>
 </bx:output>
-<bx:include template="../partials/_foot.bxm">

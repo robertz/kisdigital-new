@@ -1,4 +1,3 @@
-<bx:include template="../../partials/_head.bxm">
 <bx:output>
 <div class="container py-5">
 	<div class="c-project-hero">
@@ -119,4 +118,3 @@ boxlang --bx-home .tmp/bxhome examples/flow.bxs</code></pre>
 	</div>
 </div>
 </bx:output>
-<bx:include template="../../partials/_foot.bxm">

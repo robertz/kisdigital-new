@@ -1,0 +1,34 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "manage API: saving an author", function(){
+
+			beforeEach( function(){
+				variables.saved = {}
+				var store = variables.saved
+				variables.authorService = {
+					saveAuthor   : ( bean, password ) => { store.bean = bean; return "a1b2"; },
+					getAuthorById: ( id ) => new models.AuthorBean().populate( { id: id, display_name: store.bean.getDisplayName(), email: store.bean.getEmail(), role: store.bean.getRole() } )
+				}
+				variables.api = new routes.manageapi.Authors( authorService )
+				variables.sent = { headers: {} }
+				var out = variables.sent
+				variables.res = {}
+				res.location = ( url ) => { out.headers.Location = url; return res; }
+				res.status   = ( code ) => { out.status = code; return res; }
+				res.json     = ( payload ) => { out.json = payload; return res; }
+				variables.validBody = { displayName: "Ada", email: "ada@example.com", password: "pw", role: "author", about: "", avatarLabel: "ad" }
+			} )
+
+			it( "answers 201 with a Location for a new author", function(){
+				api.saveAuthor( { params: {}, valid: { body: validBody }, session: { manage_user: { id: "admin1", role: "admin" } } }, res )
+				expect( sent.status ).toBe( 201 )
+				expect( sent.headers.Location ).toBe( "/manage/api/authors/a1b2" )
+				expect( sent.json.author.id ).toBe( "a1b2" )
+				expect( saved.bean.getAvatarLabel() ).toBe( "AD" )
+			} )
+
+		} )
+	}
+
+}

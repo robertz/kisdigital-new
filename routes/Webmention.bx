@@ -22,7 +22,13 @@ class {
 		return this;
 	}
 
+	// The spec has senders post application/x-www-form-urlencoded; anything
+	// else never reached boxExpressUrlencoded(), so req.body would be empty.
 	function receive( req, res ){
+		if ( !req.is( "urlencoded" ) ){
+			res.status( 415 ).type( "text/plain" ).send( "Send source and target as application/x-www-form-urlencoded." );
+			return;
+		}
 		var result = variables.webmentionService.receive( req.body.source ?: "", req.body.target ?: "" );
 		res.status( result.status ).type( "text/plain" ).send( result.message );
 	}

@@ -46,7 +46,7 @@ ARG BOXLANG_MODULES=boxlang-express,boxlang-express-auth,bx-mysql,bx-markdown,bx
 # install-bx-module always takes the latest from ForgeBox, but this line never
 # changes, so Docker reuses the cached layer.
 # Change this to force a fresh pull, e.g. right after publishing a module fix.
-ARG MODULE_CACHE_BUST=2026-11-11-bx-passkeys
+ARG MODULE_CACHE_BUST=2026-11-15-boxlang-express-0.2.27
 RUN install-bx-module "$BOXLANG_MODULES" --local
 
 COPY app.bxs .boxlang.json ./

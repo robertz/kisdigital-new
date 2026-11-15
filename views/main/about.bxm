@@ -1,4 +1,3 @@
-<bx:include template="../partials/_head.bxm">
 <bx:output>
 <div class="container">
 	<div class="narrow">
@@ -30,7 +29,7 @@
 			</div>
 			<div class="entry-list">
 				<bx:loop array="#data.latestPosts#" item="post">
-					<bx:include template="../partials/postEntry.bxm">
+					#partial( "partials/postEntry", { post: post } )#
 				</bx:loop>
 			</div>
 		</section>
@@ -38,4 +37,3 @@
 </div>
 </bx:if>
 </bx:output>
-<bx:include template="../partials/_foot.bxm">

@@ -131,7 +131,7 @@ insightsService = new models.services.InsightsService(
 )
 // Summarizes each completed day of RequestLog in the background so
 // /manage/insights never has to count 30 days of raw requests.
-insightsService.startDailySummaries()
+insightsService.startDailySummaries( app )
 
 // /manage/system — live JVM/OS metrics (memory, CPU, disk, GC, threads) plus
 // Undertow's own connector stats via `app`, and MySQL's own figures. See
@@ -192,6 +192,16 @@ app.use( boxExpressStatic( expandPath( "./public" ), { maxAge: 86400 } ) )
 // present, so req.ip stays the direct connection address.
 app.set( "trust proxy header", listToArray( getSystemSetting( "TRUST_PROXY_HEADER", "CF-Connecting-IP" ) ) )
 
+// Bounds on what one request can cost. No route takes more than a JSON or
+// form body (cover images upload straight to R2), and the body parsers stop
+// at 100 KB, so 1 MB only catches what they don't parse. A handler that
+// hasn't started answering in 30 s gets a 503 instead of holding its thread.
+app.set( "maxBodySize", 1024 * 1024 )
+app.set( "requestTimeoutMs", 30 * 1000 )
+// One line per request once it's answered, with status, duration and bytes,
+// instead of an arrival line that can't say how the request went.
+app.set( "log", "access" )
+
 // [M1] Legacy XSS filter hint — a no-op in modern browsers, harmless to send.
 // (Everything else from the old app's security header set is covered by helmet above.)
 app.use( ( req, res, next ) => {
@@ -217,13 +227,21 @@ app.use( ( req, res, next ) => {
 	next()
 } )
 
+// Registered after the static handlers, so it only reaches responses built
+// per request — and those differ by session (the Dashboard link, comment
+// forms, draft previews), so a shared cache mustn't hand one visitor's copy
+// to another.
 app.use( ( req, res, next ) => {
 	res.locals.manageUser = req.session.manage_user ?: ""
 	res.locals.currentPath = req.path
+	res.vary( "Cookie" )
 	next()
 } )
 
 app.set( "views", expandPath( "./views" ) )
+// Every res.render() is wrapped in this page shell. Views run first, so one
+// can set data.pageTitle, data.meta, etc. for the shell's <head> to read.
+app.set( "view layout", "layouts/main" )
 app.set( "env", getSystemSetting( "ENV", "production" ) )
 app.set( "reloadOnChange", app.getSetting( "env" ) == "development" )
 
@@ -375,17 +393,24 @@ app.use( new routes.ManageApp(
 ).router )
 
 // ── 404 / 500 (themed, matching the site's own look) ────────────────────
+// The manage app's fetch() asks for JSON, and a themed HTML page in reply
+// would only surface as "The request failed." Ordered structs: a client with
+// no preference (curl, a crawler) gets the first entry, the page.
 app.use( ( req, res ) => {
-	res.status( 404 ).render( "main/404", {
-		pageTitle : "Page Not Found"
-	} )
+	res.status( 404 ).format( [
+		html : () => res.render( "main/404", { pageTitle: "Page Not Found" } ),
+		json : () => res.json( { "error": "Not found." } ),
+		default: () => res.type( "text/plain" ).send( "Not found." )
+	] )
 } )
 
 app.use( ( err, req, res, next ) => {
 	println( "[error] " & err.message )
-	res.status( 500 ).render( "main/error", {
-		pageTitle : "Server Error"
-	} )
+	res.status( 500 ).format( [
+		html : () => res.render( "main/error", { pageTitle: "Server Error" } ),
+		json : () => res.json( { "error": "Something went wrong on the server." } ),
+		default: () => res.type( "text/plain" ).send( "Server error." )
+	] )
 } )
 
 app.listen( getSystemSetting( "PORT", 3005 ), ( port ) => {

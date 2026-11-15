@@ -1,0 +1,19 @@
+/**
+ * boxExpressValidate() in the manage API's own error format. The React
+ * client (manage-app/src/app/api.ts) shows `data.error` as the message, and
+ * the default failure body's `error` is `true`, so it would print "true".
+ * Every problem goes into the one message; a built-in one ("must be a
+ * string") is prefixed with its field name, a rule's own `message` isn't.
+ */
+class {
+
+	function body( required struct fields ){
+		return boxExpressValidate( { body: arguments.fields }, {
+			onError: ( errors, req, res, next ) => {
+				var messages = errors.map( ( problem ) => reFind( "^[a-z]", problem.message ) ? problem.field & " " & problem.message : problem.message );
+				res.status( 422 ).json( { "error": messages.toList( " " ) } );
+			}
+		} );
+	}
+
+}
