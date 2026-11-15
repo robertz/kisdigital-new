@@ -46,6 +46,16 @@ class {
 			{ group: "Project",    page_slug: "gotchas",             title: "BoxLang Gotchas" },
 			{ group: "Project",    page_slug: "development",         title: "Hacking on BoxExpress" }
 		],
+		"boxlang-express-auth": [
+			{ page_slug: "getting-started",    title: "Getting Started" },
+			{ page_slug: "providers",          title: "GitHub, Google, Microsoft & GitLab" },
+			{ page_slug: "apple",              title: "Sign in with Apple" },
+			{ page_slug: "oidc",               title: "Any OpenID Connect Provider" },
+			{ page_slug: "users",              title: "Users & Linking Accounts" },
+			{ page_slug: "testing",            title: "Testing" },
+			{ page_slug: "reference",          title: "Reference" },
+			{ page_slug: "writing-a-provider", title: "Writing a Provider" }
+		],
 		"bx-activitypub": [
 			{ page_slug: "getting-started",   title: "Getting Started" },
 			{ page_slug: "host-contract",     title: "The Host Contract" },

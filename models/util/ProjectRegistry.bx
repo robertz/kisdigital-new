@@ -37,6 +37,15 @@ class {
 			language : "BoxLang"
 		},
 		{
+			slug     : "boxlang-express-auth",
+			name     : "boxlang-express-auth",
+			icon     : "bi-door-open",
+			tagline  : "Sign-in for BoxExpress apps with GitHub, Google, Microsoft, GitLab, Apple or any OpenID Connect provider. Runs this site's sign-in.",
+			group    : "boxlang",
+			status   : "In production",
+			language : "BoxLang"
+		},
+		{
 			slug     : "bx-activitypub",
 			name     : "bx-activitypub",
 			icon     : "bi-broadcast",
