@@ -10,24 +10,36 @@
  *
  * The comment form on a post page links to
  * GET /auth/<provider>?redirect=<that post's URL>.
+ *
+ * Google runs on boxlang-express-auth (PKCE, a signed and checked ID token,
+ * single-use state). The module regenerates the session after a login, so
+ * it hands off to /auth/complete, which signs the person in by the rules
+ * below and only then honours ?redirect. GitHub still uses
+ * GitHubOAuthClient.
  */
 class {
 
-	variables.authService = "";
-	variables.providers   = {};
-	variables.passkeys    = "";
+	variables.authService   = "";
+	variables.providers     = {};
+	variables.passkeys      = "";
+	variables.googleEnabled = false;
 
-	function init( required authService, required googleOAuthClient, required githubOAuthClient, required passkeys ){
-		variables.authService = arguments.authService;
-		variables.passkeys    = arguments.passkeys;
-		variables.providers   = {
-			"google": { "label": "Google", "client": arguments.googleOAuthClient },
+	/**
+	 * @param {struct} google - { clientId, clientSecret, callbackUrl }; sign-in
+	 *        stays off until both credentials are set.
+	 */
+	function init( required authService, required struct google, required githubOAuthClient, required passkeys ){
+		variables.authService   = arguments.authService;
+		variables.passkeys      = arguments.passkeys;
+		variables.googleEnabled = len( arguments.google.clientId ) && len( arguments.google.clientSecret );
+		variables.providers     = {
 			"github": { "label": "GitHub", "client": arguments.githubOAuthClient }
 		};
 
 		this.router = boxExpressRouter();
-		this.router.get( "/auth/google", ( req, res ) => start( req, res, "google" ) );
-		this.router.get( "/auth/google/callback", ( req, res ) => callback( req, res, "google" ) );
+		this.router.get( "/auth/google", ( req, res, next ) => googleStart( req, res, next ) );
+		this.router.get( "/auth/complete", ( req, res ) => oauthComplete( req, res ) );
+		this.router.get( "/auth/failed", ( req, res ) => oauthFailed( req, res ) );
 		this.router.get( "/auth/github", ( req, res ) => start( req, res, "github" ) );
 		this.router.get( "/auth/github/callback", ( req, res ) => callback( req, res, "github" ) );
 		this.router.get( "/auth/logout", ( req, res ) => logout( req, res ) );
@@ -64,7 +76,85 @@ class {
 		this.router.post( "/manage/passkey/options", requirePending, stepLimit, ( req, res ) => staffPasskeyOptions( req, res ) );
 		this.router.post( "/manage/passkey", requirePending, stepLimit, ( req, res ) => staffPasskeyFinish( req, res ) );
 
+		// Last, so the routes above win over the module's GET /auth/:provider.
+		if ( variables.googleEnabled ){
+			var self  = this;
+			var oauth = boxExpressAuth( {
+				verify          : ( identity, tokens, req ) => self.verifyOAuthIdentity( identity, req ),
+				successRedirect : "/auth/complete",
+				failureRedirect : "/auth/failed",
+				loginPath       : "/manage/login"
+			} );
+			oauth.provider( "google", boxExpressAuthGoogle( {
+				clientId     : arguments.google.clientId,
+				clientSecret : arguments.google.clientSecret,
+				callbackUrl  : arguments.google.callbackUrl
+			} ) );
+			this.router.use( "/auth", oauth.routes() );
+		}
+
 		return this;
+	}
+
+	// GET /auth/google?redirect=<internal path> — the module starts the login.
+	// Its returnTo survives the session regeneration, so the post to come
+	// back to rides along to /auth/complete in it.
+	function googleStart( req, res, next ){
+		if ( !variables.googleEnabled ){
+			res.status( 503 ).send( "Google sign-in isn't configured." );
+			return;
+		}
+		req.query.returnTo = "/auth/complete?redirect=" & encodeForURL( _safeRedirect( req.query.redirect ?: "/" ) );
+		next();
+	}
+
+	// boxlang-express-auth's verify(): identity comes from Google's signed ID
+	// token. Returns { id } to accept, or null to refuse (the flash says why).
+	function verifyOAuthIdentity( required struct identity, req ){
+		if ( !( arguments.identity.emailVerified ?: false ) || !len( arguments.identity.email ?: "" ) ){
+			flashSet( arguments.req, { loginError: "That Google account's email isn't verified." } );
+			return javacast( "null", "" );
+		}
+		var user = variables.authService.findOrCreateOAuthUser( arguments.identity.email, arguments.identity.name ?: "", arguments.identity.avatarUrl ?: "" );
+		if ( user.isEmpty() ){
+			flashSet( arguments.req, { loginError: "This account has been deactivated." } );
+			return javacast( "null", "" );
+		}
+		return { "id": user.id };
+	}
+
+	// GET /auth/complete?redirect=<internal path> — after the module's login.
+	function oauthComplete( req, res ){
+		var userId = req.session.auth.userId ?: "";
+		structDelete( req.session, "auth" );
+		if ( !len( userId ) ){
+			flashSet( req, { loginError: "Sign-in failed — please try again." } );
+			res.redirect( "/manage/login" );
+			return;
+		}
+
+		var user = variables.authService.findActiveUserById( userId );
+		if ( user.isEmpty() ){
+			flashSet( req, { loginError: "This account has been deactivated." } );
+			res.redirect( "/manage/login" );
+			return;
+		}
+
+		if ( _signIn( req, user, "Google" ) == "pending" ){
+			res.redirect( "/manage/passkey" );
+			return;
+		}
+		res.redirect( _safeRedirect( req.query.redirect ?: "/" ) );
+	}
+
+	// GET /auth/failed?error=<code> — the module's failureRedirect. A refusal
+	// from verifyOAuthIdentity() has already left its own message.
+	function oauthFailed( req, res ){
+		if ( !len( req.session._flash.loginError ?: "" ) ){
+			var code = req.query.error ?: "";
+			flashSet( req, { loginError: code == "access_denied" ? "Google sign-in was cancelled." : "Sign-in failed — please try again." } );
+		}
+		res.redirect( "/manage/login" );
 	}
 
 	// GET /auth/:provider?redirect=<internal path> — begins the OAuth dance.

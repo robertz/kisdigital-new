@@ -72,7 +72,7 @@ class {
 	 * somehow did, so this account only ever gets in via Google or GitHub.
 	 *
 	 * SECURITY: only call this with an email whose ownership Google has
-	 * already confirmed (GoogleOAuthClient/GitHubOAuthClient getUserInfo()'s emailVerified) —
+	 * already confirmed (the Google ID token's email_verified, or GitHubOAuthClient.getUserInfo()'s emailVerified) —
 	 * this trusts the given email outright, the same way authenticate()
 	 * trusts a matched password.
 	 *
@@ -83,7 +83,7 @@ class {
 	 *        is left alone, so a CMS-set name doesn't get silently
 	 *        overwritten by whatever the Google account happens to say.
 	 * @param {string} pictureUrl  - Google account's profile photo URL, if
-	 *        any (GoogleOAuthClient.getUserInfo()'s pictureUrl). Stored at
+	 *        any (the Google ID token's picture claim). Stored at
 	 *        creation time, and re-synced on every subsequent login when
 	 *        Google returns a non-empty value that differs from what's
 	 *        stored — an empty pictureUrl never clears an existing one, in

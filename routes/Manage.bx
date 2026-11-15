@@ -5,13 +5,13 @@
  */
 class {
 
-	variables.authService       = "";
-	variables.googleOAuthClient = "";
-	variables.persistentCache   = new models.util.PersistentCache();
+	variables.authService         = "";
+	variables.googleSignInEnabled = false;
+	variables.persistentCache     = new models.util.PersistentCache();
 
-	function init( required authService, required googleOAuthClient ){
-		variables.authService       = arguments.authService;
-		variables.googleOAuthClient = arguments.googleOAuthClient;
+	function init( required authService, required boolean googleSignInEnabled ){
+		variables.authService         = arguments.authService;
+		variables.googleSignInEnabled = arguments.googleSignInEnabled;
 
 		// Bare method references passed as route handlers lose their binding to
 		// this instance (BoxLang's Router ends up calling them unbound), so every
@@ -54,7 +54,7 @@ class {
 			pageTitle          : "Sign In",
 			error              : flash.loginError ?: "",
 			csrfToken          : req.csrfToken(),
-			googleSignInEnabled: variables.googleOAuthClient.isConfigured()
+			googleSignInEnabled: variables.googleSignInEnabled
 		} );
 	}
 

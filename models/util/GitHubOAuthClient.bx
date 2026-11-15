@@ -1,6 +1,6 @@
 /**
- * Minimal GitHub OAuth client for "Sign in with GitHub" — same shape as
- * GoogleOAuthClient.bx. GitHub isn't OpenID Connect, so the profile comes
+ * Minimal GitHub OAuth client for "Sign in with GitHub" (Google sign-in
+ * runs on boxlang-express-auth). GitHub isn't OpenID Connect, so the profile comes
  * from two REST calls: /user (name, avatar) and /user/emails (the email
  * list with verified flags — /user's own `email` is only the public one,
  * often null, and carries no verification flag).
@@ -67,8 +67,7 @@ class {
 	}
 
 	/**
-	 * @return {struct} { email, emailVerified, name, pictureUrl } — same
-	 *         keys as GoogleOAuthClient.getUserInfo(). email is the
+	 * @return {struct} { email, emailVerified, name, pictureUrl }. email is the
 	 *         account's primary address, and emailVerified is GitHub's own
 	 *         flag for it.
 	 */
@@ -117,8 +116,11 @@ class {
 		return parts.toList( "&" );
 	}
 
-	// See GoogleOAuthClient._client(): the HttpRequest must be built inline
-	// as the .send() argument, never stored in a local var first.
+	// BoxLang interop issue, confirmed in isolation: assigning a built
+	// java.net.http.HttpRequest to a local var before passing it to
+	// HttpClient.send() breaks method resolution ("Error getting method
+	// [send] for class [jdk.internal.net.http.HttpClientFacade]"). Build the
+	// request inline as the .send() argument, never in a local var first.
 	private function _client(){
 		return createObject( "java", "java.net.http.HttpClient" ).newBuilder().build();
 	}
