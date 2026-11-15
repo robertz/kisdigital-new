@@ -99,12 +99,12 @@ googleSignIn = {
 googleSignInEnabled = len( googleSignIn.clientId ) && len( googleSignIn.clientSecret )
 
 // "Sign in with GitHub" — same pattern; the GitHub OAuth App lists both
-// the localhost and kisdigital.com callbacks as redirect URIs.
-githubOAuthClient = new models.util.GitHubOAuthClient(
-	getSystemSetting( "GITHUB_CLIENT_ID", "" ),
-	getSystemSetting( "GITHUB_CLIENT_SECRET", "" ),
-	getSystemSetting( "SITEURL", "https://kisdigital.com" ) & "/auth/github/callback"
-)
+// the localhost and kisdigital.com callbacks.
+githubSignIn = {
+	clientId     : getSystemSetting( "GITHUB_CLIENT_ID", "" ),
+	clientSecret : getSystemSetting( "GITHUB_CLIENT_SECRET", "" ),
+	callbackUrl  : getSystemSetting( "SITEURL", "https://kisdigital.com" ) & "/auth/github/callback"
+}
 
 // Passkeys for commenters (bx-passkeys, routes/Auth.bx). The rpId is
 // SITEURL's host and can never change once people have passkeys. In
@@ -205,7 +205,7 @@ app.locals.cssHref  = cssHref
 app.locals.jsHref   = jsHref
 app.locals.codeJsHref = codeJsHref
 app.locals.seasonalJsHref = seasonalJsHref
-app.locals.githubSignInEnabled = githubOAuthClient.isConfigured()
+app.locals.githubSignInEnabled = len( githubSignIn.clientId ) && len( githubSignIn.clientSecret )
 
 // /manage needs a passkey (routes/Auth.bx). A staff session from before that
 // rule, or from any other way in, is dropped here.
@@ -345,7 +345,7 @@ app.use( ( req, res, next ) => {
 	}
 	next();
 } )
-app.use( new routes.Auth( authService, googleSignIn, githubOAuthClient, passkeys ).router )
+app.use( new routes.Auth( authService, googleSignIn, githubSignIn, passkeys ).router )
 app.use( new routes.Main( postService, authorService, siteDefaults ).router )
 // Before Posts: its router checks CSRF on every request that reaches it,
 // which would refuse a mail client's one-click unsubscribe POST (and the

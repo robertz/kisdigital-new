@@ -11,37 +11,33 @@
  * The comment form on a post page links to
  * GET /auth/<provider>?redirect=<that post's URL>.
  *
- * Google runs on boxlang-express-auth (PKCE, a signed and checked ID token,
- * single-use state). The module regenerates the session after a login, so
- * it hands off to /auth/complete, which signs the person in by the rules
- * below and only then honours ?redirect. GitHub still uses
- * GitHubOAuthClient.
+ * Both providers run on boxlang-express-auth (PKCE, single-use state, and
+ * for Google a signed and checked ID token). The module regenerates the
+ * session after a login, so it hands off to /auth/complete, which signs the
+ * person in by the rules below and only then honours ?redirect.
  */
 class {
 
-	variables.authService   = "";
-	variables.providers     = {};
-	variables.passkeys      = "";
-	variables.googleEnabled = false;
+	variables.authService = "";
+	variables.passkeys    = "";
+	// provider name -> label, for the providers whose credentials are set
+	variables.enabled     = {};
+	variables.LABELS      = { "google": "Google", "github": "GitHub" };
 
 	/**
-	 * @param {struct} google - { clientId, clientSecret, callbackUrl }; sign-in
-	 *        stays off until both credentials are set.
+	 * @param {struct} google - { clientId, clientSecret, callbackUrl }
+	 * @param {struct} github - the same. Each provider stays off until both
+	 *        of its credentials are set.
 	 */
-	function init( required authService, required struct google, required githubOAuthClient, required passkeys ){
-		variables.authService   = arguments.authService;
-		variables.passkeys      = arguments.passkeys;
-		variables.googleEnabled = len( arguments.google.clientId ) && len( arguments.google.clientSecret );
-		variables.providers     = {
-			"github": { "label": "GitHub", "client": arguments.githubOAuthClient }
-		};
+	function init( required authService, required struct google, required struct github, required passkeys ){
+		variables.authService = arguments.authService;
+		variables.passkeys    = arguments.passkeys;
 
 		this.router = boxExpressRouter();
-		this.router.get( "/auth/google", ( req, res, next ) => googleStart( req, res, next ) );
+		this.router.get( "/auth/google", ( req, res, next ) => oauthStart( req, res, next, "google" ) );
+		this.router.get( "/auth/github", ( req, res, next ) => oauthStart( req, res, next, "github" ) );
 		this.router.get( "/auth/complete", ( req, res ) => oauthComplete( req, res ) );
 		this.router.get( "/auth/failed", ( req, res ) => oauthFailed( req, res ) );
-		this.router.get( "/auth/github", ( req, res ) => start( req, res, "github" ) );
-		this.router.get( "/auth/github/callback", ( req, res ) => callback( req, res, "github" ) );
 		this.router.get( "/auth/logout", ( req, res ) => logout( req, res ) );
 
 		// Passkey sign-in carries no CSRF token: a post page doesn't mint one
@@ -77,42 +73,47 @@ class {
 		this.router.post( "/manage/passkey", requirePending, stepLimit, ( req, res ) => staffPasskeyFinish( req, res ) );
 
 		// Last, so the routes above win over the module's GET /auth/:provider.
-		if ( variables.googleEnabled ){
-			var self  = this;
-			var oauth = boxExpressAuth( {
-				verify          : ( identity, tokens, req ) => self.verifyOAuthIdentity( identity, req ),
-				successRedirect : "/auth/complete",
-				failureRedirect : "/auth/failed",
-				loginPath       : "/manage/login"
-			} );
-			oauth.provider( "google", boxExpressAuthGoogle( {
-				clientId     : arguments.google.clientId,
-				clientSecret : arguments.google.clientSecret,
-				callbackUrl  : arguments.google.callbackUrl
-			} ) );
+		var self  = this;
+		var oauth = boxExpressAuth( {
+			verify          : ( identity, tokens, req ) => self.verifyOAuthIdentity( identity, req ),
+			successRedirect : "/auth/complete",
+			failureRedirect : "/auth/failed",
+			loginPath       : "/manage/login"
+		} );
+		if ( _configured( arguments.google ) ){
+			oauth.provider( "google", boxExpressAuthGoogle( _credentials( arguments.google ) ) );
+			variables.enabled[ "google" ] = "Google";
+		}
+		if ( _configured( arguments.github ) ){
+			oauth.provider( "github", boxExpressAuthGitHub( _credentials( arguments.github ) ) );
+			variables.enabled[ "github" ] = "GitHub";
+		}
+		if ( !variables.enabled.isEmpty() ){
 			this.router.use( "/auth", oauth.routes() );
 		}
 
 		return this;
 	}
 
-	// GET /auth/google?redirect=<internal path> — the module starts the login.
-	// Its returnTo survives the session regeneration, so the post to come
-	// back to rides along to /auth/complete in it.
-	function googleStart( req, res, next ){
-		if ( !variables.googleEnabled ){
-			res.status( 503 ).send( "Google sign-in isn't configured." );
+	// GET /auth/:provider?redirect=<internal path> — the module starts the
+	// login. Its returnTo survives the session regeneration, so the post to
+	// come back to rides along to /auth/complete in it.
+	function oauthStart( req, res, next, required string provider ){
+		if ( !variables.enabled.keyExists( arguments.provider ) ){
+			res.status( 503 ).send( variables.LABELS[ arguments.provider ] & " sign-in isn't configured." );
 			return;
 		}
+		req.session.oauthProvider = arguments.provider;
 		req.query.returnTo = "/auth/complete?redirect=" & encodeForURL( _safeRedirect( req.query.redirect ?: "/" ) );
 		next();
 	}
 
-	// boxlang-express-auth's verify(): identity comes from Google's signed ID
-	// token. Returns { id } to accept, or null to refuse (the flash says why).
+	// boxlang-express-auth's verify(). Returns { id } to accept, or null to
+	// refuse (the flash says why).
 	function verifyOAuthIdentity( required struct identity, req ){
+		var label = variables.LABELS[ arguments.identity.provider ] ?: "That";
 		if ( !( arguments.identity.emailVerified ?: false ) || !len( arguments.identity.email ?: "" ) ){
-			flashSet( arguments.req, { loginError: "That Google account's email isn't verified." } );
+			flashSet( arguments.req, { loginError: "That " & label & " account's primary email isn't verified." } );
 			return javacast( "null", "" );
 		}
 		var user = variables.authService.findOrCreateOAuthUser( arguments.identity.email, arguments.identity.name ?: "", arguments.identity.avatarUrl ?: "" );
@@ -140,7 +141,7 @@ class {
 			return;
 		}
 
-		if ( _signIn( req, user, "Google" ) == "pending" ){
+		if ( _signIn( req, user, "OAuth" ) == "pending" ){
 			res.redirect( "/manage/passkey" );
 			return;
 		}
@@ -150,84 +151,25 @@ class {
 	// GET /auth/failed?error=<code> — the module's failureRedirect. A refusal
 	// from verifyOAuthIdentity() has already left its own message.
 	function oauthFailed( req, res ){
+		var label = variables.LABELS[ req.session.oauthProvider ?: "" ] ?: "";
+		structDelete( req.session, "oauthProvider" );
 		if ( !len( req.session._flash.loginError ?: "" ) ){
 			var code = req.query.error ?: "";
-			flashSet( req, { loginError: code == "access_denied" ? "Google sign-in was cancelled." : "Sign-in failed — please try again." } );
+			flashSet( req, { loginError: code == "access_denied" && len( label ) ? label & " sign-in was cancelled." : "Sign-in failed — please try again." } );
 		}
 		res.redirect( "/manage/login" );
 	}
 
-	// GET /auth/:provider?redirect=<internal path> — begins the OAuth dance.
-	function start( req, res, required string provider ){
-		var p = variables.providers[ arguments.provider ];
-		if ( !p.client.isConfigured() ){
-			res.status( 503 ).send( p.label & " sign-in isn't configured." );
-			return;
-		}
-
-		var state = createUUID();
-		req.session.oauthState    = state;
-		req.session.oauthProvider = arguments.provider;
-		req.session.oauthRedirect = _safeRedirect( req.query.redirect ?: "/" );
-
-		res.redirect( p.client.buildAuthorizationUrl( state ) );
+	private boolean function _configured( required struct settings ){
+		return len( arguments.settings.clientId ) && len( arguments.settings.clientSecret );
 	}
 
-	// GET /auth/:provider/callback?code=...&state=...
-	function callback( req, res, required string provider ){
-		var p                = variables.providers[ arguments.provider ];
-		var expectedState    = req.session.oauthState ?: "";
-		var expectedProvider = req.session.oauthProvider ?: "";
-		var redirectTo       = req.session.oauthRedirect ?: "/";
-		structDelete( req.session, "oauthState" );
-		structDelete( req.session, "oauthProvider" );
-		structDelete( req.session, "oauthRedirect" );
-
-		var returnedState = req.query.state ?: "";
-		var code          = req.query.code  ?: "";
-
-		if ( !len( expectedState ) || !len( returnedState ) || returnedState != expectedState || expectedProvider != arguments.provider ){
-			println( "[auth] " & p.label & " OAuth state mismatch from " & req.ip );
-			flashSet( req, { loginError: "Sign-in failed — please try again." } );
-			res.redirect( "/manage/login" );
-			return;
-		}
-
-		if ( !len( code ) ){
-			// User denied consent, or the provider sent an error instead of a code.
-			flashSet( req, { loginError: p.label & " sign-in was cancelled." } );
-			res.redirect( "/manage/login" );
-			return;
-		}
-
-		try {
-			var accessToken = p.client.exchangeCodeForToken( code );
-			var profile     = p.client.getUserInfo( accessToken );
-
-			if ( !profile.emailVerified || !len( profile.email ) ){
-				flashSet( req, { loginError: "That " & p.label & " account's primary email isn't verified." } );
-				res.redirect( "/manage/login" );
-				return;
-			}
-
-			var user = variables.authService.findOrCreateOAuthUser( profile.email, profile.name, profile.pictureUrl );
-			if ( user.isEmpty() ){
-				flashSet( req, { loginError: "This account has been deactivated." } );
-				res.redirect( "/manage/login" );
-				return;
-			}
-
-			if ( _signIn( req, user, p.label ) == "pending" ){
-				res.redirect( "/manage/passkey" );
-				return;
-			}
-			res.redirect( redirectTo );
-
-		} catch ( any e ){
-			println( "[error] " & p.label & " OAuth callback failed: " & e.message );
-			flashSet( req, { loginError: "Sign-in failed — please try again." } );
-			res.redirect( "/manage/login" );
-		}
+	private struct function _credentials( required struct settings ){
+		return {
+			clientId     : arguments.settings.clientId,
+			clientSecret : arguments.settings.clientSecret,
+			callbackUrl  : arguments.settings.callbackUrl
+		};
 	}
 
 	// POST /auth/passkey/options — no body. The browser's passkey sheet

@@ -72,7 +72,7 @@ class {
 	 * somehow did, so this account only ever gets in via Google or GitHub.
 	 *
 	 * SECURITY: only call this with an email whose ownership Google has
-	 * already confirmed (the Google ID token's email_verified, or GitHubOAuthClient.getUserInfo()'s emailVerified) —
+	 * already confirmed (boxlang-express-auth's identity.emailVerified) —
 	 * this trusts the given email outright, the same way authenticate()
 	 * trusts a matched password.
 	 *
