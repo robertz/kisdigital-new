@@ -8,7 +8,7 @@
  * presigned-URL signing (the exact code that took a full session to get
  * right against production — see R2Client.bx's own comments), BotDetector's
  * pattern matching, SiteDefaults' URL/meta building, PostRenderer's
- * markdown-to-HTML link/image enhancement, and Runnable's closure adapter.
+ * markdown-to-HTML link/image enhancement, and ApiValidation's error format.
  *
  * Deliberately NOT covered: anything that only does something interesting
  * once a database, background thread, or live HTTP call is involved —

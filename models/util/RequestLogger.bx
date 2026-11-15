@@ -9,8 +9,8 @@
  * middleware() ever touches the database. Each request just appends a
  * struct to an in-memory queue (a java.util.concurrent.ConcurrentLinkedQueue
  * — safe for many virtual threads to write to concurrently without a lock),
- * and a single background thread drains it on a timer. A slow or briefly
- * unreachable database delays analytics, never a response.
+ * and a scheduled job drains it every few seconds (start()). A slow or
+ * briefly unreachable database delays analytics, never a response.
  *
  * Register this as the very first middleware (app.use(requestLogger.middleware()),
  * before boxExpressStatic() and everything else) so next() wraps the entire
@@ -23,24 +23,28 @@ class {
 	variables.queue                = createObject( "java", "java.util.concurrent.ConcurrentLinkedQueue" ).init();
 	variables.maxQueueSize         = 5000;
 	variables.maxBatchPerFlush     = 500;
-	variables.flushIntervalSeconds = 5;
 	variables.retentionDays        = 90;
-	// Roughly every 30 min at the default 5s flush interval — no need to run
-	// a DELETE on every single flush.
-	variables.flushesBetweenCleanup = 360;
-	variables.flushesSinceCleanup   = 0;
-	variables.botDetector           = new models.util.BotDetector();
+	variables.botDetector          = new models.util.BotDetector();
 	// Running request timing since start, for the System page. Undertow's own
 	// figures stay 0: boxlang-express doesn't turn on its request start times.
 	variables.timedRequests = createObject( "java", "java.util.concurrent.atomic.AtomicLong" ).init( 0 );
 	variables.totalMs       = createObject( "java", "java.util.concurrent.atomic.AtomicLong" ).init( 0 );
 	variables.slowestMs     = createObject( "java", "java.util.concurrent.atomic.AtomicLong" ).init( 0 );
 
-	function init( numeric flushIntervalSeconds = 5, numeric retentionDays = 90 ){
-		variables.flushIntervalSeconds = arguments.flushIntervalSeconds;
-		variables.retentionDays        = arguments.retentionDays;
-		_startFlushLoop();
+	function init( numeric retentionDays = 90 ){
+		variables.retentionDays = arguments.retentionDays;
 		return this;
+	}
+
+	/**
+	 * Starts the jobs that write the queue to RequestLog every five seconds
+	 * and drop rows past retentionDays every half hour. Called once from
+	 * app.bxs, not init(), so scripts that construct this start nothing.
+	 */
+	function start( required app ){
+		var logger = this;
+		arguments.app.schedule( "*/5 * * * * *", () => logger.flushQueue(), { name: "request-log-flush" } );
+		arguments.app.schedule( "*/30 * * * *", () => logger.removeOldRows(), { name: "request-log-cleanup", timezone: "UTC" } );
 	}
 
 	/**
@@ -135,19 +139,12 @@ class {
 		}
 	}
 
-	private function _startFlushLoop(){
-		var scheduler = createObject( "java", "java.util.concurrent.Executors" ).newSingleThreadScheduledExecutor();
-		var runnable  = createDynamicProxy( new models.util.Runnable( () => _flush() ), [ "java.lang.Runnable" ] );
-		var seconds   = createObject( "java", "java.util.concurrent.TimeUnit" ).SECONDS;
-		scheduler.scheduleAtFixedRate( runnable, variables.flushIntervalSeconds, variables.flushIntervalSeconds, seconds );
-	}
-
 	/**
 	 * Drains up to maxBatchPerFlush rows and inserts them one at a time.
-	 * Runs entirely on the background scheduler thread — a slow or failing
-	 * database here delays the next flush, nothing else.
+	 * Runs on the scheduler's thread — a slow or failing database here
+	 * delays the next flush, nothing else.
 	 */
-	private function _flush(){
+	function flushQueue(){
 		try {
 			var batch = [];
 			var entry = variables.queue.poll();
@@ -163,8 +160,6 @@ class {
 				_classify( row );
 				_insertRow( row );
 			}
-
-			_cleanupOldRowsPeriodically();
 		} catch ( any e ){
 			// A DB blip should cost this batch, not the scheduler — the next
 			// tick just tries again with whatever's queued by then.
@@ -209,17 +204,16 @@ class {
 		);
 	}
 
-	private function _cleanupOldRowsPeriodically(){
-		variables.flushesSinceCleanup++;
-		if ( variables.flushesSinceCleanup < variables.flushesBetweenCleanup ){
-			return;
+	/** Deletes rows older than retentionDays. */
+	function removeOldRows(){
+		try {
+			queryExecute(
+				"DELETE FROM RequestLog WHERE requested_at < DATE_SUB(NOW(), INTERVAL :days DAY)",
+				{ "days": { value: variables.retentionDays, cfsqltype: "cf_sql_integer" } }
+			);
+		} catch ( any e ){
+			println( "[RequestLogger] cleanup failed: " & e.message );
 		}
-		variables.flushesSinceCleanup = 0;
-
-		queryExecute(
-			"DELETE FROM RequestLog WHERE requested_at < DATE_SUB(NOW(), INTERVAL :days DAY)",
-			{ "days": { value: variables.retentionDays, cfsqltype: "cf_sql_integer" } }
-		);
 	}
 
 }

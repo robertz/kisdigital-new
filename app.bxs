@@ -126,6 +126,7 @@ passkeys = passkeyRelyingParty(
 // Both together replace GoatCounterClient, whose synchronous, rate-limited
 // API calls could lock up request handling.
 requestLogger   = new models.util.RequestLogger()
+requestLogger.start( app )
 insightsService = new models.services.InsightsService(
 	reReplace( getSystemSetting( "SITEURL", "https://kisdigital.com" ), "^https?://", "", "one" )
 )
@@ -141,7 +142,7 @@ serverMonitor = new models.util.ServerMonitor( app, new models.util.GcCauses(), 
 serverHistory = new models.services.ServerHistory( serverMonitor )
 serverHistory.startHourly( app )
 
-app.schedule( 60 * 1000, () => subscriptionService.run(), { name: "post-emails" } )
+app.schedule( "* * * * *", () => subscriptionService.run(), { name: "post-emails" } )
 
 // ── Middleware ───────────────────────────────────────────────────────────
 // requestLogger goes first, ahead of everything else, so its next() wraps
@@ -305,7 +306,7 @@ if ( getSystemSetting( "ACTIVITYPUB_ENABLED", "false" ) == "true" ){
 			parseDateTime( activityPubSince ),
 			commentService
 		)
-		app.schedule( 2 * 60 * 1000, () => activityPubSweep.run(), { name: "activitypub-sweep", immediate: true } )
+		app.schedule( "*/2 * * * *", () => activityPubSweep.run(), { name: "activitypub-sweep", immediate: true } )
 	} else {
 		println( "[activitypub] ACTIVITYPUB_SINCE is not set to a date; the sweep is off and nothing will federate" )
 	}
@@ -333,7 +334,7 @@ if ( getSystemSetting( "WEBMENTION_ENABLED", "false" ) == "true" ){
 		webmentionHttp,
 		microformats
 	)
-	app.schedule( 60 * 1000, () => webmentionService.processQueue(), { name: "webmention-receive" } )
+	app.schedule( "* * * * *", () => webmentionService.processQueue(), { name: "webmention-receive" } )
 
 	webmentionSince = getSystemSetting( "WEBMENTION_SEND_SINCE", "" )
 	if ( isDate( webmentionSince ) ){
@@ -345,7 +346,7 @@ if ( getSystemSetting( "WEBMENTION_ENABLED", "false" ) == "true" ){
 			webmentionHttp,
 			microformats
 		)
-		app.schedule( 5 * 60 * 1000, () => webmentionSender.run(), { name: "webmention-send" } )
+		app.schedule( "*/5 * * * *", () => webmentionSender.run(), { name: "webmention-send" } )
 	} else {
 		println( "[webmention] WEBMENTION_SEND_SINCE is not set to a date; receiving only, nothing is sent" )
 	}
