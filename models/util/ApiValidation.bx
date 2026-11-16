@@ -8,7 +8,15 @@
 class {
 
 	function body( required struct fields ){
-		return boxExpressValidate( { body: arguments.fields }, {
+		return _validate( { body: arguments.fields } );
+	}
+
+	function query( required struct fields ){
+		return _validate( { query: arguments.fields } );
+	}
+
+	private function _validate( required struct schema ){
+		return boxExpressValidate( arguments.schema, {
 			onError: ( errors, req, res, next ) => {
 				var messages = errors.map( ( problem ) => reFind( "^[a-z]", problem.message ) ? problem.field & " " & problem.message : problem.message );
 				res.status( 422 ).json( { "error": messages.toList( " " ) } );

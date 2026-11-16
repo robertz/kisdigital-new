@@ -385,6 +385,7 @@ app.use( new routes.ManageApp(
 		new routes.manageapi.Dashboard( postService, commentService, insightsService ),
 		new routes.manageapi.Posts( postService, postRenderer, new models.services.RevisionService() ),
 		new routes.manageapi.Comments( commentService ),
+		new routes.manageapi.Subscribers( subscriptionService ),
 		new routes.manageapi.Media( r2Client, postService, new models.services.MediaService() ),
 		new routes.manageapi.Authors( authorService ),
 		new routes.manageapi.Settings( settingsService ),

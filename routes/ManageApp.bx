@@ -38,7 +38,7 @@ class {
 		var appPaths = [
 			"/manage",
 			"/manage/posts", "/manage/posts/new", "/manage/posts/calendar", "/manage/posts/:id/edit",
-			"/manage/comments", "/manage/media", "/manage/insights",
+			"/manage/comments", "/manage/media", "/manage/insights", "/manage/subscribers",
 			"/manage/authors", "/manage/authors/new", "/manage/authors/:id/edit",
 			"/manage/settings", "/manage/server", "/manage/logs"
 		];

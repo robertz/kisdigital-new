@@ -4,6 +4,7 @@ import type { SvgIconProps } from "@mui/material/SvgIcon";
 import ChatOutlined from "@mui/icons-material/ChatOutlined";
 import PhotoLibraryOutlined from "@mui/icons-material/PhotoLibraryOutlined";
 import InsightsOutlined from "@mui/icons-material/InsightsOutlined";
+import MailOutlined from "@mui/icons-material/MailOutlined";
 import PeopleOutlined from "@mui/icons-material/PeopleOutlined";
 import SettingsOutlined from "@mui/icons-material/SettingsOutlined";
 import DnsOutlined from "@mui/icons-material/DnsOutlined";
@@ -45,6 +46,7 @@ export const modules: ManageModule[] = [
 	},
 	{ id: "media", label: "Media", icon: PhotoLibraryOutlined, group: "Write", adminOnly: true, to: "/media" },
 	{ id: "insights", label: "Insights", icon: InsightsOutlined, group: "Readers", adminOnly: true, to: "/insights" },
+	{ id: "subscribers", label: "Subscribers", icon: MailOutlined, group: "Readers", adminOnly: true, to: "/subscribers" },
 	{ id: "authors", label: "Authors", icon: PeopleOutlined, group: "Admin", adminOnly: true, to: "/authors" },
 	{ id: "settings", label: "Settings", icon: SettingsOutlined, group: "Admin", adminOnly: true, to: "/settings" },
 	// Covers both of its tabs: Server (/server) and Requests (/logs).

@@ -1,0 +1,52 @@
+/**
+ * /manage/api/subscribers — the email subscribers to new posts, read-only.
+ * Addresses sign themselves up and out (routes/Subscriptions.bx); SES's
+ * feedback marks bounces and complaints.
+ */
+class {
+
+	variables.subscriptionService = "";
+
+	function init( required subscriptionService ){
+		variables.subscriptionService = arguments.subscriptionService;
+		return this;
+	}
+
+	function register( required router, required auth, required admin ){
+		var validQuery = new models.util.ApiValidation().query( {
+			status: { type: "string", oneOf: [ "pending", "active", "unsubscribed", "bounced", "complained" ] },
+			q     : { type: "string", trim: true, maxLength: 255, default: "" },
+			page  : { type: "integer", min: 1, default: 1 }
+		} );
+		arguments.router.get( "/manage/api/subscribers", arguments.admin, validQuery, ( req, res ) => listSubscribers( req, res ) );
+	}
+
+	// GET /manage/api/subscribers?status=active&q=gmail&page=2
+	function listSubscribers( req, res ){
+		var query  = req.valid.query;
+		var paging = variables.subscriptionService.listForManage( query.status ?: "", query.q, query.page, 25 );
+
+		res.json( {
+			"subscribers": paging.subscribers.map( ( row ) => {
+				return {
+					"id"        : row.id,
+					"email"     : row.email,
+					"status"    : row.status,
+					"created"   : _utc( row.created ),
+					"confirmed" : _utc( row.confirmed ),
+					"emailsSent": val( row.emails_sent ),
+					"lastSent"  : _utc( row.last_sent )
+				};
+			} ),
+			"counts"    : paging.counts,
+			"total"     : paging.total,
+			"page"      : paging.page,
+			"totalPages": paging.totalPages
+		} );
+	}
+
+	private string function _utc( value ){
+		return !isNull( arguments.value ) && isDate( arguments.value ) ? dateTimeFormat( arguments.value, "yyyy-mm-dd'T'HH:nn:ss'Z'" ) : "";
+	}
+
+}

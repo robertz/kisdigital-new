@@ -43,6 +43,24 @@ class extends="testbox.system.BaseSpec" {
 				expect( structKeyExists( req.valid.body, "isAdmin" ) ).toBeFalse()
 			} )
 
+			it( "validates a query string the same way, filling defaults", function(){
+				var listing = new models.util.ApiValidation().query( {
+					status: { type: "string", oneOf: [ "active", "pending" ] },
+					page  : { type: "integer", min: 1, default: 1 }
+				} )
+				listing( { query: { status: "deleted", page: "abc" } }, res, () => {} )
+				expect( sent.status ).toBe( 422 )
+				expect( sent.json.error ).toInclude( "status must be one of" )
+				expect( sent.json.error ).toInclude( "page must be a whole number" )
+
+				var req = { query: { page: "" } }
+				var called = false
+				listing( req, res, () => called = true )
+				expect( called ).toBeTrue()
+				expect( req.valid.query.page ).toBe( 1 )
+				expect( structKeyExists( req.valid.query, "status" ) ).toBeFalse()
+			} )
+
 		} )
 	}
 

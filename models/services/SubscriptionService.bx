@@ -143,6 +143,55 @@ class {
 	}
 
 	/**
+	 * One page of subscribers for /manage, newest first, with how many post
+	 * emails each has been sent.
+	 *
+	 * @param {string} status - One of the Subscriber statuses, or "" for all.
+	 * @param {string} search - Part of an email address, or "" for all.
+	 * @return {struct} { subscribers, total, counts (per status), page, totalPages }
+	 */
+	struct function listForManage( string status = "", string search = "", numeric page = 1, numeric pageSize = 25 ){
+		var counts = { "pending": 0, "active": 0, "unsubscribed": 0, "bounced": 0, "complained": 0 };
+		for ( var row in queryExecute( "SELECT status, COUNT(*) AS n FROM Subscriber GROUP BY status", [], { returnType: "array" } ) ){
+			counts[ row.status ] = val( row.n );
+		}
+
+		var where  = [];
+		var params = {};
+		if ( len( arguments.status ) ){
+			where.append( "S.status = :status" );
+			params.status = { value: arguments.status, sqltype: "varchar" };
+		}
+		if ( len( arguments.search ) ){
+			// LIKE wildcards in what was typed are matched literally.
+			where.append( "S.email LIKE :search ESCAPE '!'" );
+			params.search = { value: "%" & reReplace( lCase( arguments.search ), "([!%_])", "!\1", "all" ) & "%", sqltype: "varchar" };
+		}
+		var whereSql = where.len() ? "WHERE " & where.toList( " AND " ) : "";
+
+		var total      = val( queryExecute( "SELECT COUNT(*) AS n FROM Subscriber S #whereSql#", params, { returnType: "array" } )[ 1 ].n );
+		var totalPages = max( 1, ceiling( total / arguments.pageSize ) );
+		var page       = min( arguments.page, totalPages );
+
+		params.lim    = { value: arguments.pageSize, sqltype: "integer" };
+		params.offset = { value: ( page - 1 ) * arguments.pageSize, sqltype: "integer" };
+		var rows = queryExecute(
+			"SELECT S.id, S.email, S.status, S.created, S.confirmed,
+				COUNT(D.post_id) AS emails_sent, MAX(D.sent) AS last_sent
+			FROM Subscriber S
+			LEFT JOIN PostEmailDelivery D ON D.subscriber_id = S.id
+			#whereSql#
+			GROUP BY S.id, S.email, S.status, S.created, S.confirmed
+			ORDER BY S.created DESC
+			LIMIT :lim OFFSET :offset",
+			params,
+			{ returnType: "array" }
+		);
+
+		return { "subscribers": rows, "total": total, "counts": counts, "page": page, "totalPages": totalPages };
+	}
+
+	/**
 	 * @return {struct} How many emails went out, for logging.
 	 */
 	struct function run(){
