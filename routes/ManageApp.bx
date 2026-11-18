@@ -40,7 +40,7 @@ class {
 			"/manage/posts", "/manage/posts/new", "/manage/posts/calendar", "/manage/posts/:id/edit",
 			"/manage/comments", "/manage/media", "/manage/insights", "/manage/subscribers",
 			"/manage/authors", "/manage/authors/new", "/manage/authors/:id/edit",
-			"/manage/settings", "/manage/server", "/manage/logs"
+			"/manage/settings", "/manage/server", "/manage/logs", "/manage/security"
 		];
 		for ( var appPath in appPaths ){
 			this.router.get( appPath, page, ( req, res ) => shell( req, res ) );

@@ -24,6 +24,12 @@ interface Dashboard {
 	upcoming: { id: string; title: string; publishDate: string }[];
 }
 
+interface SecuritySummary {
+	last24h: number;
+	previous24h: number;
+	top: { label: string; count: number }[];
+}
+
 interface TopPosts {
 	posts: { title: string; url: string; views: number }[];
 }
@@ -46,6 +52,12 @@ export function HomePage() {
 		queryKey: ["dashboard", "top-posts"],
 		queryFn: () => api.get<TopPosts>("/manage/api/dashboard/top-posts"),
 		enabled: !isAdmin,
+	});
+	const security = useQuery({
+		queryKey: ["security", "summary"],
+		queryFn: () => api.get<SecuritySummary>("/manage/api/security/summary"),
+		enabled: isAdmin,
+		refetchInterval: 60_000,
 	});
 
 	const counts = dashboard.data?.statusCounts;
@@ -195,9 +207,56 @@ export function HomePage() {
 					</CardBody>
 				</Card>
 
+				{isAdmin && <SecurityCard query={security} />}
+
 				{!isAdmin && <TopPostsCard query={topPosts} sx={{ gridColumn: "1 / -1" }} />}
 			</Box>
 		</Page>
+	);
+}
+
+function SecurityCard({ query }: { query: UseQueryResult<SecuritySummary> }) {
+	return (
+		<Card
+			title="Malicious traffic, last 24 hours"
+			action={
+				<ButtonLink to="/security" size="small">
+					Details
+				</ButtonLink>
+			}
+		>
+			<CardBody query={query} height={150}>
+				{(data) => {
+					const change = data.last24h - data.previous24h;
+					return (
+						<>
+							<Stack direction="row" spacing={1.5} sx={{ alignItems: "baseline", mb: 1.5 }}>
+								<Typography variant="h1" component="p" sx={{ fontVariantNumeric: "tabular-nums" }}>
+									{data.last24h.toLocaleString()}
+								</Typography>
+								<Typography variant="body2" color="text.secondary">
+									{change === 0 ? "same as the day before" : `${change > 0 ? "up" : "down"} ${Math.abs(change).toLocaleString()} on the day before`}
+								</Typography>
+							</Stack>
+							{data.top.length === 0 ? (
+								<Empty>Nothing flagged.</Empty>
+							) : (
+								<Stack spacing={0.75}>
+									{data.top.map((row) => (
+										<Stack key={row.label} direction="row" spacing={1} sx={{ justifyContent: "space-between" }}>
+											<Typography variant="body2">{row.label}</Typography>
+											<Typography variant="body2" color="text.secondary" sx={{ fontVariantNumeric: "tabular-nums" }}>
+												{row.count.toLocaleString()}
+											</Typography>
+										</Stack>
+									))}
+								</Stack>
+							)}
+						</>
+					);
+				}}
+			</CardBody>
+		</Card>
 	);
 }
 

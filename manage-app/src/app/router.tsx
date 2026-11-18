@@ -6,6 +6,7 @@ import { homeRoute } from "../modules/home/routes";
 import { insightsRoute } from "../modules/insights/routes";
 import { mediaRoute } from "../modules/media/routes";
 import { postCalendarRoute, postEditRoute, postNewRoute, postsRoute } from "../modules/posts/routes";
+import { securityRoute } from "../modules/security/routes";
 import { settingsRoute } from "../modules/settings/routes";
 import { subscribersRoute } from "../modules/subscribers/routes";
 import { logsRoute, serverRoute } from "../modules/system/routes";
@@ -24,6 +25,7 @@ const routeTree = rootRoute.addChildren([
 	authorNewRoute,
 	authorEditRoute,
 	settingsRoute,
+	securityRoute,
 	serverRoute,
 	logsRoute,
 ]);

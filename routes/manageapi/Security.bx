@@ -1,0 +1,23 @@
+/**
+ * /manage/api/security — how much of the site's traffic looks like attacks
+ * or probes (models/services/ThreatService.bx). Watching only: nothing here
+ * blocks a request.
+ */
+class {
+
+	variables.threatService = "";
+
+	function init( required threatService ){
+		variables.threatService = arguments.threatService;
+		return this;
+	}
+
+	function register( required router, required auth, required admin ){
+		var validRange = new models.util.ApiValidation().query( {
+			range: { type: "string", oneOf: variables.threatService.rangeNames(), default: "7d" }
+		} );
+		arguments.router.get( "/manage/api/security", arguments.admin, validRange, ( req, res ) => res.json( variables.threatService.report( req.valid.query.range ) ) );
+		arguments.router.get( "/manage/api/security/summary", arguments.admin, ( req, res ) => res.json( variables.threatService.summary() ) );
+	}
+
+}

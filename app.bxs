@@ -134,6 +134,11 @@ insightsService = new models.services.InsightsService(
 // /manage/insights never has to count 30 days of raw requests.
 insightsService.startDailySummaries( app )
 
+// /manage/security — how much of that traffic looks like attacks or probes.
+// RequestLogger labels each new row; this labels the rows logged before that.
+threatService = new models.services.ThreatService()
+threatService.startBackfill( app )
+
 // /manage/system — live JVM/OS metrics (memory, CPU, disk, GC, threads) plus
 // Undertow's own connector stats via `app`, and MySQL's own figures. See
 // ServerMonitor.bx. ServerHistory records them hourly (ServerHourly table,
@@ -386,6 +391,7 @@ app.use( new routes.ManageApp(
 		new routes.manageapi.Posts( postService, postRenderer, new models.services.RevisionService() ),
 		new routes.manageapi.Comments( commentService ),
 		new routes.manageapi.Subscribers( subscriptionService ),
+		new routes.manageapi.Security( threatService ),
 		new routes.manageapi.Media( r2Client, postService, new models.services.MediaService() ),
 		new routes.manageapi.Authors( authorService ),
 		new routes.manageapi.Settings( settingsService ),

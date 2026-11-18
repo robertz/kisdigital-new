@@ -1,0 +1,97 @@
+/**
+ * Labels a logged request that looks like an attack or a probe for
+ * something this site doesn't have: a `.env` grab, a WordPress login, a
+ * path traversal, an injection in the query string. It's for watching, not
+ * blocking: RequestLogger stores the label in RequestLog.threat and
+ * /manage/security reads it back.
+ *
+ * Patterns come from what actually reaches this site. This site serves no
+ * PHP, has no /admin or /wp-* paths and keeps no dotfiles in public/, so
+ * anything asking for those is fishing. Checks run in CATEGORIES order and
+ * the first match wins, so an injection inside a .php request counts as the
+ * injection.
+ */
+class {
+
+	variables.CATEGORIES = [
+		{ id: "rce",       label: "Code execution" },
+		{ id: "sqli",      label: "SQL injection" },
+		{ id: "traversal", label: "Path traversal & file reads" },
+		{ id: "xss",       label: "Cross-site scripting" },
+		{ id: "secrets",   label: "Config & secret files" },
+		{ id: "wordpress", label: "WordPress" },
+		{ id: "admin",     label: "Admin & debug endpoints" },
+		{ id: "php",       label: "PHP pages" },
+		{ id: "scanner",   label: "Attack tools" },
+		{ id: "method",    label: "Unusual HTTP methods" }
+	];
+
+	// Matched against the decoded, lower-cased path plus query string.
+	variables.RCE = "(eval-stdin\.php|/cgi-bin/|\$\{jndi:|\(\)\s*\{\s*:;\s*\}|/bin/(ba)?sh|\bcmd\.exe\b|invokefunction|call_user_func|allow_url_include|php://(input|filter)|base64_decode\(|\bshell_exec\b|\b(wget|curl)\s+https?://|[;|]\s*(id|uname|whoami)\s*($|[;&|]))";
+	variables.SQLI = "(\bunion\b[\s/*+]+(all[\s/*+]+)?select\b|\bselect\b.+\bfrom\b.+\bwhere\b|'\s*or\s*'?\d+'?\s*=\s*'?\d+|\bor\s+1\s*=\s*1\b|\bsleep\s*\(\s*\d|\bbenchmark\s*\(|\bwaitfor\s+delay\b|information_schema|\bextractvalue\s*\(|\bupdatexml\s*\()";
+	variables.TRAVERSAL = "(\.\./|\.\.\\|/etc/(passwd|shadow|hosts)|/proc/self/|\bwin\.ini\b|\bboot\.ini\b|/api/fs/read|/fileview\b)";
+	variables.XSS = "(<\s*script|javascript:|\bon(error|load|mouseover)\s*=|<\s*svg|<\s*img[^>]+src|document\.cookie|\balert\s*\()";
+	// Any path segment starting with a dot: this site serves no dotfiles,
+	// and /.well-known/ is let through before this runs.
+	variables.SECRETS = "((^|/)\.[a-z0-9_-]|^/(manage/)?env(\.js)?$|id_(rsa|dsa|ecdsa|ed25519)|credentials|private[-_]?key|api[-_]?keys|gcp-key|service_account|(^|/)(firebase|next|nuxt|vite|webpack|samconfig|dockerrun\.aws)[\w.-]*\.(js|mjs|cjs|json|toml)$|(^|/)__nuxt_config\.json$|(^|/)(secrets?|sa|auth|settings|appsettings|config|production|local|environment|default|database)\.(json|ya?ml|toml)$|(^|/)config/[^/]+\.(json|ya?ml|toml|env)$|(^|/)(docker-compose[\w.-]*|compose)\.ya?ml$|(^|/)(dockerfile|jenkinsfile|bitbucket-pipelines\.yml|azure-pipelines\.yml|vercel\.json|netlify\.toml|serverless\.ya?ml|schema\.prisma)$|terraform\.tfstate|\.tfvars$|(^|/)(local_)?settings\.py$|(^|/)config\.(py|php|inc|js|env)(\.bak)?$|wp-config|web\.config|runtime-config\.js$|\.env$|laravel\.log|\.(key|pem)$|\.(sql|bak|old|orig|swp|save|backup)$|(^|/)(backup|dump|db|database|site|www)\.(zip|tar|tar\.gz|tgz|rar|7z|sql)$)";
+	variables.WORDPRESS = "(wp-(login|admin|content|includes|json|cron|signup|trackback)|xmlrpc\.php|wlwmanifest\.xml|(^|/)wordpress/|(^|/)wp/)";
+	variables.ADMIN = "((^|/)(phpmyadmin|pma|myadmin|adminer|administrator|admin|manager/html|solr|actuator|telescope|_profiler|_debugbar|__debug__|_ignition|elmah\.axd|server-status|server-info|console|jenkins|hnap1|boaform|setup\.cgi|graphql|graphiql|swagger(-ui)?|api-docs|openapi\.(json|ya?ml)|debug|_debug|vendor|userfiles|fckeditor|ckfinder|owa|ecp|remote/login|dana-na|global-protect|sslvpn|\+cscoe\+)([/.?]|$))";
+	variables.PHP = "(\.(php\d?|phtml|phar)(/|$)|(^|/)phpinfo$)";
+	variables.TOOLS = "(sqlmap|nikto|nmap|masscan|zgrab|nuclei|wpscan|dirbuster|gobuster|ffuf|feroxbuster|wfuzz|acunetix|nessus|openvas|netsparker|jaeles|l9explore|l9tcpid|censysinspect|expanse, a palo alto|internetmeasurement|fuzz faster|hydra|zmeu|morfeus|jorgee)";
+	variables.METHODS = "TRACE,TRACK,CONNECT,PROPFIND,PROPPATCH,MKCOL,COPY,MOVE,LOCK,UNLOCK,DEBUG,SEARCH";
+
+	/** The categories, in the order they're checked: [ { id, label } ]. */
+	array function categories(){
+		return variables.CATEGORIES.map( ( category ) => category.copy() );
+	}
+
+	/**
+	 * @return {string} A category id, or "" for an ordinary request.
+	 */
+	string function classify( string method = "GET", string path = "/", string queryString = "", string userAgent = "" ){
+		var cleanPath = _decode( arguments.path );
+		var target    = cleanPath & ( len( arguments.queryString ) ? "?" & _decode( arguments.queryString ) : "" );
+
+		if ( reFind( variables.RCE, target ) ) return "rce";
+		if ( reFind( variables.SQLI, target ) ) return "sqli";
+		if ( reFind( variables.TRAVERSAL, target ) ) return "traversal";
+		if ( reFind( variables.XSS, target ) ) return "xss";
+
+		// /.well-known/ holds certificates and fediverse discovery, and this
+		// site's own content paths can name anything (/tag/graphql).
+		if ( !_isPublicPath( cleanPath ) ){
+			if ( reFind( variables.SECRETS, cleanPath ) ) return "secrets";
+			if ( reFind( variables.WORDPRESS, cleanPath ) ) return "wordpress";
+			// /manage is this site's own admin
+			if ( !_isManagePath( cleanPath ) && reFind( variables.ADMIN, cleanPath ) ) return "admin";
+			if ( reFind( variables.PHP, cleanPath ) ) return "php";
+		}
+
+		if ( len( arguments.userAgent ) && reFind( variables.TOOLS, lCase( arguments.userAgent ) ) ) return "scanner";
+		if ( listFindNoCase( variables.METHODS, arguments.method ) ) return "method";
+		return "";
+	}
+
+	private boolean function _isPublicPath( required string path ){
+		return reFind( "^/(\.well-known|tag|posts|projects|u|post)/", arguments.path ) > 0;
+	}
+
+	private boolean function _isManagePath( required string path ){
+		return arguments.path == "/manage" || left( arguments.path, 8 ) == "/manage/";
+	}
+
+	// Lower-cased and URL-decoded twice, so %252e%252e/ is seen as ../.
+	// A malformed escape leaves the text as it was.
+	private string function _decode( required string value ){
+		var text = lCase( arguments.value );
+		for ( var i = 1; i <= 2 && find( "%", text ); i++ ){
+			try {
+				text = lCase( createObject( "java", "java.net.URLDecoder" ).decode( replace( text, "+", "%2b", "all" ), "UTF-8" ) );
+			} catch ( any e ){
+				break;
+			}
+		}
+		return text;
+	}
+
+}

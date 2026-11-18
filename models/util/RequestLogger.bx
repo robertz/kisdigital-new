@@ -25,6 +25,7 @@ class {
 	variables.maxBatchPerFlush     = 500;
 	variables.retentionDays        = 90;
 	variables.botDetector          = new models.util.BotDetector();
+	variables.threatDetector       = new models.util.ThreatDetector();
 	// Running request timing since start, for the System page. Undertow's own
 	// figures stay 0: boxlang-express doesn't turn on its request start times.
 	variables.timedRequests = createObject( "java", "java.util.concurrent.atomic.AtomicLong" ).init( 0 );
@@ -168,24 +169,26 @@ class {
 	}
 
 	/**
-	 * Labels a row for /manage/insights at write time, here on the flush
-	 * thread rather than in the request: whether it's a bot (BotDetector, so
-	 * Insights no longer runs a user-agent REGEXP over every row it reads)
-	 * and the referrer's hostname ("" when there's no referrer).
+	 * Labels a row at write time, here on the flush thread rather than in
+	 * the request: whether it's a bot (BotDetector, so Insights no longer
+	 * runs a user-agent REGEXP over every row it reads), the referrer's
+	 * hostname ("" when there's no referrer), and whether it looks like an
+	 * attack (ThreatDetector, for /manage/security; "" when it doesn't).
 	 */
 	private function _classify( required struct row ){
 		arguments.row.isBot        = variables.botDetector.isBot( arguments.row.userAgent );
 		arguments.row.referrerHost = len( arguments.row.referrer )
 			? lCase( left( reReplace( arguments.row.referrer, "^[a-zA-Z][a-zA-Z0-9+.-]*://([^/?##:]+).*$", "\1" ), 255 ) )
 			: "";
+		arguments.row.threat = variables.threatDetector.classify( arguments.row.method, arguments.row.path, arguments.row.queryString, arguments.row.userAgent );
 	}
 
 	private function _insertRow( required struct row ){
 		queryExecute(
 			"INSERT INTO RequestLog
-				(requested_at, method, path, query_string, status_code, duration_ms, ip_address, referrer, user_agent, is_bot, referrer_host)
+				(requested_at, method, path, query_string, status_code, duration_ms, ip_address, referrer, user_agent, is_bot, referrer_host, threat)
 			VALUES
-				(:requestedAt, :method, :path, :queryString, :statusCode, :durationMs, :ip, :referrer, :userAgent, :isBot, :referrerHost)",
+				(:requestedAt, :method, :path, :queryString, :statusCode, :durationMs, :ip, :referrer, :userAgent, :isBot, :referrerHost, :threat)",
 			{
 				"requestedAt": { value: row.requestedAt, cfsqltype: "cf_sql_timestamp" },
 				"method"     : { value: row.method,      cfsqltype: "cf_sql_varchar" },
@@ -199,7 +202,8 @@ class {
 				"referrer"   : { value: row.referrer,   cfsqltype: "cf_sql_longvarchar" },
 				"userAgent"  : { value: row.userAgent,  cfsqltype: "cf_sql_longvarchar" },
 				"isBot"      : { value: row.isBot ? 1 : 0, cfsqltype: "cf_sql_tinyint" },
-				"referrerHost": { value: row.referrerHost, cfsqltype: "cf_sql_varchar" }
+				"referrerHost": { value: row.referrerHost, cfsqltype: "cf_sql_varchar" },
+				"threat"     : { value: row.threat,     cfsqltype: "cf_sql_varchar" }
 			}
 		);
 	}

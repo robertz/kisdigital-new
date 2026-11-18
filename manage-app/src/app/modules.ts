@@ -7,6 +7,7 @@ import InsightsOutlined from "@mui/icons-material/InsightsOutlined";
 import MailOutlined from "@mui/icons-material/MailOutlined";
 import PeopleOutlined from "@mui/icons-material/PeopleOutlined";
 import SettingsOutlined from "@mui/icons-material/SettingsOutlined";
+import ShieldOutlined from "@mui/icons-material/ShieldOutlined";
 import DnsOutlined from "@mui/icons-material/DnsOutlined";
 import type { Boot } from "./boot";
 import { homeModule } from "../modules/home";
@@ -49,6 +50,7 @@ export const modules: ManageModule[] = [
 	{ id: "subscribers", label: "Subscribers", icon: MailOutlined, group: "Readers", adminOnly: true, to: "/subscribers" },
 	{ id: "authors", label: "Authors", icon: PeopleOutlined, group: "Admin", adminOnly: true, to: "/authors" },
 	{ id: "settings", label: "Settings", icon: SettingsOutlined, group: "Admin", adminOnly: true, to: "/settings" },
+	{ id: "security", label: "Security", icon: ShieldOutlined, group: "Admin", adminOnly: true, to: "/security" },
 	// Covers both of its tabs: Server (/server) and Requests (/logs).
 	{ id: "system", label: "System", icon: DnsOutlined, group: "Admin", adminOnly: true, to: "/server", alsoActive: ["/logs"] },
 ];

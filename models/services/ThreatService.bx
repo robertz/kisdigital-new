@@ -1,0 +1,231 @@
+/**
+ * The numbers behind /manage/security: how much of the traffic in
+ * RequestLog looks like attacks or probes, by kind, from where, and at what.
+ * RequestLogger labels each row as it's written (ThreatDetector); this also
+ * labels the rows logged before that, in the background, so the page covers
+ * the whole 90-day log.
+ */
+class {
+
+	variables.detector = "";
+	// The backfill's progress through RequestLog ids: { next, last, labelled }.
+	variables.backfill = {};
+	variables.BATCH = 2000;
+	variables.BATCHES_PER_RUN = 25;
+	variables.RANGES = { "24h": 24, "7d": 168, "30d": 720 };
+
+	function init(){
+		variables.detector = new models.util.ThreatDetector();
+		return this;
+	}
+
+	/** The categories, in the detector's order: [ { id, label } ]. */
+	array function categories(){
+		return variables.detector.categories();
+	}
+
+	array function rangeNames(){
+		return variables.RANGES.keyArray();
+	}
+
+	/**
+	 * Labels the rows logged before ThreatDetector existed, a few thousand a
+	 * minute, and stops once it reaches the newest of them. Called once from
+	 * app.bxs.
+	 */
+	function startBackfill( required app ){
+		var service = this;
+		variables.backfillJob = arguments.app.schedule( "* * * * *", () => service.backfillStep(), { name: "threat-backfill" } );
+	}
+
+	/** One run of the backfill; public only so the job's closure can reach it. */
+	function backfillStep(){
+		try {
+			if ( variables.backfill.isEmpty() ){
+				var bounds = queryExecute( "SELECT MIN(id) AS lo, MAX(id) AS hi FROM RequestLog WHERE threat IS NULL", [], { returnType: "array" } )[ 1 ];
+				variables.backfill = { "next": val( bounds.lo ?: 0 ), "last": val( bounds.hi ?: 0 ), "labelled": 0 };
+			}
+			for ( var i = 1; i <= variables.BATCHES_PER_RUN && variables.backfill.next > 0 && variables.backfill.next <= variables.backfill.last; i++ ){
+				_labelBatch( variables.backfill.next, min( variables.backfill.next + variables.BATCH - 1, variables.backfill.last ) );
+				variables.backfill.next += variables.BATCH;
+			}
+			if ( variables.backfill.next == 0 || variables.backfill.next > variables.backfill.last ){
+				if ( variables.backfill.labelled ){
+					println( "[security] labelled #variables.backfill.labelled# older requests; the backfill is done" );
+				}
+				variables.backfill.next = -1;
+				if ( !isNull( variables.backfillJob ) ) variables.backfillJob.cancel();
+			}
+		} catch ( any e ){
+			println( "[security] backfill failed, will retry: " & e.message );
+		}
+	}
+
+	/** Whether older rows are still being labelled. */
+	boolean function isBackfilling(){
+		return variables.backfill.isEmpty() || variables.backfill.next != -1;
+	}
+
+	/**
+	 * Everything the Security page shows, for the last 24 hours, 7 days or
+	 * 30 days.
+	 */
+	struct function report( string range = "7d" ){
+		var hours  = variables.RANGES[ arguments.range ] ?: 168;
+		var since  = dateAdd( "h", -hours, now() );
+		var hourly = hours <= 24;
+		var params = { "since": { value: since, sqltype: "timestamp" } };
+		var threat = "requested_at >= :since AND threat <> ''";
+
+		var all = queryExecute(
+			"SELECT COUNT(*) AS total, COALESCE(SUM(threat <> ''), 0) AS malicious FROM RequestLog WHERE requested_at >= :since",
+			params, { returnType: "array" }
+		)[ 1 ];
+		var flagged = queryExecute(
+			"SELECT COUNT(DISTINCT ip_address) AS ips, COALESCE(SUM(status_code BETWEEN 200 AND 299), 0) AS answered
+			FROM RequestLog WHERE #threat#",
+			params, { returnType: "array" }
+		)[ 1 ];
+
+		var byCategory = {};
+		for ( var row in queryExecute( "SELECT threat, COUNT(*) AS n FROM RequestLog WHERE #threat# GROUP BY threat", params, { returnType: "array" } ) ){
+			byCategory[ row.threat ] = val( row.n );
+		}
+
+		var bucketFormat = hourly ? "%Y-%m-%d %H:00" : "%Y-%m-%d";
+		var counted = {};
+		for ( var row in queryExecute(
+			"SELECT DATE_FORMAT(requested_at, '#bucketFormat#') AS bucket, threat, COUNT(*) AS n FROM RequestLog WHERE #threat# GROUP BY bucket, threat",
+			params, { returnType: "array" }
+		) ){
+			counted[ row.bucket & "|" & row.threat ] = val( row.n );
+		}
+		var series = [];
+		var step   = hourly ? "h" : "d";
+		var slots  = hourly ? hours : hours / 24;
+		var start  = hourly ? dateAdd( "h", -( slots - 1 ), now() ) : dateAdd( "d", -( slots - 1 ), now() );
+		for ( var i = 0; i < slots; i++ ){
+			var at  = dateAdd( step, i, start );
+			var key = hourly ? dateTimeFormat( at, "yyyy-mm-dd HH:00" ) : dateFormat( at, "yyyy-mm-dd" );
+			var point = { "t": hourly ? dateTimeFormat( at, "yyyy-mm-dd'T'HH:00:00'Z'" ) : dateFormat( at, "yyyy-mm-dd" ) & "T00:00:00Z" };
+			for ( var category in categories() ){
+				point[ category.id ] = counted[ key & "|" & category.id ] ?: 0;
+			}
+			series.append( point );
+		}
+
+		var topIps = queryExecute(
+			"SELECT ip_address, COUNT(*) AS n, GROUP_CONCAT(DISTINCT threat ORDER BY threat) AS kinds, MAX(requested_at) AS last_seen
+			FROM RequestLog WHERE #threat#
+			GROUP BY ip_address ORDER BY n DESC LIMIT 10",
+			params, { returnType: "array" }
+		).map( ( row ) => {
+			return { "ip": row.ip_address, "count": val( row.n ), "categories": listToArray( row.kinds ), "lastSeen": _utc( row.last_seen ) };
+		} );
+
+		var topPaths = queryExecute(
+			"SELECT LEFT(path, 200) AS target, MAX(threat) AS threat, COUNT(*) AS n, COUNT(DISTINCT ip_address) AS ips
+			FROM RequestLog WHERE #threat#
+			GROUP BY target ORDER BY n DESC LIMIT 10",
+			params, { returnType: "array" }
+		).map( ( row ) => {
+			return { "path": row.target, "category": row.threat, "count": val( row.n ), "ips": val( row.ips ) };
+		} );
+
+		var answered = queryExecute(
+			"SELECT method, LEFT(path, 200) AS target, threat, status_code, COUNT(*) AS n
+			FROM RequestLog WHERE #threat# AND status_code BETWEEN 200 AND 299
+			GROUP BY method, target, threat, status_code ORDER BY n DESC LIMIT 10",
+			params, { returnType: "array" }
+		).map( ( row ) => {
+			return { "method": row.method, "path": row.target, "category": row.threat, "status": val( row.status_code ), "count": val( row.n ) };
+		} );
+
+		var recent = queryExecute(
+			"SELECT requested_at, method, path, query_string, status_code, ip_address, user_agent, threat
+			FROM RequestLog WHERE #threat#
+			ORDER BY requested_at DESC LIMIT 25",
+			params, { returnType: "array" }
+		).map( ( row ) => {
+			return {
+				"time"     : _utc( row.requested_at ),
+				"method"   : row.method,
+				"path"     : left( row.path, 300 ),
+				"query"    : left( row.query_string, 300 ),
+				"status"   : isNumeric( row.status_code ?: "" ) ? val( row.status_code ) : "",
+				"ip"       : row.ip_address,
+				"userAgent": left( row.user_agent, 300 ),
+				"category" : row.threat
+			};
+		} );
+
+		return {
+			"range"      : arguments.range,
+			"hourly"     : hourly,
+			"backfilling": isBackfilling(),
+			"categories" : categories(),
+			"totals"     : {
+				"requests"  : val( all.total ),
+				"malicious" : val( all.malicious ),
+				"ips"       : val( flagged.ips ),
+				"answered2xx": val( flagged.answered )
+			},
+			"byCategory": byCategory,
+			"series"    : series,
+			"topIps"    : topIps,
+			"topPaths"  : topPaths,
+			"answered"  : answered,
+			"recent"    : recent
+		};
+	}
+
+	/** The dashboard card: the last 24 hours, against the 24 before. */
+	struct function summary(){
+		var params = {
+			"dayAgo" : { value: dateAdd( "h", -24, now() ), sqltype: "timestamp" },
+			"twoDays": { value: dateAdd( "h", -48, now() ), sqltype: "timestamp" }
+		};
+		var counts = queryExecute(
+			"SELECT COALESCE(SUM(requested_at >= :dayAgo), 0) AS last24, COALESCE(SUM(requested_at < :dayAgo), 0) AS previous24
+			FROM RequestLog WHERE requested_at >= :twoDays AND threat <> ''",
+			params, { returnType: "array" }
+		)[ 1 ];
+		var top = queryExecute(
+			"SELECT threat, COUNT(*) AS n FROM RequestLog WHERE requested_at >= :dayAgo AND threat <> '' GROUP BY threat ORDER BY n DESC LIMIT 3",
+			{ "dayAgo": params.dayAgo }, { returnType: "array" }
+		);
+		var labels = {};
+		for ( var category in categories() ) labels[ category.id ] = category.label;
+		return {
+			"last24h"    : val( counts.last24 ),
+			"previous24h": val( counts.previous24 ),
+			"top"        : top.map( ( row ) => { return { "label": labels[ row.threat ] ?: row.threat, "count": val( row.n ) }; } )
+		};
+	}
+
+	private function _labelBatch( required numeric fromId, required numeric toId ){
+		var rows = queryExecute(
+			"SELECT id, method, path, query_string, user_agent FROM RequestLog WHERE id BETWEEN :lo AND :hi AND threat IS NULL",
+			{ "lo": { value: arguments.fromId, sqltype: "bigint" }, "hi": { value: arguments.toId, sqltype: "bigint" } },
+			{ returnType: "array" }
+		);
+		var byLabel = {};
+		for ( var row in rows ){
+			var label = variables.detector.classify( row.method, row.path, row.query_string, row.user_agent );
+			byLabel[ label ] = byLabel[ label ] ?: [];
+			byLabel[ label ].append( row.id );
+		}
+		for ( var label in byLabel ){
+			queryExecute(
+				"UPDATE RequestLog SET threat = :label WHERE id IN (:ids) AND threat IS NULL",
+				{ "label": { value: label, sqltype: "varchar" }, "ids": { value: byLabel[ label ].toList(), sqltype: "bigint", list: true } }
+			);
+		}
+		variables.backfill.labelled += rows.len();
+	}
+
+	private string function _utc( value ){
+		return !isNull( arguments.value ) && isDate( arguments.value ) ? dateTimeFormat( arguments.value, "yyyy-mm-dd'T'HH:nn:ss'Z'" ) : "";
+	}
+
+}
