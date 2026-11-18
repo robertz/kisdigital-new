@@ -1,0 +1,63 @@
+<bx:output>
+<div class="container py-5">
+	<div class="c-project-hero">
+		<p class="c-project-hero__eyebrow">Project</p>
+		<h1 class="c-project-hero__title">hooktrap</h1>
+		<p class="c-project-hero__tagline">Catch, inspect and replay webhooks, built on <a href="/projects/boxlang-express" class="c-post-link">boxlang-express</a>. A bin is a throwaway URL: anything sent to it, on any method and any path below it, is stored exactly as it arrived and shows up live in the browser with its headers, query and body. Any captured request can be sent again, byte for byte, to your own server. It runs on your machine, so the payloads stay there too.</p>
+		<div class="c-project-hero__actions">
+			<a href="https://github.com/robertz/hooktrap" target="_blank" rel="noopener" class="btn btn-primary-custom">View on GitHub</a>
+		</div>
+	</div>
+
+	<div class="c-project-features">
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-eye"></i> See what's really sent</p>
+			<p class="c-project-feature__body">Point Stripe, GitHub, Shopify or anything else at a bin before writing a handler, and read the real headers, signature and payload instead of the docs' example.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-arrow-repeat"></i> Replay, exactly</p>
+			<p class="c-project-feature__body">Send a captured request to your local handler as often as it takes. Bodies are kept as the exact bytes received, so an HMAC signature over the body still verifies.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-broadcast"></i> Live in the browser</p>
+			<p class="c-project-feature__body">Requests arrive over Server-Sent Events as they're captured. JSON is pretty-printed, and a body that isn't text is shown as base64.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-shield-lock"></i> Safe by default</p>
+			<p class="c-project-feature__body">Replay only reaches loopback hosts unless you allow others, bodies are capped, and idle bins are removed after a day.</p>
+		</div>
+	</div>
+
+	<div class="c-post__body c-docs-body">
+
+		<h2>Run it</h2>
+		<pre class="bx-code"><span class="bx-code-label">bash</span><code>git clone https://github.com/robertz/hooktrap.git
+cd hooktrap
+box install boxlang-express --local
+./start.sh</code></pre>
+		<p>Open <code class="bx-inline">http://localhost:3000</code> and click <strong>Create a bin</strong>. The page shows the bin's capture URL.</p>
+
+		<h2>Capture and replay</h2>
+		<p>Send anything to the bin. Any method and any path below it works, so <code class="bx-inline">/in/&lt;bin&gt;/stripe/events</code> and <code class="bx-inline">/in/&lt;bin&gt;/github</code> can share one:</p>
+		<pre class="bx-code"><span class="bx-code-label">bash</span><code>curl -X POST 'http://localhost:3000/in/&lt;bin&gt;/stripe/events?type=invoice.paid' \
+  -H 'Content-Type: application/json' \
+  -d '{"id":"evt_1","type":"invoice.paid"}'</code></pre>
+		<p>To replay, enter your server's address and press <strong>Replay</strong>. The path and query the request arrived with are added to it, so the request above goes to <code class="bx-inline">http://localhost:8080/stripe/events?type=invoice.paid</code>. The response's status, headers, body and timing are kept next to the request.</p>
+		<p>A provider can't reach <code class="bx-inline">localhost</code>, so to catch real webhooks put a tunnel in front (ngrok, Cloudflare Tunnel, Tailscale Funnel) and set <code class="bx-inline">HOOKTRAP_PUBLIC_URL</code> to its address. Every request is answered with a <code class="bx-inline">200</code>, so the provider counts the delivery as a success.</p>
+
+		<h2>Settings</h2>
+		<p>Environment variables, all optional: <code class="bx-inline">PORT</code> (3000), <code class="bx-inline">HOOKTRAP_MAX_BODY_BYTES</code> (1 MB), <code class="bx-inline">HOOKTRAP_MAX_BINS</code> (200), <code class="bx-inline">HOOKTRAP_MAX_REQUESTS</code> per bin (100, oldest drop off), <code class="bx-inline">HOOKTRAP_IDLE_HOURS</code> (24), <code class="bx-inline">HOOKTRAP_REPLAY_HOSTS</code> (loopback; <code class="bx-inline">*</code> allows any), <code class="bx-inline">HOOKTRAP_REPLAY_TIMEOUT_SECONDS</code> (15) and <code class="bx-inline">HOOKTRAP_PUBLIC_URL</code>.</p>
+
+		<h2>Things to know</h2>
+		<ul>
+			<li>Bins live in memory, so a restart empties them.</li>
+			<li>A bin's id is its only protection. Don't put sensitive traffic through one on a public address.</li>
+			<li>A provider that signs a timestamp as well as the body, as Stripe does, rejects an old replay unless your handler's tolerance allows it.</li>
+		</ul>
+
+		<h2>Built on BoxExpress</h2>
+		<p>It's a small, readable app that uses a good slice of <a href="/projects/boxlang-express" class="c-post-link">boxlang-express</a> 0.2.27: <code class="bx-inline">boxExpressRaw()</code> keeps bodies byte-exact, a <code class="bx-inline">/in/:bin/*rest</code> path pattern catches every path below a bin, <code class="bx-inline">res.sse()</code> streams new requests to the page, <code class="bx-inline">maxBodySize</code> caps uploads, a cron schedule prunes idle bins every hour, and the pages share one view layout.</p>
+
+	</div>
+</div>
+</bx:output>

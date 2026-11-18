@@ -28,6 +28,15 @@ class {
 			language : "BoxLang"
 		},
 		{
+			slug     : "hooktrap",
+			name     : "hooktrap",
+			icon     : "bi-bullseye",
+			tagline  : "Catch, inspect and replay webhooks on your own machine: a request bin on BoxExpress that replays the exact bytes it received.",
+			group    : "apps",
+			status   : "Beta",
+			language : "BoxLang"
+		},
+		{
 			slug     : "boxlang-express",
 			name     : "boxlang-express",
 			icon     : "bi-boxes",
