@@ -73,7 +73,7 @@ Every problem is reported, not just the first. Nested fields are named by path: 
 | `url` | An `http` or `https` URL with a host | The string |
 | `uuid` | A UUID, in the standard form or the one `createUUID()` produces | The string |
 | `date` | ISO 8601: `2026-11-15` or `2026-11-15T09:30:00Z` | The string |
-| `array` | An array | The array, items converted |
+| `array` | An array, or one simple value (which becomes a one-item array) | The array, items converted |
 | `struct` | An object | Its declared fields, converted |
 | `any` | Anything | The value unchanged |
 
@@ -112,5 +112,6 @@ It runs after the built-in rules pass, so `value` is already the right type. Fie
 - **`pattern` is a regular expression run on client input**; avoid nested quantifiers like `(a+)+`, and set a `maxLength` alongside it.
 - **Validate route params here, or constrain them in the path** — see [Path patterns](/projects/boxlang-express/docs/routing#path-patterns). A path constraint decides *which route matches* (and falls through to a 404); validation answers a `400` saying what was wrong.
 - **`trim` doesn't reach array items** (0.2.27): `items: { type: "string", trim: true }` leaves `" a "` as it is. Fields of a `struct` are trimmed. Trim array elements in the handler.
+- **Repeated keys** (0.2.28): `?tag=a&tag=b` reaches the validator as an array and `?tag=a` as a string. Declare the field as `{ type: "array" }` and both are accepted, as `[ "a", "b" ]` and `[ "a" ]`; that applies to JSON bodies too, where `"tags": "a"` is taken as `[ "a" ]`. Every other type rejects an array (`?page=1&page=2` is a `400` for an `integer`), and so does an untyped field with `oneOf`, `pattern`, `minLength` or `maxLength` — "must be a single value" — since those rules can only check one. See [Query strings](/projects/boxlang-express/docs/request#query-strings).
 - `date` values stay strings. Parse them (`parseDateTime()`) where you use them.
 - Not included: validating headers or cookies, conditional rules ("required if another field is set" — use `validate`), and generating API documentation from a schema.

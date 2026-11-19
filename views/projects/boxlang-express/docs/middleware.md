@@ -90,6 +90,10 @@ app.use( boxExpressJSON( { limit: 5000000 } ) )  // 5MB
 
 A body over the limit gets a `413` response and never reaches your route handler.
 
+`boxExpressUrlencoded()` reads a form the way `req.query` reads a query string: a field that appears once is a string, and a repeated one — a multi-select, a group of checkboxes sharing a name — is an array in the order sent (`tag=a&tag=b` gives `{ tag: [ "a", "b" ] }`). Brackets in a field name are not parsed: `tag[]` and `user[name]` are literal keys. See [Query strings](/projects/boxlang-express/docs/request#query-strings), including why a field you expect to be a string should be validated.
+
+A urlencoded body may hold at most 1000 `key=value` pairs (a repeated key counts once per appearance); one with more gets a `413`. Change it with `boxExpressUrlencoded( { parameterLimit: n } )`, `0` for no limit.
+
 These limits apply only where a parser is mounted and to the content type it parses; `app.set( "maxBodySize", bytes )` caps every request — see [Timeouts & Size Limits](/projects/boxlang-express/docs/limits).
 
 A JSON body that doesn't parse gets a `400` (`{ error: true, message: "Malformed JSON body" }`), answered directly like the `413`. So does a urlencoded body with a malformed `%` escape (since 0.2.26). Before 0.2.21 the parse exception went to `next()` and surfaced as a `500`; error-handling middleware no longer sees it, so an app that turned it into its own `400` can drop that.

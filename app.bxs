@@ -178,6 +178,21 @@ app.use(
 	boxExpressHelmet( { referrerPolicy: "strict-origin-when-cross-origin", hsts: servedOverHttps ? "max-age=15552000" : false } )
 )
 
+// Since boxlang-express 0.2.28 a repeated key (?q=a&q=b) arrives as an array.
+// Nothing here takes multi-valued fields, and every handler reads them as
+// strings, so keep the last value as before rather than let a crafted URL
+// throw. JSON bodies are left alone: arrays there are real data.
+app.use( ( req, res, next ) => {
+	var lastValues = ( fields ) => {
+		for ( var key in fields ){
+			if ( isArray( fields[ key ] ) && fields[ key ].len() ) fields[ key ] = fields[ key ].last();
+		}
+	};
+	lastValues( req.query );
+	if ( isStruct( req.body ) && !isBoolean( req.is( "application/x-www-form-urlencoded" ) ) ) lastValues( req.body );
+	next()
+} )
+
 // esbuild content-hashes every filename under dist/ (see the manifest logic
 // above), so a cached copy can never go stale — a new deploy ships new
 // filenames, it never overwrites an old one. Safe to cache for a year.

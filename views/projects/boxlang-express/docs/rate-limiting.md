@@ -15,6 +15,18 @@ Sets the draft-standard `RateLimit-Limit`/`RateLimit-Remaining`/`RateLimit-Reset
 
 ## Options
 
+| Option | Default | |
+|---|---|---|
+| `windowMs` | `60000` | Length of the window, in milliseconds |
+| `max` | `100` | Requests allowed per key in each window |
+| `keyGenerator` | `( req ) => req.ip` | What to count by |
+| `statusCode` | `429` | Status for a limited request |
+| `message` | `{ error: true, message: "Too many requests, please try again later." }` | The JSON body a limited request gets |
+| `handler` | _none_ | `( req, res, next, info ) => ...` — answers a limited request instead of sending `message` |
+| `standardHeaders` | `true` | Send `RateLimit-*` and `Retry-After` |
+| `maxKeys` | `100000` | Most keys the in-memory store counts separately; `0` for no cap — see [How many keys it tracks](#how-many-keys-it-tracks) |
+| `cache`, `store`, `fallback`, `requireDurable` | in-memory | Where counts are kept — see [Sharing the count across instances](#sharing-the-count-across-instances) |
+
 ```bxs
 app.use( boxExpressRateLimit( {
     windowMs: 60000,                              // 1 minute window
@@ -25,6 +37,41 @@ app.use( boxExpressRateLimit( {
 ```
 
 The default key is `req.ip`, so the same caveat as `req.ip` itself applies: behind a reverse proxy without `app.set( "trust proxy", 1 )` (or a list of the proxies' addresses), every request shares the proxy's own IP as the key, rate-limiting the whole app together rather than per client. See [Configuration](/projects/boxlang-express/docs/config#app-level-settings).
+
+## Choosing what a limited request gets (`handler`)
+
+By default a limited request gets `message` as JSON, which is wrong for a route that serves HTML: a reader over the limit on a search page would see a raw JSON blob. `handler` (0.2.29+) is called in its place, as in `express-rate-limit`:
+
+```bxs
+app.get( "/search", boxExpressRateLimit( {
+	windowMs: 60000,
+	max: 30,
+	handler: ( req, res, next, info ) => res.render( "search/index", { retryAfter: info.resetSeconds } )
+} ), ( req, res ) => {
+	res.render( "search/index", { results: search.find( req.query.q ?: "" ) } )
+} )
+```
+
+The status (`statusCode`, 429 unless you changed it) and, with `standardHeaders` on, `Retry-After` are set before the handler runs, so it only has to produce the body — the `res.render()` above goes out as a 429. `info` is:
+
+| | |
+|---|---|
+| `limit` | `max` |
+| `remaining` | Requests left in the window — `0` here |
+| `resetSeconds` | Seconds until the window resets; the same number sent in `Retry-After` |
+| `key` | What `keyGenerator` returned for this request |
+
+The handler must end the response or call `next()`. Calling `next()` lets the request through, still carrying the 429 status unless a later handler sets another. It works the same with the in-memory store, `cache` and a custom `store`. Without `handler` nothing changes. A `handler` that isn't a function throws when the middleware is created.
+
+## How many keys it tracks
+
+The in-memory store keeps one counter per key until that key's window expires, so a flood of requests from distinct keys — spoofed `X-Forwarded-For` values behind a too-trusting `trust proxy`, or a `keyGenerator` reading a header the client controls — would otherwise grow it without limit. `maxKeys` (default `100000`, 0.2.29+) caps it: once that many keys are being counted, a key that isn't already among them is counted in **one shared bucket** until some expire.
+
+- Keys already being counted are unaffected; each keeps its own count.
+- New keys aren't let through uncounted, so filling the store isn't a way around the limit — but while it's full they are limited _together_, to `max` requests per window between them.
+- A warning is logged, at most once a minute, while the store is full.
+
+Reaching the cap in normal traffic means it's too low for your number of clients per window: raise it, or use a `cache` or `store`, which `maxKeys` doesn't apply to. `0` removes the cap. A value that isn't a whole number, 0 or more, throws `BoxExpress.InvalidArgument` when the middleware is created.
 
 ## Sharing the count across instances
 

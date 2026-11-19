@@ -7,7 +7,9 @@
 				<input type="search" name="q" class="search-box__input" value="#encodeForHTMLAttribute( data.q )#" placeholder="Search titles, summaries and articles" aria-label="Search articles" autofocus>
 				<button type="submit" class="search-box__submit">Search</button>
 			</form>
-			<bx:if len( data.q )>
+			<bx:if ( data.retryAfter ?: 0 ) GT 0>
+			<p class="page-head__lede">That's a lot of searching. Give it #data.retryAfter# #( data.retryAfter == 1 ? "second" : "seconds" )# and try again.</p>
+			<bx:elseif len( data.q )>
 			<p class="page-head__lede">#data.paging.total# #( data.paging.total == 1 ? "result" : "results" )# for &ldquo;#encodeForHTML( data.q )#&rdquo;, most relevant first.</p>
 			</bx:if>
 		</header>
@@ -19,7 +21,7 @@
 				</bx:loop>
 			</div>
 			#partial( "partials/pagination", { pageBase: "/search?q=" & encodeForURL( data.q ) } )#
-		<bx:elseif len( data.q )>
+		<bx:elseif len( data.q ) && !( data.retryAfter ?: 0 )>
 			<p class="page-head__lede">Nothing matched. Try a different term, or <a href="/posts">browse all writing</a>.</p>
 		</bx:if>
 	</div>

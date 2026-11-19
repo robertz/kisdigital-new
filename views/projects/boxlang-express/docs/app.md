@@ -28,6 +28,7 @@ app = boxExpress()
 | `app.getClusterManager()` | Cross-process peer discovery, manager election and the STOMP relay mesh — see [Cluster Support](/projects/boxlang-express/docs/cluster) |
 | `app.inject(options)` | Run a request through the app without a server — see [Testing](/projects/boxlang-express/docs/testing) |
 | `app.metrics(options)` | A Prometheus endpoint — see [Observability](/projects/boxlang-express/docs/observability) |
+| `app.set( "etag", "weak" )` | Tag buffered responses and answer conditional requests with `304` — see [ETags and conditional requests](/projects/boxlang-express/docs/response#etags-and-conditional-requests) |
 | `app.health(options)` / `app.shutdown(options)` | Probes and graceful shutdown — see [Health Checks & Graceful Shutdown](/projects/boxlang-express/docs/health-and-shutdown) |
 
 ## Starting the server: listen() blocks the process

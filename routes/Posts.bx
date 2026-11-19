@@ -41,7 +41,14 @@ class {
 		} );
 
 		this.router.get( "/posts", ( req, res ) => index( req, res ) );
-		this.router.get( "/search", ( req, res ) => search( req, res ) );
+		// A page a person reads, so a limited request gets the search page
+		// with a note rather than the limiter's JSON.
+		var searchLimit = boxExpressRateLimit( {
+			windowMs : 60000,
+			max      : 30,
+			handler  : ( req, res, next, info ) => searchLimited( req, res, info.resetSeconds )
+		} );
+		this.router.get( "/search", searchLimit, ( req, res ) => search( req, res ) );
 		this.router.get( "/posts/:year(\d{4})/:month(\d{1,2})/:slug", ( req, res ) => show( req, res ) );
 
 		return this;
@@ -218,6 +225,18 @@ class {
 			meta          : variables.siteDefaults.defaultMeta( req.path ),
 			q             : q,
 			paging        : paging
+		} );
+	}
+
+	// /search over its rate limit: the status and Retry-After are already set.
+	function searchLimited( req, res, numeric retryAfter ){
+		res.render( "search/index", {
+			pageTitle    : "Search",
+			canonicalUrl : variables.siteDefaults.canonicalUrl( req.path ),
+			meta         : variables.siteDefaults.defaultMeta( req.path ),
+			q            : trim( req.query.q ?: "" ),
+			paging       : { total: 0, totalPages: 0, posts: [] },
+			retryAfter   : max( 1, arguments.retryAfter )
 		} );
 	}
 

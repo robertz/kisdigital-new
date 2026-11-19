@@ -132,3 +132,17 @@ See [Configuration](/projects/boxlang-express/docs/config) for the full datasour
 ## The session cookie
 
 The session cookie is named `connect.sid`, matching Express's own default — familiar if you're coming from Node. It's set with `HttpOnly` by default, the same as `res.cookie()`.
+
+| Option | Default | |
+|---|---|---|
+| `name` | `"connect.sid"` | Cookie name |
+| `maxAge` | `86400` | Lifetime in seconds, reset on every request |
+| `path` | `"/"` | |
+| `httpOnly` | `true` | Hidden from page scripts |
+| `sameSite` | `"Lax"` | |
+| `secure` | `"auto"` | `"auto"`, `true` or `false` |
+
+`secure: "auto"` marks the cookie `Secure` when the request arrived over HTTPS (`req.secure`), so a site served over TLS never gets its session id sent back over plain HTTP, and local development over `http://` keeps working. BoxExpress doesn't terminate TLS itself, so `req.secure` is only true behind a proxy the app trusts — set [`"trust proxy"`](/projects/boxlang-express/docs/config#app-level-settings) to match your deployment, or the cookie stays non-`Secure`. `secure: true` always sets the flag (a browser then drops the cookie on a plain-HTTP site); `secure: false` never does. Any other value throws `BoxExpress.InvalidOption`.
+
+> [!NOTE] Behavior change in 0.2.29
+> Before 0.2.29 the default was `secure: false`. An app deliberately served over both HTTP and HTTPS that shares one session between them needs `secure: false`.

@@ -9,7 +9,7 @@ The `req.*` API available inside every handler.
 | `req.method` | Uppercased HTTP method, e.g. `"GET"` |
 | `req.path` | Path portion of the URL, no query string |
 | `req.originalUrl` | Path plus query string as received |
-| `req.query` | Struct of parsed query-string parameters |
+| `req.query` | Struct of parsed query-string parameters; a repeated key is an array — see [Query strings](#query-strings) |
 | `req.params` | Struct of captured route params (`:id` segments) |
 | `req.body` | Parsed request body — a struct from `boxExpressJSON()`/`boxExpressUrlencoded()`/`boxExpressUpload()`, a string from `boxExpressText()`, a `byte[]` from `boxExpressRaw()`, empty struct otherwise |
 | `req.valid` | The fields a `boxExpressValidate()` schema names, converted — see [Request Validation](/projects/boxlang-express/docs/validation) |
@@ -23,6 +23,7 @@ The `req.*` API available inside every handler.
 | `req.hostname` | The `Host` header (or `X-Forwarded-Host`, from a trusted proxy) with any `:port` stripped |
 | `req.subdomains` / `req.xhr` / `req.baseUrl` | See [More request properties](#more-request-properties) |
 | `req.accepts(...)` / `req.acceptsLanguages(...)` / `req.is(...)` | See [Content negotiation](#content-negotiation) |
+| `req.fresh` / `req.stale` | Whether the client's cached copy still matches the response's `ETag` or `Last-Modified` — see [ETags and conditional requests](/projects/boxlang-express/docs/response#etags-and-conditional-requests) |
 | `req.setTimeout(ms)` / `req.timedOut` | One request's own timeout, and whether it hit it — see [Timeouts & Size Limits](/projects/boxlang-express/docs/limits) |
 | `req.id` | The request's id when `app.set("requestId", true)` is on — see [Observability](/projects/boxlang-express/docs/observability) |
 | `req.session` / `req.sessionID` | Populated by `boxExpressSession()` — see [Sessions](/projects/boxlang-express/docs/sessions) |
@@ -31,6 +32,36 @@ The `req.*` API available inside every handler.
 `req.body` is populated by body-parsing middleware and `req.files` by the upload middleware — see [Middleware](/projects/boxlang-express/docs/middleware) and [File Uploads](/projects/boxlang-express/docs/uploads).
 
 Cookie and query values are URL-decoded. One with a malformed escape (`discount=50%`, `%zz`) is kept as its raw text rather than failing the request — a cookie can be set by any script or sibling subdomain, so a bad one shouldn't lock a visitor out. (Before 0.2.26 it failed every request carrying it with a `500`.)
+
+## Query strings
+
+`req.query` follows Express 5's default ("simple") parser, the semantics of Node's `querystring` module:
+
+| Request | `req.query` |
+|---|---|
+| `?tag=a` | `{ tag: "a" }` |
+| `?tag=a&tag=b` | `{ tag: [ "a", "b" ] }` |
+| `?tag=&flag` | `{ tag: "", flag: "" }` |
+| `?tag[]=a&tag[]=b` | `{ "tag[]": [ "a", "b" ] }` |
+| `?user[name]=Ada` | `{ "user[name]": "Ada" }` |
+
+A key that appears once is a string; a key that repeats is an array, in the order the values appeared. Brackets are not parsed — there is no nested (`a[b]=1`) or `a[]=1` syntax, which was Express 4's "extended" mode — so those keys stay literal. `boxExpressUrlencoded()` and `boxExpressUpload()` parse form fields the same way.
+
+> [!WARNING] Breaking change in 0.2.28
+> Before 0.2.28 the last value of a repeated key silently replaced the others. **Any client can repeat a key**, so a value you expect to be a string can now arrive as an array, and string code (`len()`, `&`, `trim()`) then throws.
+
+Declare what you expect with [`boxExpressValidate()`](/projects/boxlang-express/docs/validation) — a `string` or `integer` field answers `400` for an array, and an `array` field accepts one value or several — or normalise by hand:
+
+```bxs
+var tags = req.query.tag ?: []
+if ( !isArray( tags ) ) {
+	tags = [ tags ]
+}
+```
+
+A query string may hold at most 1000 `key=value` pairs — a repeated key counts once per appearance. One with more is answered with a `400` (`{ error: true, message: "Query string has more than 1000 parameters" }`) before any middleware or handler runs, rather than being cut short and handled as if the rest weren't there. Change the limit with `app.set( "parameterLimit", n )`; `0` turns it off. See [Timeouts & Size Limits](/projects/boxlang-express/docs/limits#parameter-count).
+
+One difference from Express: a BoxLang struct's keys are case-insensitive, so `?Tag=a&tag=b` is one key, `{ Tag: [ "a", "b" ] }`, where Express would give two.
 
 ## req.ip behind a proxy
 
@@ -88,6 +119,7 @@ Two limits: media-type parameters other than `q` are ignored (`text/html;level=1
   	res.status( 201 ).location( req.baseUrl & "/users/" & user.id ).json( user )
   } )
   ```
+- `req.fresh` / `req.stale` — whether the client's cached copy still matches the `ETag` or `Last-Modified` set on the response so far; `req.stale` is the opposite. See [ETags and conditional requests](/projects/boxlang-express/docs/response#etags-and-conditional-requests).
 
 ## Reading the request
 

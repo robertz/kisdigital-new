@@ -1,6 +1,6 @@
 # Timeouts and Size Limits
 
-Five settings bound what one client can cost the server. Set them with `app.set()` before `listen()`; `0` turns any of them off.
+Six settings bound what one client can cost the server. Set them with `app.set()` before `listen()`; `0` turns any of them off.
 
 | Setting | Default | What it bounds |
 |---|---|---|
@@ -9,6 +9,7 @@ Five settings bound what one client can cost the server. Set them with `app.set(
 | `"headerTimeoutMs"` | `60000` | How long a client has to finish sending its request headers |
 | `"keepAliveTimeoutMs"` | `60000` | How long an idle keep-alive connection is held open |
 | `"maxHeaderSize"` | `65536` | Total size of the request line and headers, in bytes |
+| `"parameterLimit"` | `1000` | Number of `key=value` pairs in a query string |
 
 ```bxs
 app.set( "requestTimeoutMs", 30000 )   // 30s
@@ -84,6 +85,18 @@ The body parsers (`boxExpressJSON()`, `boxExpressUrlencoded()`, `boxExpressText(
 A request that declares its size (`Content-Length`) is refused on the header alone, before any of the body is read, and the connection is closed rather than waiting for the rest. A chunked request declares no size, so the only way to enforce the cap is to read it: with `maxBodySize` set, a chunked body is read into memory up to the cap before the handler runs, and `req.bodyStream()` then reads from that copy. If you stream large chunked uploads to disk through `req.bodyStream()`, leave `maxBodySize` off and bound them yourself.
 
 It's off by default so that upgrading can't start rejecting uploads an app already accepts.
+
+## Parameter count
+
+A byte limit doesn't bound how many _things_ a request holds: 64 KB of query string is over 20,000 one-character keys, each of which becomes a struct entry. Three limits count them instead:
+
+| Where | Setting | Default | Over the limit |
+|---|---|---|---|
+| Query string | `app.set( "parameterLimit", n )` | `1000` | `400` |
+| Urlencoded body | `boxExpressUrlencoded( { parameterLimit: n } )` | `1000` | `413` |
+| Multipart body | `boxExpressUpload( { maxFields: n, maxFiles: n } )` | `1000` fields, `100` files | `413` |
+
+A repeated key counts once per appearance, and `0` turns a limit off. The request is refused outright, never truncated — an app that silently saw only the first 1000 parameters could be made to disagree with a proxy or validator in front of it that saw them all. `app.set( "parameterLimit" )` covers `req.query` only; each body parser has its own option, because a form with thousands of fields is sometimes legitimate on one route and not on the rest. See [Query strings](/projects/boxlang-express/docs/request#query-strings), [Middleware](/projects/boxlang-express/docs/middleware#body-size-limits) and [File Uploads](/projects/boxlang-express/docs/uploads#size-limit). These limits are new in 0.2.29.
 
 ## Connection limits
 

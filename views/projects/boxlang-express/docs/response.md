@@ -73,7 +73,12 @@ Keys are extensions or full MIME types. `Content-Type` is set to the chosen one 
 
 ## Cookies
 
-`res.cookie( name, value, options )` options: `path` (default `"/"`), `domain`, `maxAge` (seconds), `expires` (a date), `httpOnly` (default `true`), `secure`, `sameSite`, `signed`.
+`res.cookie( name, value, options )` options: `path` (default `"/"`), `domain`, `maxAge` (seconds), `expires` (a date), `httpOnly` (default `true`), `secure`, `sameSite` (default `"Lax"`), `signed`.
+
+`sameSite` takes `"Lax"`, `"Strict"` or `"None"`. With the default, the browser sends the cookie on requests from your own pages and when a user follows a link to your site, but not on a cross-site form post, `fetch()` or embedded request — which is what stops another site acting as your logged-in visitor. A cookie that has to travel cross-site (an embedded widget, a third-party login flow that posts back) needs `{ sameSite: "None", secure: true }`; browsers reject `None` without `Secure`. `sameSite: false` sends no `SameSite` attribute at all, leaving the choice to the browser, and `true` means `"Strict"`.
+
+> [!NOTE] Behavior change in 0.2.29
+> Before 0.2.29 no `SameSite` attribute was sent unless you passed one. `res.clearCookie()` follows the same default.
 
 `res.clearCookie( name, options )` tells the browser to drop a cookie, by sending it back empty and already expired:
 
@@ -168,7 +173,7 @@ Files are streamed rather than read into memory, so a large file costs the same 
 
 ### Conditional GET (ETag / 304)
 
-`res.sendFile()` sets `ETag` and `Last-Modified` on every response, and answers a conditional request (`If-None-Match` or, failing that, `If-Modified-Since`) with an empty `304 Not Modified` instead of re-sending the file — so a browser's normal caching just works. The `ETag` is a cheap weak tag (`W/"<size>-<mtime>"`, no file hash), so it changes whenever the file's size or modified time changes on disk.
+`res.sendFile()` sets `ETag` and `Last-Modified` on every response, and answers a conditional request (`If-None-Match` or, failing that, `If-Modified-Since`) with an empty `304 Not Modified` instead of re-sending the file — so a browser's normal caching just works. A request with `Cache-Control: no-cache` (a hard reload) always gets the file. The `ETag` is a cheap weak tag (`W/"<size>-<mtime>"`, no file hash), so it changes whenever the file's size or modified time changes on disk.
 
 ### Cache-Control (options.maxAge)
 
@@ -181,6 +186,53 @@ app.get( "/report", ( req, res ) => {
 ```
 
 The same options apply to static file serving — see [Middleware](/projects/boxlang-express/docs/middleware#serving-static-files).
+
+## ETags and conditional requests
+
+`res.send()`, `res.json()`, `res.sendBytes()`, `res.render()` and `res.end()` can tag what they send, so a client that already has the current copy gets an empty `304 Not Modified` instead of the body again. It's off by default; turn it on with one setting:
+
+```bxs
+app.set( "etag", "weak" )
+```
+
+| `app.set( "etag", ... )` | `ETag` header |
+|---|---|
+| `false` (default) | none |
+| `"weak"` or `true` | `W/"b-Kq5sNclPz7QV2+lfQIuc6R7oRu0"` — body length in hex, then a SHA-1 of the body. Express's default. |
+| `"strong"` | the same without `W/` |
+| `( bodyBytes, encoding ) => ...` | whatever the function returns, quotes included; nothing if it returns `""` |
+
+Any other value throws at `app.set()`. `encoding` is `"utf-8"` for a body built from a string and `""` for `res.sendBytes()`. A response is tagged only when the request is a `GET` or `HEAD`, the status is 2xx, the body isn't empty, and the handler hasn't set an `ETag` of its own.
+
+### The 304
+
+Whether or not `etag` is on, a `GET` or `HEAD` response with a 2xx status is checked against the request before it's sent, using whatever `ETag` and `Last-Modified` the response carries — generated, or set by your handler. The rules are the `fresh` package's, as in Express 5:
+
+- `If-None-Match` matches when it's `*` or lists the response's `ETag`. Weak and strong forms of the same tag match each other; the comparison is case-sensitive.
+- Without `If-None-Match`, `If-Modified-Since` matches when the response's `Last-Modified` is no later.
+- `Cache-Control: no-cache` on the request (a browser's hard reload) always gets the full response.
+
+A match is sent as `304` with no body and without `Content-Type` or `Content-Length`; every other header (`ETag`, `Cache-Control`, `Vary`, cookies) is kept. `res.getStatusCode()` then reports `304` and `res.getBytesWritten()` `0`, so access logs show it accurately.
+
+> [!NOTE] Behavior change in 0.2.28
+> A handler that already set its own `ETag` or `Last-Modified` before `res.send()`/`res.json()` now answers matching conditional requests with `304`, even with `etag` off — as Express does.
+
+The handler still runs in full — the tag is a hash of the body it built, so this saves bandwidth, not work. To skip the work, set a validator you can compute cheaply and check `req.fresh` before doing anything expensive:
+
+```bxs
+app.get( "/reports/:id", ( req, res ) => {
+	var version = reports.versionOf( req.params.id )   // cheap
+	res.set( "ETag", '"report-#version#"' )
+	if ( req.fresh ) {
+		return res.status( 304 ).end()
+	}
+	res.json( reports.build( req.params.id ) )         // expensive
+} )
+```
+
+`req.fresh` and `req.stale` are read like properties and recomputed on each read, from the validators set on the response at that moment — so read them after setting `ETag` or `Last-Modified`. They are always `false`/`true` for anything other than a `GET` or `HEAD`.
+
+`sendFile()`, static files and `res.sse()` don't use the `etag` setting: files keep the size-and-mtime tag described [above](#conditional-get-etag--304), and a stream has no body to hash.
 
 ## Range requests (partial content)
 
