@@ -1,0 +1,122 @@
+<bx:output>
+<div class="container py-5">
+	<div class="c-project-hero">
+		<p class="c-project-hero__eyebrow">Project</p>
+		<h1 class="c-project-hero__title">bx-couchcache</h1>
+		<p class="c-project-hero__tagline">An open-source <a href="https://www.couchbase.com/" target="_blank" rel="noopener" class="c-post-link">Couchbase</a> cache provider for <a href="https://boxlang.io" target="_blank" rel="noopener" class="c-post-link">BoxLang</a>. It covers caching, session storage and <code>bx:lock</code> distributed locking, and <a href="/projects/boxlang-express" class="c-post-link">boxlang-express</a> accepts it as a durable store for sessions, rate limiting and cluster mode. It doesn't do vector memory: for that, use Ortus's <code>bx-couchbase</code>, which needs a BoxLang+ subscription.</p>
+		<div class="c-project-hero__actions">
+			<a href="https://github.com/robertz/bx-couchcache" target="_blank" rel="noopener" class="btn btn-primary-custom">View on GitHub</a>
+		</div>
+	</div>
+
+	<div class="c-project-features">
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-database"></i> A named cache</p>
+			<p class="c-project-feature__body">Declare a <code>CouchCache</code> provider under <code>caches</code> in <code>boxlang.json</code> and use it like any other BoxLang cache. Couchbase handles expiry, so there is no reaper task and no eviction.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-person-badge"></i> Sessions</p>
+			<p class="c-project-feature__body">Set <code>this.sessionStorage</code> in <code>Application.bx</code>, or pass the cache to <code>boxExpressSession()</code>. <code>requireDurable: true</code> passes, with no "in-memory store" warning.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-lock"></i> Distributed locks</p>
+			<p class="c-project-feature__body"><code>bx:lock</code> with a <code>cacheName</code> excludes other instances, not just other threads. Locks are exclusive, not reentrant, and expire by themselves if the holder dies.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-plug"></i> No index needed</p>
+			<p class="c-project-feature__body">Key listings, sizes and clears use KV range scans, so there is no N1QL index to create. The Couchbase Java SDK is bundled in the module jar.</p>
+		</div>
+	</div>
+
+	<div class="c-post__body c-docs-body">
+
+		<h2>Install</h2>
+		<pre class="bx-code"><span class="bx-code-label">bash</span><code>install-bx-module bx-couchcache</code></pre>
+		<p>Or <code class="bx-inline">box install bx-couchcache</code>. Requires BoxLang <strong>1.18+</strong> and Couchbase Server <strong>7.6+</strong>.</p>
+
+		<h2>Configure</h2>
+		<p>In <code class="bx-inline">boxlang.json</code>:</p>
+		<pre class="bx-code"><span class="bx-code-label">json</span><code>"caches": {
+	"couch": {
+		"provider": "CouchCache",
+		"properties": {
+			"connectionString": "couchbase://localhost",
+			"username": "${COUCHBASE_USER}",
+			"password": "${COUCHBASE_PASSWORD}",
+			"bucket": "cache",
+			"keyPrefix": "couch:",
+			"defaultTimeout": 3600
+		}
+	},
+	"couchSessions": {
+		"provider": "CouchCache",
+		"properties": {
+			"connectionString": "couchbase://localhost",
+			"username": "${COUCHBASE_USER}",
+			"password": "${COUCHBASE_PASSWORD}",
+			"bucket": "cache",
+			"collection": "sessions",
+			"resetTimeoutOnAccess": true
+		}
+	}
+}</code></pre>
+		<p><code class="bx-inline">connectionString</code>, <code class="bx-inline">username</code>, <code class="bx-inline">password</code> and <code class="bx-inline">bucket</code> are required. The rest are optional: <code class="bx-inline">scope</code> and <code class="bx-inline">collection</code> (<code class="bx-inline">_default</code>), <code class="bx-inline">keyPrefix</code> (the cache name and a colon), <code class="bx-inline">connectTimeout</code> (10 seconds), <code class="bx-inline">defaultTimeout</code> (3600 seconds; 0 never expires) and <code class="bx-inline">resetTimeoutOnAccess</code> (false).</p>
+		<p>Caches with the same connection string, credentials and bucket share one Couchbase connection. Don't give two caches overlapping prefixes such as <code class="bx-inline">app:</code> and <code class="bx-inline">app:cart:</code>: the shorter one's <code class="bx-inline">getKeys</code> and <code class="bx-inline">clearAll</code> would include the longer one's entries.</p>
+
+		<h2>Sessions</h2>
+		<p>In <code class="bx-inline">Application.bx</code>, set <code class="bx-inline">this.sessionStorage = "couchSessions"</code>. The cache must already exist when the application starts. The BoxLang web runtime writes session changes back at the end of each request; a plain scripting context only stores the session when it is created.</p>
+
+		<h2>Locks</h2>
+		<pre class="bx-code"><span class="bx-code-label">javascript</span><code>bx:lock name="checkout" cacheName="couch" timeout=5 {
+	// one instance at a time
+}</code></pre>
+		<p>Locks are exclusive only: the runtime rejects <code class="bx-inline">readonly</code> locks when a <code class="bx-inline">cacheName</code> is given. The runtime sets the lock's expiry to <code class="bx-inline">timeout + 5</code> seconds and never renews it, so a body that runs longer than that loses the lock. <code class="bx-inline">timeout=0</code> makes a single attempt instead of waiting forever.</p>
+
+		<h2>With boxlang-express</h2>
+		<p>boxlang-express sessions go through its session middleware and a named cache. Point it at a <code class="bx-inline">CouchCache</code> cache:</p>
+		<pre class="bx-code"><span class="bx-code-label">javascript</span><code>app.use( boxExpressSession( {
+	cache: "couchSessions",
+	requireDurable: true,
+	resave: false,
+	saveUninitialized: false
+} ) )</code></pre>
+		<p>boxlang-express sets the document's expiry to the session's <code class="bx-inline">maxAge</code> on every write, so leave <code class="bx-inline">resetTimeoutOnAccess</code> off for this cache. The same provider works for rate limiting and cluster mode:</p>
+		<pre class="bx-code"><span class="bx-code-label">javascript</span><code>app.use( boxExpressRateLimit( { max: 100, windowMs: 60000, cache: "couch", requireDurable: true } ) )
+app.set( "cluster", { enabled: true, name: "ws://10.0.1.4:3000", cacheProvider: "couch" } )</code></pre>
+		<p>Rate-limit counters are a read followed by a write, so two instances counting the same client at the same instant can lose a hit. That is how the boxlang-express cache store works on any cache.</p>
+
+		<h2>When Couchbase is unreachable</h2>
+		<ul>
+			<li>Reads, writes, lookups, clears and lock attempts throw after the SDK's KV timeout (2.5 seconds by default). The provider retries nothing and serves nothing from memory.</li>
+			<li>A write or clear that timed out was still sent, and Couchbase can apply it once it is reachable again. Treat a timed-out write as "maybe".</li>
+			<li>The cache recovers by itself when Couchbase comes back; no restart is needed.</li>
+			<li>A cache that can't reach its bucket at startup throws after <code class="bx-inline">connectTimeout</code> and isn't registered.</li>
+			<li>boxlang-express sessions with the default <code class="bx-inline">fallback: true</code> keep working from per-process memory during the outage and go back to Couchbase afterwards.</li>
+		</ul>
+
+		<h2>Differences from BoxCacheProvider</h2>
+		<ul>
+			<li><code class="bx-inline">maxObjects</code> is ignored and <code class="bx-inline">lastAccessTimeout</code> isn't enforced. Use <code class="bx-inline">resetTimeoutOnAccess</code> for sliding expiry.</li>
+			<li>Per-entry <code class="bx-inline">hits</code> and <code class="bx-inline">lastAccessed</code> aren't saved, because saving them would turn every read into a write. Cache-level stats still work, per node.</li>
+			<li>Keys are lowercased: BoxLang keys are case-insensitive and Couchbase IDs aren't.</li>
+			<li><code class="bx-inline">getKeys</code>, <code class="bx-inline">getSize</code> and <code class="bx-inline">clearAll</code> scan every document under the prefix, which costs O(n).</li>
+			<li>Values are serialized Java objects, not JSON, so only BoxLang can read them.</li>
+			<li><code class="bx-inline">getOrSet</code> only locks within one node. Two nodes can both compute a cold key.</li>
+		</ul>
+
+		<h2>Not verified</h2>
+		<ul>
+			<li>The boxlang-express clustered scheduler and STOMP relay on this provider</li>
+			<li>Couchbase Enterprise Edition, multi-node clusters and node failover</li>
+			<li>Behaviour under load</li>
+		</ul>
+
+		<h2>Tests</h2>
+		<p>Integration tests start Couchbase Server with <a href="https://testcontainers.com/" target="_blank" rel="noopener" class="c-post-link">Testcontainers</a>, so they need Docker. The suite passes against Couchbase Server Community 8.0.2 and 7.6.2, including two boxlang-express servers in separate JVMs sharing sessions, rate limits, cluster membership and locks:</p>
+		<pre class="bx-code"><span class="bx-code-label">bash</span><code>./gradlew downloadBoxLang
+./gradlew build
+./gradlew test</code></pre>
+
+	</div>
+</div>
+</bx:output>

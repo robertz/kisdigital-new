@@ -82,6 +82,15 @@ class {
 			language : "BoxLang"
 		},
 		{
+			slug     : "bx-couchcache",
+			name     : "bx-couchcache",
+			icon     : "bi-database",
+			tagline  : "An open-source Couchbase cache provider for BoxLang: caching, session storage and bx:lock distributed locking.",
+			group    : "boxlang",
+			status   : "Beta",
+			language : "BoxLang"
+		},
+		{
 			slug     : "boxlang-ssg",
 			name     : "boxlang-ssg",
 			icon     : "bi-file-earmark-richtext",
