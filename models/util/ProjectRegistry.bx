@@ -145,6 +145,15 @@ class {
 			language : "BoxLang"
 		},
 		{
+			slug     : "three",
+			name     : "three",
+			icon     : "bi-badge-3d",
+			tagline  : "An open-world fantasy MMO in the browser: a Three.js client on a server-authoritative boxlang-express backend over WebSockets.",
+			group    : "archive",
+			status   : "Experiment",
+			language : "JavaScript"
+		},
+		{
 			slug     : "dnd-game-v2",
 			name     : "dnd-game-v2",
 			icon     : "bi-dice-5",

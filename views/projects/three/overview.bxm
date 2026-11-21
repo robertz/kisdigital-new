@@ -1,0 +1,75 @@
+<bx:output>
+<div class="container py-5">
+	<div class="c-project-hero">
+		<p class="c-project-hero__eyebrow">Project</p>
+		<h1 class="c-project-hero__title">three</h1>
+		<p class="c-project-hero__tagline">An open-world fantasy MMO in the browser, in the style of World of Warcraft. The client is <a href="https://threejs.org/" target="_blank" rel="noopener" class="c-post-link">Three.js</a>; the server is <a href="/projects/boxlang-express" class="c-post-link">boxlang-express</a>, which owns the world: monsters, combat, loot and every player's stats are decided there and sent to each client over one WebSocket.</p>
+		<div class="c-project-hero__actions">
+			<a href="https://github.com/robertz/three" target="_blank" rel="noopener" class="btn btn-primary-custom">View on GitHub</a>
+		</div>
+	</div>
+
+	<div class="c-project-features">
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-globe-americas"></i> A shared world</p>
+			<p class="c-project-feature__body">Everyone connected sees the same scenery, the same monsters and each other. Remote players and monsters are interpolated between server updates, and animated as they move.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-shield-check"></i> Server-authoritative combat</p>
+			<p class="c-project-feature__body">The client picks a target; the server checks range, facing and cooldowns against its own record of where the player is, then applies damage, XP, gold and drops.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-lightning-charge"></i> Abilities and an action bar</p>
+			<p class="c-project-feature__body">Four abilities unlock as a character levels, each with its own cooldown. Empty action-bar slots take a usable item by drag and drop, for one-key use.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-bag"></i> Loot, gear and a vendor</p>
+			<p class="c-project-feature__body">Monsters drop items by zone, the harder zone's being rarer and stronger. Four equipment slots raise attack damage and health, and a shop NPC sells the basics.</p>
+		</div>
+	</div>
+
+	<div class="c-post__body c-docs-body">
+
+		<h2>Tech stack</h2>
+		<table class="bx-table">
+			<tr><th>Layer</th><th>What</th></tr>
+			<tr><td>Client</td><td><a href="https://threejs.org/" target="_blank" rel="noopener">Three.js</a>, built with <a href="https://vite.dev/" target="_blank" rel="noopener">Vite</a>. Plain JavaScript modules, no UI framework.</td></tr>
+			<tr><td>Server</td><td><a href="https://boxlang.io/" target="_blank" rel="noopener">BoxLang</a> on <a href="/projects/boxlang-express" class="c-post-link">boxlang-express</a>. <code class="bx-inline">app.bxs</code> wires things together; game logic is in <code class="bx-inline">server/game/</code>, REST routes in <code class="bx-inline">server/routes/</code> and database access in <code class="bx-inline">server/models/</code>.</td></tr>
+			<tr><td>Realtime</td><td><code class="bx-inline">app.ws( "/game" )</code>, with the monster AI on an <code class="bx-inline">app.schedule()</code> tick. No SocketBox or CommandBox.</td></tr>
+			<tr><td>Database</td><td>MySQL.</td></tr>
+			<tr><td>Assets</td><td>CC0 models from KayKit, Quaternius and Kenney's Nature Kit.</td></tr>
+		</table>
+
+		<h2>What's in it</h2>
+		<ul>
+			<li>Accounts with PBKDF2-hashed passwords, and up to three characters each. Signing in somewhere else ends the earlier session and closes its connection.</li>
+			<li>A third-person character with WASD movement, strafing and a mouse-look camera.</li>
+			<li>Two zones, the Meadow and the harder Ashen Highlands, with passive and aggressive monsters that wander, chase, die and respawn on the server.</li>
+			<li>Levels, XP, gold, and death with a respawn timer and a small XP penalty.</li>
+			<li>Four abilities: Heroic Strike, Cleave, Execute and Rampage.</li>
+			<li>An inventory, weapon, helmet, chest and trinket slots, and a vendor who checks your gold and how close you are standing.</li>
+			<li>Chat over the same WebSocket as the game.</li>
+		</ul>
+
+		<h2>Run it</h2>
+		<p>Needs the BoxLang CLI, CommandBox, Node and a local MySQL server. Set the server up once:</p>
+		<pre class="bx-code"><span class="bx-code-label">bash</span><code>git clone https://github.com/robertz/three.git
+cd three/server
+box install
+mysql -uroot -e "CREATE DATABASE IF NOT EXISTS three"
+mysql -uroot three &lt; db/schema.sql
+cp .env.example .env</code></pre>
+		<p>Then build the client and start the server, which serves the built client too:</p>
+		<pre class="bx-code"><span class="bx-code-label">bash</span><code>cd ../client &amp;&amp; npm install &amp;&amp; npm run build
+cd ../server &amp;&amp; ./start.sh</code></pre>
+		<p>Open <code class="bx-inline">http://localhost:3001</code>. Without <code class="bx-inline">.env</code>, <code class="bx-inline">./start.sh</code> hangs with no output instead of failing, so check that first if nothing appears.</p>
+
+		<h2>Tests</h2>
+		<p><a href="https://testbox.ortusbooks.com/" target="_blank" rel="noopener" class="c-post-link">TestBox</a> specs for the game logic and the account routes. They use the real <code class="bx-inline">three</code> database, and each spec removes the accounts it creates:</p>
+		<pre class="bx-code"><span class="bx-code-label">bash</span><code>cd server
+box install testbox --saveDev
+boxlang --bx-config boxlang.json run-tests.bxs</code></pre>
+
+	</div>
+</div>
+</bx:output>
