@@ -24,6 +24,7 @@ class {
 	 * Includes:
 	 *  - The homepage at priority 1.00
 	 *  - The posts index at priority 0.90
+	 *  - The topics index (/tags) at priority 0.50
 	 *  - Up to 5,000 published posts at priority 0.80, each stamped with
 	 *    the post's last_updated date so edits are reflected in crawl scheduling.
 	 *
@@ -53,6 +54,14 @@ class {
 		out.append( "<lastmod>" & dateTimeFormat( now(), "iso" ) & "</lastmod>" );
 		out.append( "<changefreq>daily</changefreq>" );
 		out.append( "<priority>0.90</priority>" );
+		out.append( "</url>" );
+
+		// ── Topics index ──────────────────────────────────────────────────────────
+		out.append( "<url>" );
+		out.append( "<loc>" & siteUrl & "/tags</loc>" );
+		out.append( "<lastmod>" & dateTimeFormat( now(), "iso" ) & "</lastmod>" );
+		out.append( "<changefreq>weekly</changefreq>" );
+		out.append( "<priority>0.50</priority>" );
 		out.append( "</url>" );
 
 		// ── Published posts ───────────────────────────────────────────────────────
