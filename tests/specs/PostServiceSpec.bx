@@ -24,6 +24,40 @@ class extends="testbox.system.BaseSpec" {
 			} )
 
 		} )
+
+		describe( "PostService.matchTags()", function(){
+
+			beforeEach( function(){
+				variables.service = new models.services.PostService()
+				variables.tags = [
+					{ tag: "boxlang", post_count: 12 },
+					{ tag: "boxlang-express", post_count: 20 },
+					{ tag: "BoxLang Modules", post_count: 3 },
+					{ tag: "cfml", post_count: 30 }
+				]
+			} )
+
+			it( "matches on part of the name, whatever the case", function(){
+				var found = variables.service.matchTags( "MODULES", 5, variables.tags )
+				expect( found.len() ).toBe( 1 )
+				expect( found[ 1 ].tag ).toBe( "BoxLang Modules" )
+			} )
+
+			it( "puts an exact match first, then the most-used", function(){
+				var found = variables.service.matchTags( " boxlang ", 5, variables.tags )
+				expect( found.map( ( row ) => row.tag ) ).toBe( [ "boxlang", "boxlang-express", "BoxLang Modules" ] )
+			} )
+
+			it( "stops at the limit", function(){
+				expect( variables.service.matchTags( "boxlang", 2, variables.tags ).len() ).toBe( 2 )
+			} )
+
+			it( "returns nothing for an empty term or no match", function(){
+				expect( variables.service.matchTags( "  ", 5, variables.tags ) ).toBeEmpty()
+				expect( variables.service.matchTags( "python", 5, variables.tags ) ).toBeEmpty()
+			} )
+
+		} )
 	}
 
 }

@@ -33,6 +33,7 @@ class {
 			canonicalUrl     : variables.siteDefaults.canonicalUrl( req.path ),
 			meta             : variables.siteDefaults.defaultMeta( req.path ),
 			recentPosts      : variables.postService.getPosts( page = 1, pageSize = 8 ).posts,
+			topics           : variables.postService.getTopTags(),
 			featuredProjects : variables.projectRegistry.getFeatured(),
 			season           : variables.season.current()
 		} );

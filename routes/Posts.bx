@@ -224,7 +224,8 @@ class {
 			canonicalUrl  : variables.siteDefaults.canonicalUrl( req.path ),
 			meta          : variables.siteDefaults.defaultMeta( req.path ),
 			q             : q,
-			paging        : paging
+			paging        : paging,
+			topics        : currentPage == 1 ? variables.postService.matchTags( q ) : []
 		} );
 	}
 

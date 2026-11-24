@@ -6,5 +6,6 @@
 	<bx:loop array="#data.topics#" item="topic">
 		<a href="/tag/#encodeForURL( topic.tag )#" class="topic-filter__link" #( data.currentTag ?: "" ) == topic.tag ? 'aria-current="page"' : ''#>#encodeForHTML( topic.tag )#</a>
 	</bx:loop>
+	<a href="/tags" class="topic-filter__link topic-filter__more">All topics &rarr;</a>
 </nav>
 </bx:output>

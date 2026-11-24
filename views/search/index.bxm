@@ -14,6 +14,15 @@
 			</bx:if>
 		</header>
 
+		<bx:if ( data.topics ?: [] ).len()>
+			<p class="topic-match">
+				<span class="topic-match__label">#( data.topics.len() == 1 ? "Topic" : "Topics" )#</span>
+				<bx:loop array="#data.topics#" item="topic">
+					<a href="/tag/#encodeForURL( topic.tag )#" class="topic-match__link">#encodeForHTML( topic.tag )# <span class="topic-match__count">#topic.post_count#</span></a>
+				</bx:loop>
+			</p>
+		</bx:if>
+
 		<bx:if len( data.q ) && data.paging.posts.len()>
 			<div class="entry-list">
 				<bx:loop array="#data.paging.posts#" item="post">

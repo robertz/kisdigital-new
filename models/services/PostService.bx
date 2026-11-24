@@ -474,6 +474,24 @@ class {
 		return top;
 	}
 
+	/**
+	 * The published tags whose name contains the search term, for the topic
+	 * links on /search. An exact match leads, then the most-used.
+	 * @param {array} tags - Rows from getAllTags(); fetched when omitted.
+	 */
+	array function matchTags( required string term, numeric limit = 5, array tags ){
+		var needle = lCase( trim( arguments.term ) );
+		if ( !len( needle ) ) return [];
+		var pool    = arguments.tags ?: getAllTags();
+		var matches = pool.filter( ( row ) => find( needle, lCase( row.tag ) ) > 0 );
+		matches.sort( ( a, b ) => {
+			var exactA = lCase( a.tag ) == needle ? 1 : 0;
+			var exactB = lCase( b.tag ) == needle ? 1 : 0;
+			return exactA != exactB ? exactB - exactA : b.post_count - a.post_count;
+		} );
+		return matches.len() > arguments.limit ? matches.slice( 1, arguments.limit ) : matches;
+	}
+
 	function getAllTags(){
 		return queryExecute(
 			"SELECT

@@ -19,6 +19,20 @@
 			</div>
 		</section>
 
+		<bx:if data.topics.len()>
+		<section class="home-block">
+			<div class="block-head">
+				<h2 class="block-head__title">Topics</h2>
+				<a href="/tags" class="block-head__more">All topics &rarr;</a>
+			</div>
+			<nav class="topic-filter topic-filter--plain" aria-label="Topics">
+				<bx:loop array="#data.topics#" item="topic">
+					<a href="/tag/#encodeForURL( topic.tag )#" class="topic-filter__link">#encodeForHTML( topic.tag )#</a>
+				</bx:loop>
+			</nav>
+		</section>
+		</bx:if>
+
 		<section class="home-block">
 			<div class="block-head">
 				<h2 class="block-head__title">Selected projects</h2>

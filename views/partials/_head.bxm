@@ -84,7 +84,7 @@
 
 <bx:script>
 	navPath    = data.currentPath ?: "";
-	navWriting = navPath == "/posts" || left( navPath, 7 ) == "/posts/" || left( navPath, 5 ) == "/tag/" || navPath == "/search";
+	navWriting = navPath == "/posts" || left( navPath, 7 ) == "/posts/" || left( navPath, 5 ) == "/tag/" || navPath == "/tags" || navPath == "/search";
 	navProjects = left( navPath, 9 ) == "/projects";
 	navAbout   = navPath == "/about";
 </bx:script>

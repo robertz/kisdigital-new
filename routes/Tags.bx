@@ -1,5 +1,5 @@
 /**
- * Tag-filtered article list.
+ * The index of every tag, and the tag-filtered article list.
  */
 class {
 
@@ -11,9 +11,20 @@ class {
 		variables.siteDefaults = arguments.siteDefaults;
 
 		this.router = boxExpressRouter();
+		this.router.get( "/tags", ( req, res ) => all( req, res ) );
 		this.router.get( "/tag/:tag", ( req, res ) => index( req, res ) );
 
 		return this;
+	}
+
+	// route: /tags
+	function all( req, res ){
+		res.render( "tags/all", {
+			pageTitle    : "Topics",
+			canonicalUrl : variables.siteDefaults.canonicalUrl( req.path ),
+			meta         : variables.siteDefaults.defaultMeta( req.path ),
+			tags         : variables.postService.getAllTags()
+		} );
 	}
 
 	// route: /tag/:tag

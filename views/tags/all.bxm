@@ -1,0 +1,23 @@
+<bx:output>
+<div class="container">
+	<div class="narrow">
+		<header class="page-head">
+			<h1 class="page-head__title">Topics</h1>
+			<p class="page-head__lede">#data.tags.len()# #( data.tags.len() == 1 ? "topic" : "topics" )# across the writing here, in alphabetical order.</p>
+		</header>
+
+		<bx:if data.tags.len()>
+			<ul class="topic-index">
+				<bx:loop array="#data.tags#" item="topic">
+				<li class="topic-index__item">
+					<a href="/tag/#encodeForURL( topic.tag )#" class="topic-index__link">#encodeForHTML( topic.tag )#</a>
+					<span class="topic-index__count">#topic.post_count#</span>
+				</li>
+				</bx:loop>
+			</ul>
+		<bx:else>
+			<p class="page-head__lede">No topics yet.</p>
+		</bx:if>
+	</div>
+</div>
+</bx:output>
