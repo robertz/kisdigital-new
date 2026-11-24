@@ -13,11 +13,11 @@
 	<div class="c-project-features">
 		<div class="c-project-feature">
 			<p class="c-project-feature__title"><i class="bi bi-person-workspace"></i> Handlers you know</p>
-			<p class="c-project-feature__body">Actions take <code>event</code>, <code>rc</code> and <code>prc</code>, with <code>setView()</code>, <code>renderData()</code>, <code>relocate()</code>, <code>buildLink()</code> and <code>preHandler</code>/<code>postHandler</code> hooks.</p>
+			<p class="c-project-feature__body">Actions take <code>event</code>, <code>rc</code> and <code>prc</code>, with <code>setView()</code>, <code>renderData()</code>, <code>relocate()</code>, <code>buildLink()</code>, flash, and <code>preHandler</code>, <code>postHandler</code> and <code>aroundHandler</code> hooks.</p>
 		</div>
 		<div class="c-project-feature">
 			<p class="c-project-feature__title"><i class="bi bi-signpost-2"></i> A routes file</p>
-			<p class="c-project-feature__body"><code>route().to()</code>, <code>withAction()</code>, named routes, <code>resources()</code> and an opt-in <code>/:handler/:action?</code> convention route. A route to a missing handler or action fails at startup.</p>
+			<p class="c-project-feature__body"><code>route().to()</code>, <code>get()</code>/<code>post()</code> shortcuts, <code>group()</code>, named routes, <code>resources()</code> with <code>_method</code> for forms, and an opt-in <code>/:handler/:action?</code> convention route. A route to a missing handler or action fails at startup.</p>
 		</div>
 		<div class="c-project-feature">
 			<p class="c-project-feature__title"><i class="bi bi-layout-text-window"></i> Views and layouts</p>
@@ -25,12 +25,12 @@
 		</div>
 		<div class="c-project-feature">
 			<p class="c-project-feature__title"><i class="bi bi-plug"></i> Services, your way</p>
-			<p class="c-project-feature__body">Fill handler properties from a plain struct, or pass a WireBox injector and use <code>inject=</code>. Handlers are wired once, at startup.</p>
+			<p class="c-project-feature__body">Fill handler properties from a plain struct, or pass a WireBox injector and use <code>inject=</code>. Handlers and interceptors are wired once, at startup.</p>
 		</div>
 	</div>
 
 	<div class="c-post__body c-docs-body">
-		<div class="bx-callout"><strong>Coming from ColdBox?</strong>Handlers are singletons and every request runs on its own thread, <code>renderData()</code> and <code>relocate()</code> send immediately, and there are no interceptors or HMVC modules. <a href="/projects/boxlang-express-mvc/docs/coming-from-coldbox" class="c-post-link">Read what carries over and what doesn't</a>.</div>
+		<div class="bx-callout"><strong>Coming from ColdBox?</strong>Handlers are singletons and every request runs on its own thread, <code>renderData()</code> and <code>relocate()</code> send immediately, and there are no built-in interception points or HMVC modules. <a href="/projects/boxlang-express-mvc/docs/coming-from-coldbox" class="c-post-link">Read what carries over and what doesn't</a>.</div>
 	</div>
 
 	<p class="c-post-sidebar__label mb-3 mt-4">Quick start</p>

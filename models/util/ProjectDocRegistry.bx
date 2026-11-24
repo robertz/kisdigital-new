@@ -62,6 +62,7 @@ class {
 			{ page_slug: "routes",              title: "Routes" },
 			{ page_slug: "views",               title: "Views & Layouts" },
 			{ page_slug: "services",            title: "Services" },
+			{ page_slug: "interceptors",        title: "Interceptors" },
 			{ page_slug: "testing",             title: "Testing" },
 			{ page_slug: "coming-from-coldbox", title: "Coming from ColdBox" }
 		],

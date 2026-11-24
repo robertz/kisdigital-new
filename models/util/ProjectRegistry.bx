@@ -191,8 +191,8 @@ class {
 		}
 	];
 
-	// The hosted apps lead; boxlang-express is what they and this site run on.
-	// BoxPress follows it as the app to clone and build on.
+	// The hosted apps lead; boxlang-express is what they and this site run on,
+	// with its MVC layer beside it. BoxPress follows as the app to clone and build on.
 	variables.featured = [
 		{
 			name   : "Feedhouse",
@@ -216,6 +216,14 @@ class {
 			label  : "Docs",
 			icon   : "bi-boxes",
 			pitch  : "An Express.js-style web framework for BoxLang: routing, middleware, sessions, WebSockets and STOMP. Both apps above, and this site, run on it.",
+			stack  : "BoxLang module"
+		},
+		{
+			name   : "boxlang-express-mvc",
+			url    : "/projects/boxlang-express-mvc",
+			label  : "Docs",
+			icon   : "bi-diagram-3-fill",
+			pitch  : "ColdBox-style handlers, routes, views and layouts on top of boxlang-express: event, rc and prc, a routes file, flash and interceptors, all compiled to plain routes at startup.",
 			stack  : "BoxLang module"
 		},
 		{

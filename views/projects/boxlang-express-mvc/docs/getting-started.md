@@ -84,7 +84,7 @@ class {
 </bx:output>
 ```
 
-Two complete apps are in [examples/](https://github.com/robertz/boxlang-express-mvc/tree/main/examples): `starter`, a rebuild of the ColdBox starter template, and `todo`, a todo list with forms, a service, a partial, sessions with CSRF protection, and a Dockerfile.
+Two complete apps are in [examples/](https://github.com/robertz/boxlang-express-mvc/tree/main/examples): `starter`, a rebuild of the ColdBox starter template, and `todo`, a todo list with forms, a service, a partial, flash messages, sessions with CSRF protection, and a Dockerfile.
 
 Everything here compiles to plain BoxExpress routes when the app starts. Nothing is scanned or looked up on disk per request.
 
@@ -98,7 +98,8 @@ Everything here compiles to plain BoxExpress routes when the app starts. Nothing
 | `defaultLayout` | Layout name. Defaults to `Main` when `layouts/Main.bxm` exists, otherwise no layout. |
 | `routes` | Path of a routes class (below). Routes can also be added in code with `mvc.route()` and `mvc.resources()`. |
 | `services` | A struct. A handler property named after one of its keys is set to that value at startup. |
-| `injector` | A WireBox injector. `injector.autowire()` is called on each handler at startup. |
+| `injector` | A WireBox injector. `injector.autowire()` is called on each handler and interceptor at startup. |
+| `interceptors` | Directory of interceptor classes, for [`announce()`](/projects/boxlang-express-mvc/docs/interceptors). |
 
 `mvc.getHandlers()` returns each handler's name with its action names, for a listing page or a startup log.
 

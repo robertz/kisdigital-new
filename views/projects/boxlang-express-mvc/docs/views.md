@@ -4,7 +4,7 @@
 
 ## Views and layouts
 
-Views and layouts are `.bxm` files. Each sees `rc`, `prc` and `event`. `#…#` is only evaluated inside `<bx:output>`.
+Views and layouts are `.bxm` files. Each sees `rc`, `prc`, `event` and [`flash`](/projects/boxlang-express-mvc/docs/handlers#flash). `#…#` is only evaluated inside `<bx:output>`.
 
 **Output is not escaped.** Wrap anything that came from a user in the encoder for where it lands:
 
