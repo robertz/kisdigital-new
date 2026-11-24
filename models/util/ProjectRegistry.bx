@@ -55,6 +55,15 @@ class {
 			language : "BoxLang"
 		},
 		{
+			slug     : "boxlang-express-mvc",
+			name     : "boxlang-express-mvc",
+			icon     : "bi-diagram-3-fill",
+			tagline  : "ColdBox-style handlers, routes, views and layouts for BoxExpress: familiar to a ColdBox developer, compiled to plain routes at startup.",
+			group    : "boxlang",
+			status   : "Beta",
+			language : "BoxLang"
+		},
+		{
 			slug     : "bx-activitypub",
 			name     : "bx-activitypub",
 			icon     : "bi-broadcast",

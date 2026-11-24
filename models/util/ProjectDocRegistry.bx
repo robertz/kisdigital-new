@@ -56,6 +56,15 @@ class {
 			{ page_slug: "reference",          title: "Reference" },
 			{ page_slug: "writing-a-provider", title: "Writing a Provider" }
 		],
+		"boxlang-express-mvc": [
+			{ page_slug: "getting-started",     title: "Getting Started" },
+			{ page_slug: "handlers",            title: "Handlers & Actions" },
+			{ page_slug: "routes",              title: "Routes" },
+			{ page_slug: "views",               title: "Views & Layouts" },
+			{ page_slug: "services",            title: "Services" },
+			{ page_slug: "testing",             title: "Testing" },
+			{ page_slug: "coming-from-coldbox", title: "Coming from ColdBox" }
+		],
 		"bx-activitypub": [
 			{ page_slug: "getting-started",   title: "Getting Started" },
 			{ page_slug: "host-contract",     title: "The Host Contract" },

@@ -1,0 +1,70 @@
+<bx:output>
+<div class="container py-5">
+	<div class="c-project-hero">
+		<p class="c-project-hero__eyebrow">Project</p>
+		<h1 class="c-project-hero__title">boxlang-express-mvc</h1>
+		<p class="c-project-hero__tagline">ColdBox-style handlers, routes, views and layouts for <a href="/projects/boxlang-express" class="c-post-link">boxlang-express</a>. It is familiar, not compatible: a ColdBox developer will recognise <code>function index( event, rc, prc )</code>, the <code>route().to()</code> DSL and <code>views/</code> + <code>layouts/</code>, but existing ColdBox apps and modules don't run on it. Everything compiles to plain BoxExpress routes when the app starts.</p>
+		<div class="c-project-hero__actions">
+			<a href="/projects/boxlang-express-mvc/docs/getting-started" class="btn btn-primary-custom">Read the Docs</a>
+			<a href="https://github.com/robertz/boxlang-express-mvc" target="_blank" rel="noopener" class="btn btn-outline-custom">View on GitHub</a>
+		</div>
+	</div>
+
+	<div class="c-project-features">
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-person-workspace"></i> Handlers you know</p>
+			<p class="c-project-feature__body">Actions take <code>event</code>, <code>rc</code> and <code>prc</code>, with <code>setView()</code>, <code>renderData()</code>, <code>relocate()</code>, <code>buildLink()</code> and <code>preHandler</code>/<code>postHandler</code> hooks.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-signpost-2"></i> A routes file</p>
+			<p class="c-project-feature__body"><code>route().to()</code>, <code>withAction()</code>, named routes, <code>resources()</code> and an opt-in <code>/:handler/:action?</code> convention route. A route to a missing handler or action fails at startup.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-layout-text-window"></i> Views and layouts</p>
+			<p class="c-project-feature__body">Implicit <code>views/{handler}/{action}.bxm</code> inside <code>layouts/Main.bxm</code>, with <code>##view()##</code> for the body and for partials. Edits to <code>.bxm</code> files show up without a restart.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-plug"></i> Services, your way</p>
+			<p class="c-project-feature__body">Fill handler properties from a plain struct, or pass a WireBox injector and use <code>inject=</code>. Handlers are wired once, at startup.</p>
+		</div>
+	</div>
+
+	<div class="c-post__body c-docs-body">
+		<div class="bx-callout"><strong>Coming from ColdBox?</strong>Handlers are singletons and every request runs on its own thread, <code>renderData()</code> and <code>relocate()</code> send immediately, and there are no interceptors or HMVC modules. <a href="/projects/boxlang-express-mvc/docs/coming-from-coldbox" class="c-post-link">Read what carries over and what doesn't</a>.</div>
+	</div>
+
+	<p class="c-post-sidebar__label mb-3 mt-4">Quick start</p>
+	<div class="c-post__body c-docs-body">
+<pre class="bx-code"><span class="bx-code-label">bash</span><code>install-bx-module boxlang-express boxlang-express-mvc bx-esapi --local</code></pre>
+<pre class="bx-code"><span class="bx-code-label">javascript</span><code>// server.bxs
+app = boxExpress()
+app.use( boxExpressUrlencoded() )
+
+mvc = boxExpressMvc( {
+	handlers: expandPath( "./handlers" ),
+	views   : expandPath( "./views" ),
+	layouts : expandPath( "./layouts" ),
+	routes  : expandPath( "./config/Router.bx" )
+} )
+app.use( mvc.router() )
+app.listen( 3000 )
+
+// config/Router.bx
+class {
+	function configure() {
+		route( "/", "items.index" )
+		route( "/items/:id(\d+)" ).as( "itemDetail" ).to( "items.show" )
+	}
+}
+
+// handlers/items.bx
+class {
+	function index( event, rc, prc ) {
+		prc.items = [ { id: 1, name: "Anvil" } ]
+		// renders views/items/index.bxm inside layouts/Main.bxm
+	}
+}</code></pre>
+	</div>
+	<p class="mt-3"><a href="/projects/boxlang-express-mvc/docs/getting-started" class="c-post-link">App layout, settings and the two example apps &rarr;</a></p>
+</div>
+</bx:output>
