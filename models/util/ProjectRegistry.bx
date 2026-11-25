@@ -100,6 +100,15 @@ class {
 			language : "BoxLang"
 		},
 		{
+			slug     : "bx-feeds",
+			name     : "bx-feeds",
+			icon     : "bi-rss",
+			tagline  : "RSS, Atom, JSON Feed, OPML and WebSub for BoxLang feed readers: find, fetch with conditional GET, and parse any feed into one plain struct.",
+			group    : "boxlang",
+			status   : "Beta",
+			language : "BoxLang"
+		},
+		{
 			slug     : "boxlang-ssg",
 			name     : "boxlang-ssg",
 			icon     : "bi-file-earmark-richtext",

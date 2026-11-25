@@ -66,6 +66,15 @@ class {
 			{ page_slug: "testing",             title: "Testing" },
 			{ page_slug: "coming-from-coldbox", title: "Coming from ColdBox" }
 		],
+		"bx-feeds": [
+			{ page_slug: "getting-started", title: "Getting Started" },
+			{ page_slug: "parsing",         title: "Parsing" },
+			{ page_slug: "fetching",        title: "Fetching" },
+			{ page_slug: "finding-feeds",   title: "Finding Feeds" },
+			{ page_slug: "opml",            title: "OPML" },
+			{ page_slug: "websub",          title: "WebSub" },
+			{ page_slug: "security",        title: "Security" }
+		],
 		"bx-activitypub": [
 			{ page_slug: "getting-started",   title: "Getting Started" },
 			{ page_slug: "host-contract",     title: "The Host Contract" },

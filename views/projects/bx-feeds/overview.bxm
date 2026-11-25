@@ -1,0 +1,57 @@
+<bx:output>
+<div class="container py-5">
+	<div class="c-project-hero">
+		<p class="c-project-hero__eyebrow">Project</p>
+		<h1 class="c-project-hero__title">bx-feeds</h1>
+		<p class="c-project-hero__tagline">RSS, Atom, JSON Feed and OPML for <a href="https://boxlang.io" target="_blank" rel="noopener" class="c-post-link">BoxLang</a>, built for feed readers. It finds the feeds behind a pasted address, fetches them with a conditional GET, and parses any format into one plain struct with a stable id on every item. XML is parsed by <a href="https://rometools.github.io/rome/" target="_blank" rel="noopener" class="c-post-link">ROME</a>; the module adds what a reader needs on top of it.</p>
+		<div class="c-project-hero__actions">
+			<a href="/projects/bx-feeds/docs/getting-started" class="btn btn-primary-custom">Read the Docs</a>
+			<a href="https://github.com/robertz/bx-feeds" target="_blank" rel="noopener" class="btn btn-outline-custom">View on GitHub</a>
+		</div>
+	</div>
+
+	<div class="c-project-features">
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-rss"></i> One shape for every feed</p>
+			<p class="c-project-feature__body">RSS 0.9x to 2.0, Atom and JSON Feed come back as the same struct: UTC dates or null, absolute URLs, and an item id to dedupe on even when the feed gives none.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-cloud-download"></i> Fetching that behaves</p>
+			<p class="c-project-feature__body"><code>If-None-Match</code> and <code>If-Modified-Since</code>, permanent-redirect reporting, a timeout and a size limit, fallback User-Agents, bot-check detection and a pause for sites that answer 429.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-search"></i> Find, import, subscribe</p>
+			<p class="c-project-feature__body"><code>findFeeds()</code> for an "add a feed" box, <code>parseOpml()</code> and <code>toOpml()</code> for subscription lists, and <code>webSub()</code> so a feed's hub pushes new posts to you.</p>
+		</div>
+		<div class="c-project-feature">
+			<p class="c-project-feature__title"><i class="bi bi-shield-check"></i> Safe with strangers' XML</p>
+			<p class="c-project-feature__body">No DTD is ever read, so XXE and entity-expansion attacks don't work, and fetches refuse private network addresses. Broken real-world feeds are repaired and read through.</p>
+		</div>
+	</div>
+
+	<div class="c-post__body c-docs-body">
+		<div class="bx-callout"><strong>Porting cffeed code?</strong>bx-feeds doesn't create feeds. Use Ortus's <code>bx-rss</code> to port <code>cffeed</code> code or publish a feed; use bx-feeds to subscribe to other people's. <a href="/projects/bx-feeds/docs/getting-started##how-it-differs-from-cffeed-and-bx-rss" class="c-post-link">How the two differ</a>.</div>
+	</div>
+
+	<p class="c-post-sidebar__label mb-3 mt-4">Quick start</p>
+	<div class="c-post__body c-docs-body">
+<pre class="bx-code"><span class="bx-code-label">bash</span><code>install-bx-module bx-feeds</code></pre>
+<pre class="bx-code"><span class="bx-code-label">javascript</span><code>// "add a feed": whatever was pasted, to the feeds behind it
+found = findFeeds( "example.com/blog" )
+
+// poll it, sending back what the last fetch returned
+result = fetchFeed( found[ 1 ].url, { etag: saved.etag, lastModified: saved.lastModified } )
+
+if ( len( result.permanentUrl ) ) {
+	// the feed moved for good: save result.permanentUrl as its address
+}
+if ( result.status == 200 ) {
+	for ( item in result.feed.items ) {
+		// item.id, item.title, item.link, item.published, item.contentHtml
+	}
+	// save result.etag and result.lastModified for next time
+}</code></pre>
+	</div>
+	<p class="mt-3"><a href="/projects/bx-feeds/docs/getting-started" class="c-post-link">Install, settings and what each function does &rarr;</a></p>
+</div>
+</bx:output>
