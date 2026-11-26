@@ -75,6 +75,18 @@ class {
 			{ page_slug: "websub",          title: "WebSub" },
 			{ page_slug: "security",        title: "Security" }
 		],
+		"bx-graphql": [
+			{ page_slug: "getting-started",   title: "Getting Started" },
+			{ page_slug: "schema-files",      title: "Schema Files" },
+			{ page_slug: "resolvers",         title: "Resolvers" },
+			{ page_slug: "code-first",        title: "Code-First Schema" },
+			{ page_slug: "authorization",     title: "Authorization" },
+			{ page_slug: "batch-loading",     title: "Batch Loading" },
+			{ page_slug: "interfaces-unions", title: "Interfaces & Unions" },
+			{ page_slug: "errors",            title: "Errors" },
+			{ page_slug: "custom-scalars",    title: "Custom Scalars" },
+			{ page_slug: "testing",           title: "Testing" }
+		],
 		"bx-activitypub": [
 			{ page_slug: "getting-started",   title: "Getting Started" },
 			{ page_slug: "host-contract",     title: "The Host Contract" },

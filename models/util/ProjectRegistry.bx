@@ -85,7 +85,7 @@ class {
 			slug     : "bx-graphql",
 			name     : "bx-graphql",
 			icon     : "bi-diagram-2",
-			tagline  : "A schema-first GraphQL server for plain BoxLang, with no ColdBox, WireBox or HTTP framework required.",
+			tagline  : "A GraphQL server for plain BoxLang: write .graphqls files or annotate the classes you have, with no ColdBox, WireBox or HTTP framework required.",
 			group    : "boxlang",
 			status   : "In production",
 			language : "BoxLang"
