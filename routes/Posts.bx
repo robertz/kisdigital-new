@@ -72,10 +72,12 @@ class {
 			return;
 		}
 
+		var pagePath = currentPage > 1 ? req.path & "?page=" & currentPage : req.path;
+
 		res.render( "posts/index", {
 			pageTitle     : "Writing",
-			canonicalUrl  : variables.siteDefaults.canonicalUrl( req.path ),
-			meta          : variables.siteDefaults.defaultMeta( req.path ),
+			canonicalUrl  : variables.siteDefaults.canonicalUrl( pagePath ),
+			meta          : variables.siteDefaults.defaultMeta( pagePath ),
 			paging        : paging,
 			topics        : variables.postService.getTopTags(),
 			currentTag    : ""
@@ -219,6 +221,8 @@ class {
 			return;
 		}
 
+		// robots.txt leaves /search crawlable so Google can read this.
+		res.set( "X-Robots-Tag", "noindex, follow" );
 		res.render( "search/index", {
 			pageTitle     : len( q ) ? "Search: " & q : "Search",
 			canonicalUrl  : variables.siteDefaults.canonicalUrl( req.path ),
@@ -231,6 +235,7 @@ class {
 
 	// /search over its rate limit: the status and Retry-After are already set.
 	function searchLimited( req, res, numeric retryAfter ){
+		res.set( "X-Robots-Tag", "noindex, follow" );
 		res.render( "search/index", {
 			pageTitle    : "Search",
 			canonicalUrl : variables.siteDefaults.canonicalUrl( req.path ),

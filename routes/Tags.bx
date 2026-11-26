@@ -52,10 +52,12 @@ class {
 			return;
 		}
 
+		var pagePath = currentPage > 1 ? req.path & "?page=" & currentPage : req.path;
+
 		res.render( "tags/index", {
 			pageTitle     : "Tagged: " & currentTag,
-			canonicalUrl  : variables.siteDefaults.canonicalUrl( req.path ),
-			meta          : variables.siteDefaults.defaultMeta( req.path ),
+			canonicalUrl  : variables.siteDefaults.canonicalUrl( pagePath ),
+			meta          : variables.siteDefaults.defaultMeta( pagePath ),
 			currentTag    : currentTag,
 			paging        : paging,
 			topics        : variables.postService.getTopTags( include = currentTag )
