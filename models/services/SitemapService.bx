@@ -11,10 +11,14 @@
  */
 class {
 
-	variables.postService = "";
+	variables.postService        = "";
+	variables.projectRegistry    = "";
+	variables.projectDocRegistry = "";
 
 	function init( required postService ){
-		variables.postService = arguments.postService;
+		variables.postService        = arguments.postService;
+		variables.projectRegistry    = new models.util.ProjectRegistry();
+		variables.projectDocRegistry = new models.util.ProjectDocRegistry();
 		return this;
 	}
 
@@ -27,6 +31,9 @@ class {
 	 *  - The topics index (/tags) at priority 0.50
 	 *  - Up to 5,000 published posts at priority 0.80, each stamped with
 	 *    the post's last_updated date so edits are reflected in crawl scheduling.
+	 *  - The projects index at priority 0.70, each project's overview at 0.60
+	 *    and each of its docs pages at 0.50. These carry no lastmod: the pages
+	 *    are files, and a file's date in the image is when it was built.
 	 *
 	 * The site URL is read from the SITEURL environment variable.
 	 *
@@ -77,6 +84,22 @@ class {
 			out.append( "<lastmod>" & lastmod & "</lastmod>" );
 			out.append( "<changefreq>weekly</changefreq>" );
 			out.append( "<priority>0.80</priority>" );
+			out.append( "</url>" );
+		}
+
+		// ── Projects ──────────────────────────────────────────────────────────────
+		var projectPages = [ { path: "/projects", priority: "0.70" } ];
+		for ( var project in variables.projectRegistry.getProjects() ) {
+			projectPages.append( { path: "/projects/" & project.slug, priority: "0.60" } );
+			for ( var doc in variables.projectDocRegistry.getDocsForProject( project.slug ) ) {
+				projectPages.append( { path: "/projects/" & project.slug & "/docs/" & doc.page_slug, priority: "0.50" } );
+			}
+		}
+		for ( var page in projectPages ) {
+			out.append( "<url>" );
+			out.append( "<loc>" & siteUrl & page.path & "</loc>" );
+			out.append( "<changefreq>monthly</changefreq>" );
+			out.append( "<priority>" & page.priority & "</priority>" );
 			out.append( "</url>" );
 		}
 
